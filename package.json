@@ -8,24 +8,26 @@
     "pnpm": ">=10.0.0"
   },
   "scripts": {
-    "dev": "turbo run dev --parallel",
+    "dev": "pnpm exec turbo run dev",
     "dev:landing": "pnpm --filter landing dev",
     "dev:member": "pnpm --filter member-pwa dev",
     "dev:admin": "pnpm --filter admin-web dev",
     "dev:api": "pnpm --filter api dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "test": "turbo run test",
-    "typecheck": "turbo run typecheck",
-    "format": "turbo run format",
+    "build": "pnpm exec turbo run build",
+    "lint": "pnpm exec turbo run lint",
+    "test": "pnpm exec turbo run test",
+    "typecheck": "pnpm exec turbo run typecheck",
+    "format": "pnpm exec turbo run format",
     "db:generate": "pnpm --filter api prisma generate",
     "db:migrate": "pnpm --filter api prisma migrate dev",
     "db:seed": "pnpm --filter api prisma db seed"
   },
   "devDependencies": {
-    "@types/node": "24.3.0",
-    "prettier": "3.6.2",
-    "turbo": "2.5.6",
-    "typescript": "5.9.2"
+    "@types/node": "25.5.2",
+    "caniuse-lite": "1.0.30001787",
+    "prettier": "3.8.1",
+    "source-map": "0.7.6",
+    "turbo": "2.9.5",
+    "typescript": "6.0.2"
   }
 }

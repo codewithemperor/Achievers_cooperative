@@ -1,5 +1,9 @@
 {
   "extends": "../../packages/config/tsconfig/nextjs.json",
+  "compilerOptions": {
+    "types": ["@serwist/next/typings"],
+    "lib": ["DOM", "DOM.Iterable", "ES2022", "WebWorker"]
+  },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "public/sw.js"]
 }
