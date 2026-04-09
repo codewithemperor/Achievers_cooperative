@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# build output
+.next
+dist
+coverage
+public/sw.js
+public/workbox-*.js
+
+# env
+.env
+.env.local
+.env.*.local
+
+# logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# misc
+.DS_Store
+*.tsbuildinfo

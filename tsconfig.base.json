@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@achievers/ui": ["packages/ui/src/index.ts"],
+      "@achievers/ui/*": ["packages/ui/src/*"],
+      "@achievers/types": ["packages/types/src/index.ts"],
+      "@achievers/types/*": ["packages/types/src/*"],
+      "@achievers/utils": ["packages/utils/src/index.ts"],
+      "@achievers/utils/*": ["packages/utils/src/*"],
+      "@achievers/api-client": ["packages/api-client/src/index.ts"],
+      "@achievers/api-client/*": ["packages/api-client/src/*"]
+    }
+  }
+}

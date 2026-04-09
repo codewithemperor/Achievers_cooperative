@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  AUDITOR
+  MEMBER
+}
+
+enum MemberStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum TransactionType {
+  FUNDING
+  SAVINGS
+  LOAN_DISBURSEMENT
+  LOAN_REPAYMENT
+  INVESTMENT
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  role         UserRole
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  member       Member?
+  notifications Notification[]
+  auditEvents  AuditEvent[] @relation("AuditActor")
+}
+
+model Member {
+  id               String            @id @default(cuid())
+  userId           String            @unique
+  membershipNumber String            @unique
+  fullName         String
+  phoneNumber      String
+  status           MemberStatus      @default(PENDING)
+  joinedAt         DateTime          @default(now())
+  user             User              @relation(fields: [userId], references: [id])
+  wallet           Wallet?
+  savingsAccounts  SavingsAccount[]
+  loanApplications LoanApplication[]
+  investments      InvestmentSubscription[]
+}
+
+model Wallet {
+  id               String        @id @default(cuid())
+  memberId         String        @unique
+  availableBalance Decimal       @default(0)
+  pendingBalance   Decimal       @default(0)
+  currency         String        @default("NGN")
+  member           Member        @relation(fields: [memberId], references: [id])
+  transactions     Transaction[]
+}
+
+model Transaction {
+  id         String          @id @default(cuid())
+  walletId    String
+  type       TransactionType
+  amount     Decimal
+  status     ApprovalStatus  @default(PENDING)
+  reference  String?         @unique
+  createdAt  DateTime        @default(now())
+  wallet     Wallet          @relation(fields: [walletId], references: [id])
+}
+
+model SavingsAccount {
+  id                    String   @id @default(cuid())
+  memberId              String
+  balance               Decimal  @default(0)
+  contributionFrequency String
+  member                Member   @relation(fields: [memberId], references: [id])
+}
+
+model LoanApplication {
+  id           String         @id @default(cuid())
+  memberId      String
+  amount       Decimal
+  tenorMonths  Int
+  purpose      String
+  status       ApprovalStatus @default(PENDING)
+  submittedAt  DateTime       @default(now())
+  member       Member         @relation(fields: [memberId], references: [id])
+}
+
+model InvestmentProduct {
+  id              String   @id @default(cuid())
+  name            String
+  annualRate      Decimal
+  minimumAmount   Decimal
+  durationMonths  Int
+  status          String   @default("ACTIVE")
+  subscriptions   InvestmentSubscription[]
+}
+
+model InvestmentSubscription {
+  id             String            @id @default(cuid())
+  memberId       String
+  productId      String
+  principal      Decimal
+  maturityDate   DateTime
+  status         ApprovalStatus    @default(PENDING)
+  member         Member            @relation(fields: [memberId], references: [id])
+  product        InvestmentProduct @relation(fields: [productId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId     String
+  channel   String
+  title     String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  actor      User     @relation("AuditActor", fields: [actorId], references: [id])
+}

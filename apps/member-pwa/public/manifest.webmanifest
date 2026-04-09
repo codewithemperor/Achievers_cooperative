@@ -1,0 +1,10 @@
+{
+  "name": "Achievers Cooperative Member App",
+  "short_name": "Achievers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#edf3f8",
+  "theme_color": "#13213a",
+  "description": "Installable PWA for member wallet, savings, loans, and investments.",
+  "icons": []
+}
