@@ -1,8 +1,8 @@
 "use client";
 
 import type { PropsWithChildren } from "react";
-import { AppProvider } from "@achievers/ui";
+import { HeroUIProvider } from "@heroui/react";
 
 export function Providers({ children }: PropsWithChildren) {
-  return <AppProvider>{children}</AppProvider>;
+  return <HeroUIProvider>{children}</HeroUIProvider>;
 }

@@ -73,7 +73,7 @@ model Wallet {
 
 model Transaction {
   id         String          @id @default(cuid())
-  walletId    String
+  walletId   String
   type       TransactionType
   amount     Decimal
   status     ApprovalStatus  @default(PENDING)
@@ -92,7 +92,7 @@ model SavingsAccount {
 
 model LoanApplication {
   id           String         @id @default(cuid())
-  memberId      String
+  memberId     String
   amount       Decimal
   tenorMonths  Int
   purpose      String
@@ -124,7 +124,7 @@ model InvestmentSubscription {
 
 model Notification {
   id        String   @id @default(cuid())
-  userId     String
+  userId    String
   channel   String
   title     String
   message   String
@@ -142,4 +142,11 @@ model AuditEvent {
   metadata   Json?
   createdAt  DateTime @default(now())
   actor      User     @relation("AuditActor", fields: [actorId], references: [id])
+}
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
 }

@@ -1,0 +1,138 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../common/prisma.service';
+
+@Injectable()
+export class ReportsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getSummary() {
+    const [
+      totalMembers,
+      activeMembers,
+      pendingMembers,
+      totalWalletBalance,
+      totalSavings,
+      totalLoansDisbursed,
+      pendingLoans,
+      totalInvestments,
+    ] = await Promise.all([
+      this.prisma.member.count(),
+      this.prisma.member.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.member.count({ where: { status: 'PENDING' } }),
+      this.prisma.wallet.aggregate({ _sum: { availableBalance: true } }),
+      this.prisma.savingsAccount.aggregate({ _sum: { balance: true } }),
+      this.prisma.loanApplication.aggregate({
+        _sum: { amount: true },
+        where: { status: 'APPROVED' },
+      }),
+      this.prisma.loanApplication.count({ where: { status: 'PENDING' } }),
+      this.prisma.investmentSubscription.aggregate({
+        _sum: { principal: true },
+        where: { status: 'APPROVED' },
+      }),
+    ]);
+
+    return {
+      members: {
+        total: totalMembers,
+        active: activeMembers,
+        pending: pendingMembers,
+      },
+      wallet: {
+        totalBalance: Number(totalWalletBalance._sum.availableBalance ?? 0),
+      },
+      savings: {
+        totalBalance: Number(totalSavings._sum.balance ?? 0),
+      },
+      loans: {
+        totalDisbursed: Number(totalLoansDisbursed._sum.amount ?? 0),
+        pending: pendingLoans,
+      },
+      investments: {
+        totalPrincipal: Number(totalInvestments._sum.principal ?? 0),
+      },
+    };
+  }
+
+  async getMemberReport() {
+    const members = await this.prisma.member.findMany({
+      orderBy: { joinedAt: 'desc' },
+      include: {
+        user: { select: { email: true, role: true } },
+        wallet: { select: { availableBalance: true, currency: true } },
+        savingsAccounts: { select: { balance: true } },
+        loanApplications: { where: { status: 'APPROVED' }, select: { amount: true } },
+      },
+    });
+
+    return members.map((m) => ({
+      id: m.id,
+      fullName: m.fullName,
+      membershipNumber: m.membershipNumber,
+      status: m.status,
+      email: m.user.email,
+      joinedAt: m.joinedAt,
+      walletBalance: m.wallet ? Number(m.wallet.availableBalance) : 0,
+      savingsBalance: m.savingsAccounts.reduce((sum, s) => sum + Number(s.balance), 0),
+      totalLoans: m.loanApplications.reduce((sum, l) => sum + Number(l.amount), 0),
+    }));
+  }
+
+  async getLoanReport() {
+    const loans = await this.prisma.loanApplication.findMany({
+      orderBy: { submittedAt: 'desc' },
+      include: {
+        member: {
+          select: { fullName: true, membershipNumber: true },
+        },
+      },
+    });
+
+    return loans.map((l) => ({
+      id: l.id,
+      amount: Number(l.amount),
+      tenorMonths: l.tenorMonths,
+      purpose: l.purpose,
+      status: l.status,
+      submittedAt: l.submittedAt,
+      memberName: l.member.fullName,
+      membershipNumber: l.member.membershipNumber,
+    }));
+  }
+
+  async getTransactionReport(options?: { limit?: number; offset?: number }) {
+    const { limit = 50, offset = 0 } = options ?? {};
+
+    const [items, total] = await Promise.all([
+      this.prisma.transaction.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        include: {
+          wallet: {
+            include: {
+              member: { select: { fullName: true, membershipNumber: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.transaction.count(),
+    ]);
+
+    return {
+      items: items.map((t) => ({
+        id: t.id,
+        type: t.type,
+        amount: Number(t.amount),
+        status: t.status,
+        reference: t.reference,
+        createdAt: t.createdAt,
+        memberName: t.wallet.member.fullName,
+        membershipNumber: t.wallet.member.membershipNumber,
+      })),
+      total,
+      limit,
+      offset,
+    };
+  }
+}
