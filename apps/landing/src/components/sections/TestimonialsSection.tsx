@@ -12,8 +12,7 @@ export default function TestimonialsSection() {
 
   const prev = () =>
     setActiveIndex((i) => (i - 1 + testimonials.length) % testimonials.length);
-  const next = () =>
-    setActiveIndex((i) => (i + 1) % testimonials.length);
+  const next = () => setActiveIndex((i) => (i + 1) % testimonials.length);
 
   const visibleTestimonials = [
     testimonials[activeIndex],
@@ -47,7 +46,7 @@ export default function TestimonialsSection() {
             </button>
             <button
               onClick={next}
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-coop-dark/20 transition-all hover:bg-coop-dark hover:text-coop-cream"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-coop-dark/20 transition-all text-white hover:bg-coop-dark hover:text-coop-cream"
               aria-label="Next testimonial"
             >
               <ChevronRight size={18} />
@@ -80,7 +79,9 @@ export default function TestimonialsSection() {
                   />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-coop-dark">{t.name}</p>
+                  <p className="text-sm font-semibold text-coop-dark">
+                    {t.name}
+                  </p>
                   <p className="text-xs text-coop-muted">{t.company}</p>
                 </div>
               </div>
@@ -91,7 +92,7 @@ export default function TestimonialsSection() {
         <AnimatedSection className="text-center">
           <Link
             href={testimonialsSection.ctaHref}
-            className="inline-flex items-center gap-2 rounded-full bg-coop-dark px-7 py-4 text-sm font-medium text-coop-cream transition-colors hover:bg-coop-green"
+            className="inline-flex items-center gap-2 rounded-full bg-coop-dark px-7 py-4 text-sm font-medium text-white transition-colors hover:bg-coop-green"
           >
             {testimonialsSection.ctaLabel} &rarr;
           </Link>

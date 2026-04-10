@@ -1,19 +1,19 @@
 // ============================================================
-// Acheivers COOPERATIVE ASSOCIATION - SITE CONTENT
+// ACHIEVERS COOPERATIVE ASSOCIATION - SITE CONTENT
 // Edit this file to update any text on the website.
 // ============================================================
 
 export const siteConfig = {
-  name: "Acheivers Cooperative",
-  tagline: "People-powered. CommAcheivers-driven.",
+  name: "Achievers Cooperative",
+  tagline: "Shared progress. Trusted growth.",
   description:
-    "Acheivers Cooperative Association empowers communities through collective ownership, shared resources, and democratic governance.",
-  url: "https://Acheiverscoop.org",
-  contactEmail: "hello@Acheiverscoop.org",
-  contactPhone: "+1 (800) 468-2669",
-  address: "14 Cooperative Way, Suite 200, Lagos, Nigeria",
+    "Achievers Cooperative helps members save consistently, access fair credit, and build long-term prosperity through accountable, member-led finance.",
+  url: "https://achieverscooperative.org",
+  contactEmail: "hello@achieverscooperative.org",
+  contactPhone: "+234 800 2244 8377",
+  address: "14 Cooperative Way, Ikeja, Lagos, Nigeria",
   foundedYear: 2003,
-  copyright: `© ${new Date().getFullYear()} Acheivers Cooperative Association. All rights reserved.`,
+  copyright: `© ${new Date().getFullYear()} Achievers Cooperative Association. All rights reserved.`,
 };
 
 export const navLinks = [
@@ -26,29 +26,29 @@ export const navLinks = [
 
 // HERO SECTION
 export const hero = {
-  badge: "Membership open this quarter",
-  headline: "Building prosperity\nthrough collective\npower",
+  badge: "Member referrals guide new applications",
+  headline: "Growing financial\nconfidence through\ncollective action",
   subheadline:
-    "Acheivers Cooperative Association helps individuals and communities grow wealth, share resources, and thrive together. Your journey to collective prosperity starts here.",
-  ctaLabel: "Become a Member",
-  ctaHref: "/contact",
+    "Achievers Cooperative brings together disciplined savers, responsible borrowers, and community-minded members who want practical support for real life goals.",
+  ctaLabel: "Explore Our Services",
+  ctaHref: "/services",
 };
 
 // ABOUT SNAPSHOT
 export const aboutSnapshot = {
   label: "About",
   headline:
-    "We're a member-owned cooperative built on transparency, equity, and the belief that people are stronger together.",
-  ctaLabel: "Learn more",
+    "We are a member-owned cooperative built on trust, accountability, and the belief that people achieve more when they grow together.",
+  ctaLabel: "Our story",
   ctaHref: "/about",
 };
 
 // SERVICES SECTION
 export const servicesSection = {
   label: "Services",
-  headline: "Your pathway to shared prosperity",
+  headline: "Practical support for savings, credit, and enterprise growth",
   subheadline:
-    "We offer practical programs and resources that help members grow financially, access affordable credit, and build lasting commAcheivers wealth.",
+    "Our services are designed to help members build stability, unlock opportunity, and move forward with confidence.",
 };
 
 export const services = [
@@ -56,15 +56,15 @@ export const services = [
     slug: "cooperative-savings",
     title: "Cooperative Savings & Thrift",
     description:
-      "Pool your savings with fellow members and earn competitive returns while supporting your commAcheivers.",
+      "Build disciplined savings with structured contribution plans that strengthen both personal resilience and the wider cooperative.",
     image: "/images/service-savings.jpg",
-    imageAlt: "People at a commAcheivers savings meeting",
+    imageAlt: "People at a community savings meeting",
   },
   {
     slug: "credit-loans",
     title: "Credit & Affordable Loans",
     description:
-      "Access fair, low-interest credit without the barriers of traditional banking, designed for real people.",
+      "Access fair, member-centered loans with clear terms, transparent review, and repayment structures built for real households and businesses.",
     image: "/images/service-credit.jpg",
     imageAlt: "Handshake representing financial agreement",
   },
@@ -72,7 +72,7 @@ export const services = [
     slug: "business-development",
     title: "Member Business Development",
     description:
-      "Grow your enterprise with mentorship, group procurement, and market-linkage support from the cooperative.",
+      "Grow your enterprise through mentorship, market access, peer learning, and cooperative networks that open doors.",
     image: "/images/service-business.jpg",
     imageAlt: "Aerial view of cooperative farm or marketplace",
   },
@@ -81,34 +81,34 @@ export const services = [
 // BENEFITS / WHY US SECTION
 export const benefitsSection = {
   label: "Benefits",
-  headline: "Why join Acheivers Coop?",
+  headline: "Why members stay with Achievers Cooperative",
   subheadline:
-    "In a world of complex financial systems, we keep things fair, transparent, and member-first.",
+    "Our approach keeps finance understandable, accountable, and anchored in long-term member value.",
 };
 
 export const benefits = [
   {
-    title: "Secure your financial future",
+    title: "Build with confidence",
     description:
-      "Build long-term wealth through collective savings plans and dividend-sharing every fiscal year.",
+      "Grow your savings in a structured environment that rewards consistency and long-term planning.",
     icon: "shield",
   },
   {
-    title: "Access affordable credit",
+    title: "Borrow fairly",
     description:
-      "No hidden fees. No predatory rates. Just fair, member-backed loans when you need them most.",
+      "Access affordable credit shaped by member needs, not aggressive fees or exploitative rates.",
     icon: "coins",
   },
   {
-    title: "Have a real voice",
+    title: "Be heard in governance",
     description:
-      "Every member gets one vote. Decisions are made democratically, not by distant shareholders.",
+      "Every member has a voice in decisions that shape the direction and priorities of the cooperative.",
     icon: "megaphone",
   },
   {
-    title: "Network & grow together",
+    title: "Grow through community",
     description:
-      "Connect with a thriving commAcheivers of entrepreneurs, farmers, and professionals who support each other.",
+      "Benefit from a trusted network of professionals, traders, and entrepreneurs who support one another.",
     icon: "network",
   },
 ];
@@ -123,45 +123,45 @@ export const statsNumbers = [
 // TESTIMONIALS
 export const testimonialsSection = {
   label: "Testimonials",
-  headline: "Voices from our commAcheivers",
+  headline: "What members say about the cooperative",
   subheadline:
-    "Membership is a long-term relationship. Here's what our members have to say.",
-  ctaLabel: "Become a Member",
+    "The strongest proof of our work is the progress our members make over time.",
+  ctaLabel: "Contact Member Services",
   ctaHref: "/contact",
 };
 
 export const testimonials = [
   {
     quote:
-      "Acheivers Coop turned what felt like an impossible dream into reality. I got my first business loan through them and never looked back.",
+      "Achievers Cooperative helped me move from informal borrowing to a stable financing plan for my business.",
     name: "Amaka O.",
     company: "Sunrise Textile Co.",
     avatar: "/images/avatar-1.jpg",
   },
   {
     quote:
-      "The cooperative savings plan helped my family build an emergency fund within a year. Truly life-changing.",
+      "The savings structure gave my family the discipline we needed to build an emergency fund that actually lasts.",
     name: "Emeka N.",
     company: "Lagos Market Traders",
     avatar: "/images/avatar-2.jpg",
   },
   {
     quote:
-      "I love that every member has a voice. Acheivers Coop genuinely listens and acts on what we say.",
+      "I value how transparent the cooperative is. Members understand what is happening and have a say in it.",
     name: "Fatima B.",
     company: "Northern Agro Alliance",
     avatar: "/images/avatar-3.jpg",
   },
   {
     quote:
-      "Their business development workshops gave me skills I use every single day. Outstanding value.",
+      "The business support sessions have been as valuable to me as the financial products themselves.",
     name: "Chidi M.",
     company: "TechBridge Ventures",
     avatar: "/images/avatar-4.jpg",
   },
   {
     quote:
-      "Three years in, and I've already earned dividends twice. The transparency here is unmatched.",
+      "You can feel the difference when a financial institution is truly built around its members.",
     name: "Grace A.",
     company: "Harvest Foods Ltd.",
     avatar: "/images/avatar-5.jpg",
@@ -171,7 +171,7 @@ export const testimonials = [
 // NEWS / BLOG SECTION
 export const newsSection = {
   label: "News & Insights",
-  headline: "Stories from the cooperative world",
+  headline: "Stories, updates, and cooperative insight",
   ctaLabel: "View all",
   ctaHref: "/news",
 };
@@ -181,45 +181,45 @@ export const newsArticles = [
     slug: "annual-general-meeting-2025",
     category: "Governance",
     date: "March 15, 2025",
-    title: "Acheivers Coop holds successful Annual General Meeting 2025",
+    title: "Achievers Cooperative holds its 2025 Annual General Meeting",
     excerpt:
-      "Members gathered to review the year's performance, elect new board members, and vote on key resolutions.",
+      "Members reviewed performance, approved key resolutions, and aligned on the next stage of growth for the cooperative.",
     image: "/images/news-1.jpg",
   },
   {
     slug: "new-loan-product-launch",
     category: "Finance",
     date: "February 20, 2025",
-    title: "New micro-loan product now available to all members",
+    title: "New flexible micro-loan product introduced for members",
     excerpt:
-      "Designed for small traders and artisans, our new flexible micro-loan product requires zero collateral.",
+      "The new product is designed to support small traders and entrepreneurs with practical, easier-to-access credit.",
     image: "/images/news-2.jpg",
   },
   {
-    slug: "commAcheivers-farm-initiative",
-    category: "CommAcheivers",
+    slug: "community-farm-initiative",
+    category: "Community",
     date: "January 10, 2025",
-    title: "Launching our commAcheivers cooperative farm initiative",
+    title: "Cooperative-backed farming initiative opens new livelihoods",
     excerpt:
-      "Acheivers Coop kicks off its first large-scale cooperative farming project, creating 200 new livelihoods.",
+      "A new agricultural initiative expands member opportunity while strengthening local food production and shared income.",
     image: "/images/news-3.jpg",
   },
   {
     slug: "digital-savings-platform",
     category: "Technology",
     date: "December 5, 2024",
-    title: "Our new digital savings platform is now live",
+    title: "Digital savings platform improves access for members",
     excerpt:
-      "Members can now manage contributions, check balances, and apply for loans directly from their phones.",
+      "Members can now track balances, review contributions, and engage more easily with cooperative services online.",
     image: "/images/news-4.jpg",
   },
   {
     slug: "youth-empowerment-program",
     category: "Education",
     date: "November 18, 2024",
-    title: "Youth empowerment program enrolls 350 new participants",
+    title: "Youth empowerment program expands financial literacy reach",
     excerpt:
-      "Our 6-month financial literacy and entrepreneurship program continues to transform young lives.",
+      "The cooperative continues investing in education that equips younger participants with practical financial skills.",
     image: "/images/news-5.jpg",
   },
 ];
@@ -227,117 +227,117 @@ export const newsArticles = [
 // FAQ SECTION
 export const faqSection = {
   label: "FAQ",
-  headline: "Frequently asked questions",
-  subheadline: "Everything you need to know before joining.",
+  headline: "Questions people often ask us",
+  subheadline: "A quick guide to how the cooperative works.",
 };
 
 export const faqs = [
   {
-    question: "How do I become a member?",
+    question: "How does someone join the cooperative?",
     answer:
-      "Joining is simple. Fill out the membership application form online or visit any of our branch offices. Pay the one-time membership fee and initial share capital, and you're in. The whole process takes less than 24 hours.",
+      "Membership is referral-based. New applicants are typically introduced by an existing member, after which the cooperative guides them through eligibility, documentation, and onboarding requirements.",
   },
   {
-    question: "What is the minimum contribution to join?",
+    question: "What is the minimum contribution requirement?",
     answer:
-      "The minimum share capital contribution is ₦10,000, with a one-time registration fee of ₦2,000. Members may increase their shares at any time to earn greater dividends.",
+      "The minimum share capital contribution is ₦10,000, with a one-time registration fee of ₦2,000. Members may increase their shares over time to deepen participation and dividend potential.",
   },
   {
-    question: "How are loans processed?",
+    question: "How are loans reviewed?",
     answer:
-      "Loan applications are reviewed within 5 business days. Approval is based on your savings history and cooperative standing, not external credit scores. No collateral is required for loans up to three times your total savings.",
+      "Loan applications are assessed using savings history, participation record, repayment capacity, and cooperative standing. The process is designed to be fair, transparent, and timely.",
   },
   {
     question: "When are dividends paid?",
     answer:
-      "Dividends are declared and distributed annually, at the end of each fiscal year, following the AGM. The amount depends on the cooperative's overall performance and your share balance.",
+      "Dividends are declared annually after the cooperative's financial review and Annual General Meeting, based on performance and approved member resolutions.",
   },
   {
-    question: "Can I withdraw my savings at any time?",
+    question: "Can members access their savings when needed?",
     answer:
-      "Yes. Members can make partial withdrawals with a 7-day notice period. Full share withdrawal requires 30 days' notice and is processed at the end of the quarter.",
+      "Yes. Withdrawal rules depend on the savings product involved, but members can request access subject to the notice periods and terms attached to that plan.",
   },
   {
-    question: "Is my money safe in the cooperative?",
+    question: "How does the cooperative protect member funds?",
     answer:
-      "Absolutely. Acheivers Coop is registered with the national cooperative registry, audited annually, and holds all member funds in licensed financial institutions. We also carry cooperative insurance for added protection.",
+      "Achievers Cooperative operates with structured governance, annual audits, documented controls, and regulated financial relationships that help safeguard member assets.",
   },
 ];
 
 // CTA SECTION
 export const ctaSection = {
-  headline: "Ready to grow\ntogether?",
+  headline: "Need guidance on\nhow the cooperative works?",
   subheadline:
-    "Join thousands of members already building financial security and commAcheivers wealth with Acheivers Coop. Membership is open, and it starts with a single step.",
-  ctaLabel: "Join Acheivers Coop Today",
+    "Our team can walk you through services, contribution structures, and the referral-based membership process.",
+  ctaLabel: "Speak With Member Services",
   ctaHref: "/contact",
 };
 
 // ABOUT PAGE
 export const aboutPage = {
   badge: "Our Story",
-  headline: "Born from commAcheivers,\nbuilt for people",
+  headline: "Built from community,\nshaped by trust",
   intro:
-    "Acheivers Cooperative Association was founded in 2003 by a group of 47 market traders in Lagos who were tired of predatory money lenders and exclusionary banks. Armed with little more than trust and a shared vision, they pooled their savings and established what would become one of Nigeria's most respected cooperative societies.",
-  history: `Over the past two decades, Acheivers Coop has grown from those original 47 members to over 5,200 active members across six states. Through economic downturns, currency crises, and global pandemics, the cooperative has remained profitable and member-focused, paying dividends every single year since 2005.
+    "Achievers Cooperative Association was founded in 2003 by a group of market traders and small business owners who wanted a fairer, more dependable way to save, borrow, and grow together.",
+  history: `Over the past two decades, Achievers Cooperative has grown from a small founding circle into a trusted institution serving thousands of active members across multiple communities.
 
-In 2010, we expanded our mandate beyond savings and credit to include agricultural support, housing schemes, and small business development. In 2018, we launched our digital platform, making cooperative services accessible to members in remote areas for the first time.
+Through periods of uncertainty and economic pressure, the cooperative has remained focused on discipline, transparency, and practical value for members. Its steady growth has been driven not by shortcuts, but by consistent participation and accountable governance.
 
-Today, Acheivers Coop manages over ₦2.4 billion in member assets and has disbursed more than ₦800 million in loans to date. Our success is not measured in profit margins; it is measured in the homes built, businesses started, and families stabilized because of collective action.`,
+Today, Achievers Cooperative manages over ₦2.4 billion in member assets and has supported businesses, households, and long-term savings goals through a model built on shared responsibility.`,
   mission:
-    "To empower individuals and communities through cooperative principles, providing accessible financial services, democratic governance, and shared economic opportAcheivers for every member.",
+    "To empower members through accessible financial services, democratic governance, and a cooperative structure that turns discipline into long-term opportunity.",
   vision:
-    "A Nigeria where every person, regardless of background, has access to fair financial systems and the power to build lasting wealth through collective effort.",
+    "A future where more people can access fair financial systems, build stability, and grow through trusted collective action.",
   values: [
     {
       title: "Democratic Member Control",
       description:
-        "Every member has one equal vote. Decisions are made together, not from the top down.",
+        "Members shape the direction of the cooperative through participation, accountability, and shared decision-making.",
     },
     {
       title: "Transparency",
       description:
-        "Full financial disclosure to all members, annually audited, and always accessible.",
+        "We believe trust grows when members can clearly understand the systems, numbers, and decisions that affect them.",
     },
     {
       title: "Equity",
       description:
-        "Fair treatment for all, regardless of savings size, occupation, or social standing.",
+        "Our goal is fair access, fair process, and fair treatment for every participating member.",
     },
     {
       title: "Education & Empowerment",
       description:
-        "We invest in member knowledge because informed members build stronger cooperatives.",
+        "We invest in knowledge because informed members make stronger decisions for themselves and the cooperative.",
     },
     {
-      title: "CommAcheivers Concern",
+      title: "Community Concern",
       description:
-        "Our mission extends beyond membership to the health and development of the wider commAcheivers.",
+        "We measure success not only by financial performance, but by the stability and progress our members create around them.",
     },
   ],
   team: [
     {
       name: "Ngozi Adeyemi",
       role: "President & Co-founder",
-      bio: "One of the original 47 founding members. Has led Acheivers Coop through 22 years of growth with unwavering commitment to member welfare.",
+      bio: "A founding member who has helped guide the cooperative with steady focus on governance, trust, and member welfare.",
       avatar: "/images/team-1.jpg",
     },
     {
       name: "Babatunde Okafor",
       role: "General Manager",
-      bio: "20 years in cooperative finance and development banking. Joined Acheivers Coop in 2012 and led the expansion to six states.",
+      bio: "Brings two decades of experience in cooperative finance and has helped scale operations while preserving member-first principles.",
       avatar: "/images/team-2.jpg",
     },
     {
       name: "Aisha Mohammed",
       role: "Head of Credit & Loans",
-      bio: "A chartered accountant with deep expertise in microfinance, Aisha has approved over 12,000 member loans with an industry-low default rate.",
+      bio: "Leads responsible credit review and works to ensure members can access financing through clear, fair processes.",
       avatar: "/images/team-3.jpg",
     },
     {
       name: "Femi Adebayo",
       role: "Head of Member Services",
-      bio: "Member of Acheivers Coop since 2006 and staff since 2014. Femi is the face of our member experience, ensuring every voice is heard.",
+      bio: "Supports the day-to-day member experience and helps ensure that questions, concerns, and onboarding steps are handled well.",
       avatar: "/images/team-4.jpg",
     },
   ],
@@ -345,7 +345,7 @@ Today, Acheivers Coop manages over ₦2.4 billion in member assets and has disbu
 
 // FOOTER
 export const footer = {
-  tagline: "People-powered cooperative finance since 2003.",
+  tagline: "Trusted cooperative finance since 2003.",
   pages: [
     { label: "Home", href: "/" },
     { label: "About", href: "/about" },

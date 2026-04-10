@@ -22,7 +22,8 @@ export default function ContactForm() {
           Message received!
         </h3>
         <p className="text-sm text-coop-muted">
-          Thank you for reaching out. We&apos;ll get back to you within 2 business days.
+          Thank you for reaching out. We&apos;ll get back to you within 2
+          business days.
         </p>
       </div>
     );
@@ -98,9 +99,9 @@ export default function ContactForm() {
 
       <button
         type="submit"
-        className="w-full rounded-full bg-coop-dark py-4 text-sm font-medium text-coop-cream transition-colors duration-200 hover:bg-coop-green"
+        className="w-full rounded-full bg-coop-dark py-4 text-sm font-medium text-white transition-colors duration-200 hover:bg-coop-green"
       >
-        Send Message &rarr;
+        <span className="text-white">Send Message &rarr;</span>
       </button>
     </form>
   );

@@ -20,7 +20,9 @@ export default function Navbar() {
     <header
       className={clsx(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-        scrolled ? "nav-scrolled" : "bg-transparent border-b border-transparent"
+        scrolled
+          ? "nav-scrolled"
+          : "bg-transparent border-b border-transparent",
       )}
     >
       <nav className="section-padding mx-auto flex items-center justify-between h-16 md:h-18 max-w-[1400px]">
@@ -50,9 +52,9 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-3">
           <Link
             href="/contact"
-            className="inline-flex items-center px-5 py-2.5 rounded-full bg-coop-dark text-coop-cream text-sm font-medium hover:bg-coop-green transition-colors duration-200"
+            className="inline-flex items-center px-5 py-2.5 rounded-full bg-coop-dark text-white text-sm font-medium hover:bg-coop-green transition-colors duration-200"
           >
-            Join Now
+            Contact Us
           </Link>
         </div>
 
@@ -82,9 +84,9 @@ export default function Navbar() {
           <Link
             href="/contact"
             onClick={() => setMenuOpen(false)}
-            className="inline-flex items-center justify-center px-5 py-3 rounded-full bg-coop-dark text-coop-cream text-sm font-medium mt-2"
+            className="inline-flex items-center justify-center px-5 py-3 rounded-full bg-coop-dark text-white text-sm font-medium mt-2"
           >
-            Join Now
+            Contact Us
           </Link>
         </div>
       )}

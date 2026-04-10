@@ -78,7 +78,7 @@ export default async function ServiceDetailPage({
             </p>
             <Link
               href="/contact"
-              className="inline-flex items-center gap-2 rounded-full bg-coop-dark px-7 py-4 text-sm font-medium text-coop-cream transition-colors hover:bg-coop-green"
+              className="inline-flex items-center gap-2 rounded-full bg-coop-dark px-7 py-4 text-sm font-medium text-white transition-colors hover:bg-coop-green"
             >
               Enquire About This Service &rarr;
             </Link>

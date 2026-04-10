@@ -46,7 +46,7 @@ export default function HeroSection() {
             <AnimatedSection delay={300}>
               <Link
                 href={hero.ctaHref}
-                className="inline-flex items-center gap-2 rounded-full bg-coop-dark px-7 py-4 text-sm font-medium text-coop-cream transition-all duration-300 hover:gap-3 hover:bg-coop-green"
+                className="inline-flex items-center gap-2 rounded-full bg-coop-dark px-7 py-4 text-sm font-medium text-white transition-all duration-300 hover:gap-3 hover:bg-coop-green"
               >
                 {hero.ctaLabel}
                 <span className="text-lg leading-none" aria-hidden="true">
