@@ -1,13 +1,14 @@
 import {
   Controller,
+  Post,
   Get,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
   UseGuards,
   Request,
-  ParseArrayPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -45,6 +46,13 @@ export class MembersController {
     return this.membersService.findByUserId(req.user.id);
   }
 
+  @Get('search')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @ApiOperation({ summary: 'Search members by name or email' })
+  search(@Query('query') query: string) {
+    return this.membersService.search(query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get member by ID' })
   @ApiOkResponse({ description: 'Member details' })
@@ -52,11 +60,34 @@ export class MembersController {
     return this.membersService.findOne(id);
   }
 
+  @Post()
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Create member profile' })
+  create(
+    @Request() req: any,
+    @Body()
+    body: {
+      email: string;
+      fullName: string;
+      phoneNumber: string;
+      address?: string;
+    },
+  ) {
+    return this.membersService.create(req.user.id, body);
+  }
+
   @Patch('me')
   @ApiOperation({ summary: 'Update own member profile' })
   @ApiOkResponse({ description: 'Updated profile' })
   updateMyProfile(@Request() req: any, @Body() dto: UpdateMemberDto) {
     return this.membersService.updateProfile(req.user.id, dto);
+  }
+
+  @Patch(':id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Update member by ID' })
+  updateById(@Param('id') id: string, @Request() req: any, @Body() dto: UpdateMemberDto) {
+    return this.membersService.updateById(id, dto, req.user.id);
   }
 
   @Patch(':id/status')
@@ -70,5 +101,22 @@ export class MembersController {
     @Request() req: any,
   ) {
     return this.membersService.updateStatus(id, dto, req.user.id);
+  }
+
+  @Post(':id/avatar')
+  @ApiOperation({ summary: 'Update member avatar url' })
+  updateAvatar(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body() body: { avatarUrl: string },
+  ) {
+    return this.membersService.updateAvatar(id, body.avatarUrl, req.user.id);
+  }
+
+  @Delete(':id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Delete member record' })
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.membersService.remove(id, req.user.id);
   }
 }

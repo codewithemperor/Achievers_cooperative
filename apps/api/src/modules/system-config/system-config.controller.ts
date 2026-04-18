@@ -14,7 +14,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 
 @ApiTags('system-config')
 @ApiBearerAuth()
-@Controller('system-config')
+@Controller(['system-config', 'config'])
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SystemConfigController {
   constructor(private readonly systemConfigService: SystemConfigService) {}

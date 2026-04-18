@@ -23,6 +23,33 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Post('activate')
+  @ApiOperation({ summary: 'Activate a pending member account' })
+  @ApiOkResponse({ description: 'Member activated successfully' })
+  async activate(
+    @Body() body: { email: string; tempActivationCode: string; newPassword: string },
+  ) {
+    return this.authService.activate(body.email, body.tempActivationCode, body.newPassword);
+  }
+
+  @Post('refresh')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Refresh JWT token' })
+  @ApiOkResponse({ description: 'Returns a new token' })
+  async refresh(@Request() req: any) {
+    return this.authService.refresh(req.user.id);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Logout current user' })
+  @ApiOkResponse({ description: 'Logout acknowledged' })
+  async logout(@Request() req: any) {
+    return this.authService.logout(req.user.id);
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

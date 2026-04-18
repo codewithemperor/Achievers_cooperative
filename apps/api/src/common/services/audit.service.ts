@@ -18,7 +18,7 @@ export class AuditService {
         action,
         entityType,
         entityId,
-        metadata: metadata ?? undefined,
+        metadata: metadata as any,
       },
     });
   }

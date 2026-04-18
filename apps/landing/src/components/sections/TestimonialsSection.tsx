@@ -22,7 +22,7 @@ export default function TestimonialsSection() {
 
   return (
     <section className="bg-coop-cream py-24">
-      <div className="section-padding mx-auto max-w-[1400px]">
+      <div className="section-padding mx-auto max-w-350">
         <AnimatedSection className="mb-14 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-coop-muted">
@@ -58,7 +58,7 @@ export default function TestimonialsSection() {
           {visibleTestimonials.map((t, i) => (
             <div
               key={`${t.name}-${i}`}
-              className="flex min-h-[220px] flex-col justify-between rounded-4xl bg-coop-sand p-7"
+              className="flex min-h-55 flex-col justify-between rounded-4xl bg-coop-sand p-7"
             >
               <p className="mb-6 font-display text-lg leading-relaxed text-coop-dark italic">
                 &ldquo;{t.quote}&rdquo;

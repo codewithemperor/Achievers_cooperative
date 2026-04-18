@@ -14,7 +14,7 @@ const colorMap = {
 
 export function StatusBadge({ children, tone = "default" }: StatusBadgeProps) {
   return (
-    <Chip color={colorMap[tone]} radius="sm" size="sm" variant="flat">
+    <Chip color={colorMap[tone]} size="sm" variant="soft">
       {children}
     </Chip>
   );

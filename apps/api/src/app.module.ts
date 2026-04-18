@@ -12,6 +12,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { PackagesModule } from './modules/packages/packages.module';
+import { CooperativeWalletModule } from './modules/cooperative-wallet/cooperative-wallet.module';
 import { HealthController } from './common/health.controller';
 
 @Module({
@@ -30,6 +33,9 @@ import { HealthController } from './common/health.controller';
     AuditModule,
     ReportsModule,
     SystemConfigModule,
+    PaymentsModule,
+    PackagesModule,
+    CooperativeWalletModule,
   ],
 })
 export class AppModule {}

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards, Request, Patch } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -26,11 +26,38 @@ export class InvestmentsController {
     return this.investmentsService.getProducts();
   }
 
+  @Post('products')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Create investment product' })
+  createProduct(@Request() req: any, @Body() body: any) {
+    return this.investmentsService.createProduct(req.user.id, body);
+  }
+
+  @Patch('products/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Update investment product' })
+  updateProduct(@Param('id') id: string, @Request() req: any, @Body() body: any) {
+    return this.investmentsService.updateProduct(id, req.user.id, body);
+  }
+
   @Post('subscribe')
   @ApiOperation({ summary: 'Subscribe to an investment product' })
   @ApiOkResponse({ description: 'Subscription created' })
   subscribe(@Request() req: any, @Body() dto: SubscribeInvestmentDto) {
     return this.investmentsService.subscribe(req.user.id, dto);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Create investment subscription' })
+  create(@Request() req: any, @Body() dto: SubscribeInvestmentDto) {
+    return this.investmentsService.subscribe(req.user.id, dto);
+  }
+
+  @Get()
+  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @ApiOperation({ summary: 'List investment subscriptions' })
+  listAll(@Query() query: QueryInvestmentsDto) {
+    return this.investmentsService.getAllInvestments(query);
   }
 
   @Get('my')
@@ -47,5 +74,12 @@ export class InvestmentsController {
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   approveSubscription(@Param('id') id: string, @Request() req: any) {
     return this.investmentsService.approveSubscription(id, req.user.id);
+  }
+
+  @Patch(':id/withdraw')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Withdraw matured investment' })
+  withdraw(@Param('id') id: string, @Request() req: any) {
+    return this.investmentsService.withdraw(id, req.user.id);
   }
 }

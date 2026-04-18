@@ -10,16 +10,9 @@ export class SystemConfigService {
   ) {}
 
   async getAll() {
-    const configs = await this.prisma.systemConfig.findMany({
+    return this.prisma.systemConfig.findMany({
       orderBy: { key: 'asc' },
     });
-
-    const map: Record<string, string> = {};
-    for (const c of configs) {
-      map[c.key] = c.value;
-    }
-
-    return map;
   }
 
   async update(key: string, value: string, actorId: string) {

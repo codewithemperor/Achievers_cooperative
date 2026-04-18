@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../common/prisma.service';
@@ -118,6 +118,68 @@ export class AuthService {
           }
         : null,
     };
+  }
+
+  async activate(email: string, tempActivationCode: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { member: true },
+    });
+
+    if (!user || !user.member) {
+      throw new UnauthorizedException('Invalid activation request');
+    }
+
+    if (!user.tempActivationCodeHash || !user.tempCodeExpiry) {
+      throw new BadRequestException('No activation code is available');
+    }
+
+    if (user.tempCodeExpiry.getTime() < Date.now()) {
+      throw new BadRequestException('Activation code has expired');
+    }
+
+    const valid = await bcrypt.compare(tempActivationCode, user.tempActivationCodeHash);
+    if (!valid) {
+      throw new UnauthorizedException('Invalid activation code');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        tempActivationCodeHash: null,
+        tempCodeExpiry: null,
+      },
+    });
+
+    await this.prisma.member.update({
+      where: { userId: user.id },
+      data: { status: 'ACTIVE' },
+    });
+
+    return { success: true };
+  }
+
+  async refresh(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return {
+      token: this.signToken(user.id, user.email, user.role),
+    };
+  }
+
+  async logout(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return { success: true };
   }
 
   private signToken(sub: string, email: string, role: string) {

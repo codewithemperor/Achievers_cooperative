@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Card, CardBody, Chip } from "@heroui/react";
+import { Card, Chip } from "@heroui/react";
 import { formatCurrency } from "@achievers/utils";
 
 const mockProducts = [
@@ -35,7 +35,9 @@ const mockSubscriptions = [
 export default function InvestmentsPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
-      <h1 className="text-xl font-semibold text-[var(--brand-ink)]">Investments</h1>
+      <h1 className="text-xl font-semibold text-[var(--brand-ink)]">
+        Investments
+      </h1>
       <p className="mt-1 text-sm text-slate-500">
         Browse investment products and track your subscriptions
       </p>
@@ -48,11 +50,8 @@ export default function InvestmentsPage() {
         {mockSubscriptions.length > 0 ? (
           <div className="space-y-2">
             {mockSubscriptions.map((sub) => (
-              <Card
-                key={sub.id}
-                className="border border-slate-200 bg-white"
-              >
-                <CardBody className="p-5">
+              <Card key={sub.id} className="border border-slate-200 bg-white">
+                <Card.Content className="p-5">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-sm font-medium text-[var(--brand-ink)]">
@@ -62,7 +61,7 @@ export default function InvestmentsPage() {
                         Matures {sub.maturityDate}
                       </p>
                     </div>
-                    <Chip size="sm" color="success" variant="flat">
+                    <Chip size="sm" color="success" variant="soft">
                       {sub.status}
                     </Chip>
                   </div>
@@ -80,17 +79,17 @@ export default function InvestmentsPage() {
                       </p>
                     </div>
                   </div>
-                </CardBody>
+                </Card.Content>
               </Card>
             ))}
           </div>
         ) : (
           <Card className="border border-dashed border-slate-300 bg-white">
-            <CardBody className="p-6 text-center">
+            <Card.Content className="p-6 text-center">
               <p className="text-sm text-slate-400">
                 You don&apos;t have any active investments yet.
               </p>
-            </CardBody>
+            </Card.Content>
           </Card>
         )}
       </div>
@@ -102,11 +101,8 @@ export default function InvestmentsPage() {
         </h2>
         <div className="space-y-3">
           {mockProducts.map((product) => (
-            <Card
-              key={product.id}
-              className="border border-slate-200 bg-white"
-            >
-              <CardBody className="p-5">
+            <Card key={product.id} className="border border-slate-200 bg-white">
+              <Card.Content className="p-5">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-base font-semibold text-[var(--brand-ink)]">
@@ -127,7 +123,7 @@ export default function InvestmentsPage() {
                 <button className="mt-4 w-full rounded-lg border border-[var(--brand-ink)] bg-white py-2.5 text-sm font-medium text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-ink)] hover:text-white">
                   Invest Now
                 </button>
-              </CardBody>
+              </Card.Content>
             </Card>
           ))}
         </div>

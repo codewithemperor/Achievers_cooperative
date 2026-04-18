@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { TransactionType } from '@prisma/client';
+import type { TransactionType } from '../prisma-types';
 
 @Injectable()
 export class WalletService {
@@ -42,6 +42,7 @@ export class WalletService {
         where: { id: wallet.id },
         data: {
           availableBalance: { increment: amount },
+          totalFunded: { increment: amount },
         },
       }),
       this.prisma.transaction.create({

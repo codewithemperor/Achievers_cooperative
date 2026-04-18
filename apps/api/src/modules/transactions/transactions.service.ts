@@ -123,4 +123,32 @@ export class TransactionsService {
       amount: Number(updated.amount),
     };
   }
+
+  async exportCsv() {
+    const items = await this.prisma.transaction.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        wallet: {
+          include: {
+            member: true,
+          },
+        },
+      },
+    });
+
+    const header = ['id', 'member', 'type', 'amount', 'status', 'reference', 'createdAt'].join(',');
+    const rows = items.map((item) =>
+      [
+        item.id,
+        `"${item.wallet.member.fullName}"`,
+        item.type,
+        Number(item.amount),
+        item.status,
+        item.reference ?? '',
+        item.createdAt.toISOString(),
+      ].join(','),
+    );
+
+    return [header, ...rows].join('\n');
+  }
 }

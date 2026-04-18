@@ -27,6 +27,120 @@ export class InvestmentsService {
     }));
   }
 
+  async createProduct(
+    actorId: string,
+    body: {
+      name: string;
+      annualRate: number;
+      minimumAmount: number;
+      maximumAmount?: number;
+      durationMonths: number;
+      status?: string;
+    },
+  ) {
+    const created = await this.prisma.investmentProduct.create({
+      data: {
+        ...body,
+        status: body.status ?? 'ACTIVE',
+      },
+    });
+
+    await this.audit.log(actorId, 'CREATE_INVESTMENT_PRODUCT', 'InvestmentProduct', created.id, body);
+
+    return {
+      ...created,
+      annualRate: Number(created.annualRate),
+      minimumAmount: Number(created.minimumAmount),
+      maximumAmount: created.maximumAmount ? Number(created.maximumAmount) : null,
+    };
+  }
+
+  async updateProduct(id: string, actorId: string, body: Record<string, unknown>) {
+    const updated = await this.prisma.investmentProduct.update({
+      where: { id },
+      data: body,
+    });
+
+    await this.audit.log(actorId, 'UPDATE_INVESTMENT_PRODUCT', 'InvestmentProduct', id, body);
+
+    return {
+      ...updated,
+      annualRate: Number(updated.annualRate),
+      minimumAmount: Number(updated.minimumAmount),
+      maximumAmount: updated.maximumAmount ? Number(updated.maximumAmount) : null,
+    };
+  }
+
+  async getAllInvestments(query: { page?: number; limit?: number }) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.investmentSubscription.findMany({
+        orderBy: { maturityDate: 'desc' },
+        include: {
+          member: { select: { fullName: true, membershipNumber: true } },
+          product: true,
+        },
+        take: limit,
+        skip,
+      }),
+      this.prisma.investmentSubscription.count(),
+    ]);
+
+    return {
+      items: items.map((item) => ({
+        ...item,
+        principal: Number(item.principal),
+        product: {
+          ...item.product,
+          annualRate: Number(item.product.annualRate),
+          minimumAmount: Number(item.product.minimumAmount),
+          maximumAmount: item.product.maximumAmount ? Number(item.product.maximumAmount) : null,
+        },
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async withdraw(id: string, actorId: string) {
+    const investment = await this.prisma.investmentSubscription.findUnique({
+      where: { id },
+      include: { product: true, member: true },
+    });
+
+    if (!investment) {
+      throw new NotFoundException('Investment not found');
+    }
+
+    const annualRate = Number(investment.product.annualRate);
+    const principal = Number(investment.principal);
+    const totalReturn = principal + principal * (annualRate / 100) * (investment.product.durationMonths / 12);
+
+    await this.walletService.creditWallet(
+      investment.memberId,
+      totalReturn,
+      'INVESTMENT_RETURN',
+      `INV-WD-${Date.now()}`,
+    );
+
+    const updated = await this.prisma.investmentSubscription.update({
+      where: { id },
+      data: { status: 'APPROVED' },
+    });
+
+    await this.audit.log(actorId, 'WITHDRAW_INVESTMENT', 'InvestmentSubscription', id, { totalReturn });
+
+    return {
+      ...updated,
+      principal: Number(updated.principal),
+      totalReturn,
+    };
+  }
+
   async subscribe(userId: string, dto: SubscribeInvestmentDto) {
     const member = await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');

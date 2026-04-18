@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards, Request, Param } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 import { WalletsService } from './wallets.service';
 import { FundWalletDto } from './dto';
@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('wallets')
 @ApiBearerAuth()
-@Controller('wallets')
+@Controller(['wallets', 'wallet'])
 @UseGuards(JwtAuthGuard)
 export class WalletsController {
   constructor(private readonly walletsService: WalletsService) {}
@@ -37,5 +37,12 @@ export class WalletsController {
       limit: limit ? Number(limit) : undefined,
       offset: offset ? Number(offset) : undefined,
     });
+  }
+
+  @Get(':memberId')
+  @ApiOperation({ summary: 'Get member wallet by member ID' })
+  @ApiOkResponse({ description: 'Wallet balance and transactions' })
+  getMemberWallet(@Param('memberId') memberId: string) {
+    return this.walletsService.getMemberWalletByMemberId(memberId);
   }
 }

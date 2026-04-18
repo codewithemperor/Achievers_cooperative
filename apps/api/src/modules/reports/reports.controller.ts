@@ -27,6 +27,12 @@ export class ReportsController {
     return this.reportsService.getSummary();
   }
 
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Get dashboard report payload' })
+  getDashboard() {
+    return this.reportsService.getDashboard();
+  }
+
   @Get('members')
   @ApiOperation({ summary: 'Get member report' })
   @ApiOkResponse({ description: 'Member details report' })
@@ -34,11 +40,23 @@ export class ReportsController {
     return this.reportsService.getMemberReport();
   }
 
+  @Get('membership-growth')
+  @ApiOperation({ summary: 'Get membership growth time series' })
+  getMembershipGrowth() {
+    return this.reportsService.getMembershipGrowth();
+  }
+
   @Get('loans')
   @ApiOperation({ summary: 'Get loan report' })
   @ApiOkResponse({ description: 'Loan report' })
   getLoanReport() {
     return this.reportsService.getLoanReport();
+  }
+
+  @Get('loan-portfolio')
+  @ApiOperation({ summary: 'Get loan portfolio breakdown' })
+  getLoanPortfolio() {
+    return this.reportsService.getLoanPortfolio();
   }
 
   @Get('transactions')
@@ -52,5 +70,11 @@ export class ReportsController {
       limit: limit ? Number(limit) : undefined,
       offset: offset ? Number(offset) : undefined,
     });
+  }
+
+  @Get('revenue')
+  @ApiOperation({ summary: 'Get revenue report from membership charges' })
+  getRevenue() {
+    return this.reportsService.getRevenue();
   }
 }

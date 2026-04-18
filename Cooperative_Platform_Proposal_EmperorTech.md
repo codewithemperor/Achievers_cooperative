@@ -51,7 +51,7 @@ The administrative application serves as the control centre for cooperative oper
 
 4. **Investment Management:** Create and manage investment products, set interest rates and terms, approve member investment requests, and track investment performance across the cooperative portfolio.
 
-5. **Loan Disbursement:** Process approved loans by transferring funds from cooperative accounts to member wallets or external accounts, with complete documentation and member notification.
+5. **Loan Disbursement:** Process approved loans by transferring funds from cooperative accounts to member external accounts, with complete documentation and member notification.
 
 6. **Transaction Monitoring:** Access comprehensive transaction histories, monitor wallet activities, track membership charge collections, and generate detailed financial reports for management and regulatory purposes.
 

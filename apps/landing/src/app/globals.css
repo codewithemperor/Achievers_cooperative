@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "@heroui/styles";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --font-display: var(--font-display-family);

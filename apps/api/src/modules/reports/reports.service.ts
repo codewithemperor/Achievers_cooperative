@@ -54,6 +54,22 @@ export class ReportsService {
     };
   }
 
+  async getDashboard() {
+    const [summary, membershipGrowth, loanPortfolio, revenue] = await Promise.all([
+      this.getSummary(),
+      this.getMembershipGrowth(),
+      this.getLoanPortfolio(),
+      this.getRevenue(),
+    ]);
+
+    return {
+      summary,
+      membershipGrowth,
+      loanPortfolio,
+      revenue,
+    };
+  }
+
   async getMemberReport() {
     const members = await this.prisma.member.findMany({
       orderBy: { joinedAt: 'desc' },
@@ -134,5 +150,52 @@ export class ReportsService {
       limit,
       offset,
     };
+  }
+
+  async getMembershipGrowth() {
+    const members = await this.prisma.member.findMany({
+      orderBy: { joinedAt: 'asc' },
+      select: { joinedAt: true },
+    });
+
+    const buckets = new Map<string, number>();
+
+    for (const member of members) {
+      const key = member.joinedAt.toISOString().slice(0, 7);
+      buckets.set(key, (buckets.get(key) ?? 0) + 1);
+    }
+
+    return Array.from(buckets.entries()).map(([month, count]) => ({ month, count }));
+  }
+
+  async getLoanPortfolio() {
+    const loans = await this.prisma.loanApplication.groupBy({
+      by: ['status'],
+      _sum: { amount: true },
+      _count: { id: true },
+    });
+
+    return loans.map((loan) => ({
+      status: loan.status,
+      count: loan._count.id,
+      totalAmount: Number(loan._sum.amount ?? 0),
+    }));
+  }
+
+  async getRevenue() {
+    const charges = await this.prisma.cooperativeEntry.findMany({
+      where: { category: 'MEMBERSHIP_CHARGE' },
+      orderBy: { createdAt: 'asc' },
+      select: { amount: true, createdAt: true },
+    });
+
+    const buckets = new Map<string, number>();
+
+    for (const charge of charges) {
+      const key = charge.createdAt.toISOString().slice(0, 7);
+      buckets.set(key, (buckets.get(key) ?? 0) + Number(charge.amount));
+    }
+
+    return Array.from(buckets.entries()).map(([month, total]) => ({ month, total }));
   }
 }

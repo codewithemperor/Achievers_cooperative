@@ -1,4 +1,4 @@
-import { Card, CardBody } from "@heroui/react";
+import { Card,  } from "@heroui/react";
 import { formatCurrency } from "@achievers/utils";
 
 export default function ReportsPage() {
@@ -18,14 +18,14 @@ export default function ReportsPage() {
           { label: "Investment Pool", value: "₦5.1M", detail: "Active investment subscriptions", color: "bg-[var(--brand-gold)]" },
         ].map((stat) => (
           <Card key={stat.label} className="border border-slate-200 bg-white">
-            <CardBody className="p-5">
+            <Card.Content  className="p-5">
               <div className="flex items-center gap-2">
                 <div className={`h-3 w-3 rounded-full ${stat.color}`} />
                 <p className="text-xs text-slate-400">{stat.label}</p>
               </div>
               <p className="mt-2 text-2xl font-bold text-[var(--brand-ink)]">{stat.value}</p>
               <p className="mt-1 text-xs text-slate-400">{stat.detail}</p>
-            </CardBody>
+            </Card.Content >
           </Card>
         ))}
       </div>
@@ -34,7 +34,7 @@ export default function ReportsPage() {
       <div className="mb-8">
         <h2 className="mb-4 text-sm font-semibold text-[var(--brand-ink)]">Monthly Breakdown</h2>
         <Card className="border border-slate-200 bg-white">
-          <CardBody className="p-0">
+          <Card.Content  className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -66,7 +66,7 @@ export default function ReportsPage() {
                 </tbody>
               </table>
             </div>
-          </CardBody>
+          </Card.Content >
         </Card>
       </div>
 
@@ -80,11 +80,11 @@ export default function ReportsPage() {
             { label: "Suspended", value: "6", detail: "Accounts on hold" },
           ].map((item) => (
             <Card key={item.label} className="border border-slate-200 bg-white">
-              <CardBody className="p-5 text-center">
+              <Card.Content  className="p-5 text-center">
                 <p className="text-xs text-slate-400">{item.label}</p>
                 <p className="mt-2 text-3xl font-bold text-[var(--brand-ink)]">{item.value}</p>
                 <p className="mt-1 text-xs text-slate-400">{item.detail}</p>
-              </CardBody>
+              </Card.Content >
             </Card>
           ))}
         </div>

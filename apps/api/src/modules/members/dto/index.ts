@@ -1,5 +1,5 @@
 import { IsOptional, IsString } from 'class-validator';
-import { MemberStatus } from '@prisma/client';
+import type { MemberStatus } from '../../../common/prisma-types';
 import { Transform } from 'class-transformer';
 
 export class UpdateMemberDto {

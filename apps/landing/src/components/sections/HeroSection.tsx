@@ -19,7 +19,7 @@ export default function HeroSection() {
         }}
       />
 
-      <div className="section-padding relative mx-auto max-w-[1400px]">
+      <div className="section-padding relative mx-auto max-w-350">
         <AnimatedSection delay={0}>
           <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-coop-green/20 bg-coop-green/10 px-4 py-1.5">
             <span className="h-2 w-2 animate-pulse rounded-full bg-coop-light" />
@@ -57,10 +57,10 @@ export default function HeroSection() {
           </div>
 
           <AnimatedSection delay={150} className="relative">
-            <div className="grid h-[520px] grid-cols-2 gap-3">
+            <div className="grid h-130 grid-cols-2 gap-3">
               <div className="relative row-span-2 overflow-hidden rounded-3xl bg-coop-green/20">
                 <Image
-                  src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=600&q=80"
+                  src="/cert.jpeg"
                   alt="Community members meeting"
                   fill
                   className="object-cover"

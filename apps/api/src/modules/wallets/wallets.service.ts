@@ -19,6 +19,33 @@ export class WalletsService {
     return this.walletService.getBalance(member.id);
   }
 
+  async getMemberWalletByMemberId(memberId: string) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      include: { wallet: true },
+    });
+
+    if (!member || !member.wallet) {
+      throw new NotFoundException('Wallet not found');
+    }
+
+    const transactions = await this.prisma.transaction.findMany({
+      where: { walletId: member.wallet.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      balance: Number(member.wallet.availableBalance),
+      pendingBalance: Number(member.wallet.pendingBalance),
+      totalFunded: Number(member.wallet.totalFunded),
+      totalCharges: Number(member.wallet.totalCharges),
+      transactions: transactions.map((transaction) => ({
+        ...transaction,
+        amount: Number(transaction.amount),
+      })),
+    };
+  }
+
   async fund(userId: string, dto: FundWalletDto) {
     const member = await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');

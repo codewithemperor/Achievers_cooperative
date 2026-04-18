@@ -2,32 +2,37 @@
   "name": "landing",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
-    "dev": "pnpm exec next dev --port 3000",
-    "build": "pnpm exec next build",
-    "start": "pnpm exec next start --port 3000",
-    "lint": "pnpm exec next lint",
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "format": "prettier --check ."
   },
   "dependencies": {
-    "@achievers/types": "workspace:*",
-    "@achievers/utils": "workspace:*",
     "@heroui/react": "3.0.2",
+    "axios": "1.13.1",
     "clsx": "2.1.1",
     "framer-motion": "12.38.0",
     "lucide-react": "0.542.0",
-    "next": "16.2.2",
+    "next": "16.2.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-hook-form": "7.66.0",
     "react-intersection-observer": "9.16.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.2.2",
+    "@types/node": "^25.6.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "tailwindcss": "4.2.2",
+    "typescript": "^6.0.2",
     "vitest": "4.1.3"
   }
 }

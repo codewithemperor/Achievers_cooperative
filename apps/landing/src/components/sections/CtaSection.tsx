@@ -25,7 +25,7 @@ export default function CtaSection() {
 
       <div className="absolute inset-0 bg-coop-dark/70" />
 
-      <div className="section-padding relative mx-auto max-w-[1400px] text-center">
+      <div className="section-padding relative mx-auto max-w-350 text-center">
         <AnimatedSection>
           <h2 className="mb-6 whitespace-pre-line font-display text-5xl font-semibold leading-[1.1] text-coop-cream md:text-6xl lg:text-7xl">
             {ctaSection.headline}

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -26,6 +26,13 @@ export class LoansController {
     return this.loansService.apply(req.user.id, dto);
   }
 
+  @Post()
+  @ApiOperation({ summary: 'Create loan application' })
+  @ApiOkResponse({ description: 'Loan application created' })
+  create(@Request() req: any, @Body() dto: ApplyLoanDto) {
+    return this.loansService.apply(req.user.id, dto);
+  }
+
   @Get()
   @ApiOperation({ summary: 'List loan applications' })
   @ApiOkResponse({ description: 'Paginated loan applications' })
@@ -49,6 +56,13 @@ export class LoansController {
     return this.loansService.approve(id, req.user.id);
   }
 
+  @Patch(':id/approve')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Approve a loan (admin)' })
+  approvePatch(@Param('id') id: string, @Request() req: any) {
+    return this.loansService.approve(id, req.user.id);
+  }
+
   @Post(':id/reject')
   @Roles('SUPER_ADMIN', 'ADMIN')
   @ApiOperation({ summary: 'Reject a loan (admin)' })
@@ -58,12 +72,26 @@ export class LoansController {
     return this.loansService.reject(id, req.user.id);
   }
 
+  @Patch(':id/reject')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Reject a loan (admin)' })
+  rejectPatch(@Param('id') id: string, @Request() req: any) {
+    return this.loansService.reject(id, req.user.id);
+  }
+
   @Post(':id/disburse')
   @Roles('SUPER_ADMIN', 'ADMIN')
   @ApiOperation({ summary: 'Disburse an approved loan (admin)' })
   @ApiOkResponse({ description: 'Loan disbursed' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   disburse(@Param('id') id: string, @Request() req: any) {
+    return this.loansService.disburse(id, req.user.id);
+  }
+
+  @Patch(':id/disburse')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Disburse an approved loan (admin)' })
+  disbursePatch(@Param('id') id: string, @Request() req: any) {
     return this.loansService.disburse(id, req.user.id);
   }
 

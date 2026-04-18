@@ -25,7 +25,7 @@ export default function Navbar() {
           : "bg-transparent border-b border-transparent",
       )}
     >
-      <nav className="section-padding mx-auto flex items-center justify-between h-16 md:h-18 max-w-[1400px]">
+      <nav className="section-padding mx-auto flex items-center justify-between h-16 md:h-18 max-w-350">
         {/* Logo */}
         <Link
           href="/"

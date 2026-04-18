@@ -1,10 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+
 }
 
 enum UserRole {
@@ -26,6 +27,17 @@ enum TransactionType {
   LOAN_DISBURSEMENT
   LOAN_REPAYMENT
   INVESTMENT
+  WALLET_FUNDING
+  MEMBERSHIP_CHARGE
+  INVESTMENT_DEPOSIT
+  INVESTMENT_RETURN
+  PACKAGE_SUBSCRIPTION
+  PACKAGE_PENALTY
+}
+
+enum CooperativeEntryType {
+  INCOME
+  EXPENSE
 }
 
 enum ApprovalStatus {
@@ -35,30 +47,38 @@ enum ApprovalStatus {
 }
 
 model User {
-  id           String      @id @default(cuid())
-  email        String      @unique
-  passwordHash String
-  role         UserRole
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  member       Member?
-  notifications Notification[]
-  auditEvents  AuditEvent[] @relation("AuditActor")
+  id                     String      @id @default(cuid())
+  email                  String      @unique
+  passwordHash           String
+  role                   UserRole
+  tempActivationCodeHash String?
+  tempCodeExpiry         DateTime?
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+  member                 Member?
+  notifications          Notification[]
+  auditEvents            AuditEvent[] @relation("AuditActor")
+  verifiedPayments       Payment[]   @relation("PaymentVerifier")
+  cooperativeEntries     CooperativeEntry[]
 }
 
 model Member {
-  id               String            @id @default(cuid())
-  userId           String            @unique
-  membershipNumber String            @unique
-  fullName         String
-  phoneNumber      String
-  status           MemberStatus      @default(PENDING)
-  joinedAt         DateTime          @default(now())
-  user             User              @relation(fields: [userId], references: [id])
-  wallet           Wallet?
-  savingsAccounts  SavingsAccount[]
-  loanApplications LoanApplication[]
-  investments      InvestmentSubscription[]
+  id                   String                 @id @default(cuid())
+  userId               String                 @unique
+  membershipNumber     String                 @unique
+  fullName             String
+  phoneNumber          String
+  address              String?
+  avatarUrl            String?
+  status               MemberStatus           @default(PENDING)
+  joinedAt             DateTime               @default(now())
+  user                 User                   @relation(fields: [userId], references: [id])
+  wallet               Wallet?
+  savingsAccounts      SavingsAccount[]
+  loanApplications     LoanApplication[]
+  investments          InvestmentSubscription[]
+  payments             Payment[]
+  packageSubscriptions PackageSubscription[]
 }
 
 model Wallet {
@@ -66,6 +86,8 @@ model Wallet {
   memberId         String        @unique
   availableBalance Decimal       @default(0)
   pendingBalance   Decimal       @default(0)
+  totalFunded      Decimal       @default(0)
+  totalCharges     Decimal       @default(0)
   currency         String        @default("NGN")
   member           Member        @relation(fields: [memberId], references: [id])
   transactions     Transaction[]
@@ -91,14 +113,18 @@ model SavingsAccount {
 }
 
 model LoanApplication {
-  id           String         @id @default(cuid())
-  memberId     String
-  amount       Decimal
-  tenorMonths  Int
-  purpose      String
-  status       ApprovalStatus @default(PENDING)
-  submittedAt  DateTime       @default(now())
-  member       Member         @relation(fields: [memberId], references: [id])
+  id               String         @id @default(cuid())
+  memberId         String
+  amount           Decimal
+  tenorMonths      Int
+  purpose          String
+  status           ApprovalStatus @default(PENDING)
+  submittedAt      DateTime       @default(now())
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
+  disbursedAt      DateTime?
+  remainingBalance Decimal        @default(0)
+  member           Member         @relation(fields: [memberId], references: [id])
 }
 
 model InvestmentProduct {
@@ -106,6 +132,7 @@ model InvestmentProduct {
   name            String
   annualRate      Decimal
   minimumAmount   Decimal
+  maximumAmount   Decimal?
   durationMonths  Int
   status          String   @default("ACTIVE")
   subscriptions   InvestmentSubscription[]
@@ -149,4 +176,73 @@ model SystemConfig {
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
+}
+
+model Payment {
+  id              String         @id @default(cuid())
+  memberId        String
+  amount          Decimal
+  receiptUrl      String?
+  status          ApprovalStatus @default(PENDING)
+  rejectionReason String?
+  verifiedAt      DateTime?
+  netCreditAmount Decimal?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  verifiedById    String?
+  member          Member         @relation(fields: [memberId], references: [id])
+  verifiedBy      User?          @relation("PaymentVerifier", fields: [verifiedById], references: [id])
+}
+
+model Package {
+  id               String                @id @default(cuid())
+  name             String
+  totalAmount      Decimal
+  durationMonths   Int
+  penaltyType      String
+  penaltyValue     Decimal
+  penaltyFrequency String
+  isActive         Boolean               @default(true)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  subscriptions    PackageSubscription[]
+}
+
+model PackageSubscription {
+  id             String   @id @default(cuid())
+  packageId      String
+  memberId       String
+  amountPaid     Decimal  @default(0)
+  amountRemaining Decimal
+  penaltyAccrued Decimal  @default(0)
+  status         String   @default("ACTIVE")
+  nextDueAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  package        Package  @relation(fields: [packageId], references: [id])
+  member         Member   @relation(fields: [memberId], references: [id])
+}
+
+model CooperativeWallet {
+  id           String             @id @default(cuid())
+  balance      Decimal            @default(0)
+  totalIncome  Decimal            @default(0)
+  totalExpense Decimal            @default(0)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  entries      CooperativeEntry[]
+}
+
+model CooperativeEntry {
+  id          String               @id @default(cuid())
+  walletId    String
+  type        CooperativeEntryType
+  amount      Decimal
+  category    String
+  description String
+  reference   String?
+  createdById String?
+  createdAt   DateTime             @default(now())
+  wallet      CooperativeWallet    @relation(fields: [walletId], references: [id])
+  createdBy   User?                @relation(fields: [createdById], references: [id])
 }

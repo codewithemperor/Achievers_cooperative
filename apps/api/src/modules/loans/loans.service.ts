@@ -24,6 +24,7 @@ export class LoansService {
         amount: dto.amount,
         tenorMonths: dto.tenorMonths,
         purpose: dto.purpose,
+        remainingBalance: dto.amount,
       },
     });
 
@@ -112,7 +113,7 @@ export class LoansService {
 
     const updated = await this.prisma.loanApplication.update({
       where: { id },
-      data: { status: 'APPROVED' },
+      data: { status: 'APPROVED', approvedAt: new Date() },
     });
 
     await this.audit.log(actorId, 'APPROVE_LOAN', 'LoanApplication', id, {
@@ -140,7 +141,7 @@ export class LoansService {
 
     const updated = await this.prisma.loanApplication.update({
       where: { id },
-      data: { status: 'REJECTED' },
+      data: { status: 'REJECTED', rejectedAt: new Date() },
     });
 
     await this.audit.log(actorId, 'REJECT_LOAN', 'LoanApplication', id);
@@ -170,6 +171,14 @@ export class LoansService {
       reference,
     );
 
+    await this.prisma.loanApplication.update({
+      where: { id },
+      data: {
+        disbursedAt: new Date(),
+        remainingBalance: loan.amount,
+      },
+    });
+
     await this.audit.log(actorId, 'DISBURSE_LOAN', 'LoanApplication', id, {
       amount: Number(loan.amount),
       reference,
@@ -190,11 +199,20 @@ export class LoansService {
 
     const loan = await this.prisma.loanApplication.findUnique({ where: { id } });
     if (!loan) throw new NotFoundException('Loan not found');
-    if (loan.status !== 'APPROVED') throw new BadRequestException('Loan is not active');
+    if (!['APPROVED'].includes(loan.status)) throw new BadRequestException('Loan is not active');
     if (loan.memberId !== member.id) throw new BadRequestException('Not your loan');
 
     const reference = `REPAY-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     await this.walletService.debitWallet(member.id, dto.amount, 'LOAN_REPAYMENT', reference);
+
+    await this.prisma.loanApplication.update({
+      where: { id },
+      data: {
+        remainingBalance: {
+          decrement: dto.amount,
+        },
+      },
+    });
 
     await this.audit.log(userId, 'REPAY_LOAN', 'LoanApplication', id, {
       amount: dto.amount,

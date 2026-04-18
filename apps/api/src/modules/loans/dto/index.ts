@@ -31,3 +31,4 @@ export class RepayLoanDto {
   @Min(100)
   amount!: number;
 }
+import { IsNotEmpty } from 'class-validator';

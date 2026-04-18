@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -26,6 +26,16 @@ export class TransactionsController {
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   findAll(@Query() query: QueryTransactionsDto) {
     return this.transactionsService.findAll(query);
+  }
+
+  @Get('export')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @ApiOperation({ summary: 'Export transactions as CSV' })
+  async export(@Res() res: any) {
+    const csv = await this.transactionsService.exportCsv();
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="transactions.csv"');
+    res.send(csv);
   }
 
   @Get(':id')
