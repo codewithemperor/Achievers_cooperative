@@ -7,7 +7,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { SystemConfigService } from './system-config.service';
-import { UpdateConfigDto } from './dto';
+import { UpdateConfigDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -20,7 +20,7 @@ export class SystemConfigController {
   constructor(private readonly systemConfigService: SystemConfigService) {}
 
   @Get()
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Get all system configuration' })
   @ApiOkResponse({ description: 'Configuration key-value map' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -29,8 +29,8 @@ export class SystemConfigController {
   }
 
   @Patch(':key')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Update a system config value (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Update a system config value' })
   @ApiOkResponse({ description: 'Config updated' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   update(

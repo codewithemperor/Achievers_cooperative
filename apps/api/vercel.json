@@ -2,12 +2,13 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.ts",
+      "src": "dist/main.js",
       "use": "@vercel/node",
       "config": {
         "includeFiles": [
-          "prisma/**/*",
-          "dist/**/*"
+          "dist/**",
+          "node_modules/.prisma/**",
+          "node_modules/@prisma/**"
         ]
       }
     }
@@ -15,7 +16,8 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api/index.ts"
+      "dest": "dist/main.js"
     }
-  ]
+  ],
+  "buildCommand": "npm run vercel-build"
 }

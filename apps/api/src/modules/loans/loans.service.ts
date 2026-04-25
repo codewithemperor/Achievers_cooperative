@@ -3,7 +3,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { AuditService } from '../../common/services/audit.service';
-import { ApplyLoanDto, QueryLoansDto, RepayLoanDto } from './dto';
+import { ApplyLoanDto, QueryLoansDto, RepayLoanDto } from './dto/index';
 
 @Injectable()
 export class LoansService {
@@ -15,7 +15,11 @@ export class LoansService {
   ) {}
 
   async apply(userId: string, dto: ApplyLoanDto) {
-    const member = await this.prisma.member.findUnique({ where: { userId } });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const member =
+      user?.role === 'SUPER_ADMIN' && dto.memberId
+        ? await this.prisma.member.findUnique({ where: { id: dto.memberId } })
+        : await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');
 
     const loan = await this.prisma.loanApplication.create({
@@ -171,7 +175,7 @@ export class LoansService {
       reference,
     );
 
-    await this.prisma.loanApplication.update({
+    const updated = await this.prisma.loanApplication.update({
       where: { id },
       data: {
         disbursedAt: new Date(),
@@ -190,7 +194,7 @@ export class LoansService {
       `₦${Number(loan.amount).toLocaleString()} has been credited to your wallet.`,
     );
 
-    return { message: 'Loan disbursed successfully', reference };
+    return { ...updated, amount: Number(updated.amount), message: 'Loan disbursed successfully', reference };
   }
 
   async repay(userId: string, id: string, dto: RepayLoanDto) {

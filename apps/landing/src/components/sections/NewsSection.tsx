@@ -42,7 +42,7 @@ export default function NewsSection() {
             >
               <div className="relative h-64 w-full overflow-hidden">
                 <Image
-                  src={articleImages[0]}
+                  src={featured.image || articleImages[0]}
                   alt={featured.title}
                   fill
                   className="object-cover transition-transform duration-500 group-hover:scale-105"

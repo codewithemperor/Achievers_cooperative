@@ -23,6 +23,43 @@ export class PackagesService {
     };
   }
 
+  async findOne(id: string) {
+    const item = await this.prisma.package.findUnique({
+      where: { id },
+      include: {
+        subscriptions: {
+          include: {
+            member: { select: { id: true, fullName: true, membershipNumber: true } },
+          },
+          orderBy: { updatedAt: 'desc' },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Package not found');
+    }
+
+    const subscriptions = item.subscriptions.map((subscription) => ({
+      ...subscription,
+      amountPaid: Number(subscription.amountPaid),
+      amountRemaining: Number(subscription.amountRemaining),
+      penaltyAccrued: Number(subscription.penaltyAccrued),
+    }));
+
+    return {
+      ...item,
+      totalAmount: Number(item.totalAmount),
+      penaltyValue: Number(item.penaltyValue),
+      subscriptions,
+      defaulters: subscriptions.filter(
+        (subscription) =>
+          subscription.penaltyAccrued > 0 ||
+          (subscription.nextDueAt ? subscription.nextDueAt < new Date() : false),
+      ),
+    };
+  }
+
   async create(actorId: string, body: {
     name: string;
     totalAmount: number;

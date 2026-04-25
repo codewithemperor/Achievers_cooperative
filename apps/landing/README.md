@@ -1,6 +1,6 @@
-# Unity Cooperative Association — Website
+# Achievers Cooperative Association — Website
 
-A Next.js 15 website inspired by the Greenleaf Framer template, adapted for Unity Cooperative Association.
+A Next.js 15 website inspired by the Greenleaf Framer template, adapted for Achievers Cooperative Association.
 
 ## Tech Stack
 

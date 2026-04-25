@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, Playfair_Display } from "next/font/google";
+// import "@heroui/react/dist/styles.css";
 import "./globals.css";
 import { siteConfig } from "@/data/content";
 import { Providers } from "@/components/ui/Providers";

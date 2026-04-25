@@ -6,7 +6,7 @@ export interface ServerSession {
   userId: string;
   email: string;
   name: string;
-  role: "ADMIN" | "MEMBER" | "SUPER_ADMIN" | "AUDITOR";
+  role: "MEMBER" | "SUPER_ADMIN";
   profileImageUrl?: string;
 }
 
@@ -34,7 +34,7 @@ export async function requireAuth() {
 }
 
 export async function requireAdminRole(session: ServerSession) {
-  if (!["ADMIN", "SUPER_ADMIN", "AUDITOR"].includes(session.role)) {
+  if (session.role !== "SUPER_ADMIN") {
     redirect("/admin/auth/login");
   }
 }

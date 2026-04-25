@@ -5,7 +5,7 @@ export interface SessionData {
   userId: string;
   email: string;
   name: string;
-  role: "ADMIN" | "MEMBER" | "SUPER_ADMIN" | "AUDITOR";
+  role: "MEMBER" | "SUPER_ADMIN";
   profileImageUrl?: string;
 }
 

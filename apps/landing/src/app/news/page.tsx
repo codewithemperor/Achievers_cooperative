@@ -7,7 +7,7 @@ import { AnimatedSection } from "@/components/ui/AnimatedSection";
 export const metadata: Metadata = {
   title: `News & Insights | ${siteConfig.name}`,
   description:
-    "Stay up to date with the latest news, updates, and stories from Unity Cooperative Association.",
+    "Stay up to date with the latest news, updates, and stories from Achievers Cooperative Association.",
 };
 
 export const dynamic = "force-static";
@@ -44,7 +44,7 @@ export default function NewsPage() {
               >
                 <div className="relative h-52 overflow-hidden">
                   <Image
-                    src={articleImages[i % articleImages.length]}
+                    src={article.image || articleImages[i % articleImages.length]}
                     alt={article.title}
                     fill
                     className="object-cover transition-transform duration-500 group-hover:scale-105"

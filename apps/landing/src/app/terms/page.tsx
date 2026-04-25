@@ -22,7 +22,7 @@ export default function TermsPage() {
               1. Membership
             </h2>
             <p>
-              Membership in Unity Cooperative Association is open to all individuals of legal age who subscribe to the cooperative&apos;s values and fulfil the financial requirements outlined during registration. Membership confers voting rights and access to all cooperative services.
+              Membership in Achievers Cooperative Association is open to all individuals of legal age who subscribe to the cooperative&apos;s values and fulfil the financial requirements outlined during registration. Membership confers voting rights and access to all cooperative services.
             </p>
           </section>
 
@@ -49,7 +49,7 @@ export default function TermsPage() {
               4. Limitation of Liability
             </h2>
             <p>
-              Unity Cooperative Association shall not be held liable for losses arising from circumstances beyond its control. All financial services are subject to the cooperative&apos;s bylaws and applicable Nigerian cooperative law.
+              Achievers Cooperative Association shall not be held liable for losses arising from circumstances beyond its control. All financial services are subject to the cooperative&apos;s bylaws and applicable Nigerian cooperative law.
             </p>
           </section>
 

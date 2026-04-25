@@ -13,28 +13,28 @@ export class PackagesController {
   constructor(private readonly packagesService: PackagesService) {}
 
   @Get()
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'List packages' })
   findAll() {
     return this.packagesService.findAll();
   }
 
   @Post()
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Create package' })
   create(@Request() req: any, @Body() body: any) {
     return this.packagesService.create(req.user.id, body);
   }
 
   @Patch(':id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Update package' })
   update(@Param('id') id: string, @Request() req: any, @Body() body: any) {
     return this.packagesService.update(id, req.user.id, body);
   }
 
   @Get('subscriptions')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'List package subscriptions' })
   subscriptions() {
     return this.packagesService.listSubscriptions();
@@ -47,9 +47,16 @@ export class PackagesController {
   }
 
   @Get('defaulters')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'List package defaulters' })
   defaulters() {
     return this.packagesService.defaulters();
+  }
+
+  @Get(':id')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get package detail with subscriptions and defaulters' })
+  findOne(@Param('id') id: string) {
+    return this.packagesService.findOne(id);
   }
 }

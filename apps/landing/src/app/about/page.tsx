@@ -41,7 +41,7 @@ export default function AboutPage() {
           <div className="relative h-80 md:h-[500px] rounded-4xl overflow-hidden">
             <Image
               src="https://images.unsplash.com/photo-1556745757-8d76bdb6984b?w=1400&q=80"
-              alt="Unity Coop community gathering"
+              alt="Achievers Coop community gathering"
               fill
               className="object-cover"
               priority
@@ -56,7 +56,9 @@ export default function AboutPage() {
         <div className="section-padding mx-auto max-w-[1400px]">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
             <AnimatedSection>
-              <p className="text-xs font-semibold uppercase tracking-widest text-coop-muted mb-4">Our History</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-coop-muted mb-4">
+                Our History
+              </p>
               <h2 className="font-display text-3xl md:text-4xl font-semibold text-coop-dark mb-6 leading-snug">
                 Two decades of collective strength
               </h2>
@@ -148,7 +150,7 @@ export default function AboutPage() {
                 <div className="group rounded-3xl overflow-hidden bg-coop-sand card-lift">
                   <div className="relative h-56 overflow-hidden">
                     <Image
-                      src={teamImages[i]}
+                      src={member.avatar}
                       alt={member.name}
                       fill
                       className="object-cover group-hover:scale-105 transition-transform duration-500"

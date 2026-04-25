@@ -1,11 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useForm } from "react-hook-form";
+import { Button } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
+import { AdminModal } from "@/components/ui/admin-modal";
+import { NumberInput, TextInput } from "@/components/ui/form-input";
+import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 interface ProductsResponse {
   items?: Array<{
@@ -27,39 +33,72 @@ const currency = new Intl.NumberFormat("en-NG", {
 export default function InvestmentsPage() {
   const products = useApi<ProductsResponse | Array<any>>("/investments/products");
   const rows = Array.isArray(products.data) ? products.data : products.data?.items ?? [];
-  const [form, setForm] = useState({
-    name: "",
-    annualRate: "",
-    minimumAmount: "",
-    durationMonths: "",
+  const [submitting, setSubmitting] = useState(false);
+  const { control, handleSubmit, reset } = useForm<{
+    name: string;
+    annualRate: number | undefined;
+    minimumAmount: number | undefined;
+    durationMonths: number | undefined;
+  }>({
+    defaultValues: {
+      name: "",
+      annualRate: undefined,
+      minimumAmount: undefined,
+      durationMonths: undefined,
+    },
   });
 
-  async function createProduct() {
-    await api.post("/investments/products", {
-      name: form.name,
-      annualRate: Number(form.annualRate),
-      minimumAmount: Number(form.minimumAmount),
-      durationMonths: Number(form.durationMonths),
-    });
-    setForm({ name: "", annualRate: "", minimumAmount: "", durationMonths: "" });
-    await products.refetch();
-  }
+  const createProduct = handleSubmit(async (values) => {
+    try {
+      setSubmitting(true);
+      await api.post("/investments/products", {
+        name: values.name,
+        annualRate: Number(values.annualRate),
+        minimumAmount: Number(values.minimumAmount),
+        durationMonths: Number(values.durationMonths),
+      });
+      showSuccessToast("Investment product created successfully.");
+      reset();
+      await products.refetch();
+    } catch (error: any) {
+      showErrorToast(error?.response?.data?.message || "Unable to create investment product.");
+    } finally {
+      setSubmitting(false);
+    }
+  });
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Investments"
         subtitle="Active investment products available for members, including rate, threshold, and term."
+        actions={
+          <AdminModal
+            description="Create an investment product and publish it to the admin catalog."
+            title="Add Investment Product"
+            trigger={
+              <button
+                className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white"
+                type="button"
+              >
+                Add product
+              </button>
+            }
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <TextInput className="rounded-2xl md:col-span-2" control={control} label="Product Name" name="name" placeholder="Product name" />
+              <NumberInput className="rounded-2xl" control={control} label="Rate %" name="annualRate" placeholder="Rate %" min={0} />
+              <NumberInput className="rounded-2xl" control={control} label="Minimum Amount" name="minimumAmount" placeholder="Minimum amount" min={0} />
+              <NumberInput className="rounded-2xl md:col-span-2" control={control} label="Duration Months" name="durationMonths" placeholder="Duration months" min={1} />
+            </div>
+            <div className="mt-6 flex justify-end">
+              <Button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" isDisabled={submitting} onPress={() => void createProduct()}>
+                {submitting ? "Saving..." : "Save product"}
+              </Button>
+            </div>
+          </AdminModal>
+        }
       />
-      <section className="grid gap-3 rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6 md:grid-cols-5">
-        <input className="rounded-full border px-4 py-3" placeholder="Product name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
-        <input className="rounded-full border px-4 py-3" placeholder="Rate %" value={form.annualRate} onChange={(event) => setForm((current) => ({ ...current, annualRate: event.target.value }))} />
-        <input className="rounded-full border px-4 py-3" placeholder="Minimum amount" value={form.minimumAmount} onChange={(event) => setForm((current) => ({ ...current, minimumAmount: event.target.value }))} />
-        <input className="rounded-full border px-4 py-3" placeholder="Duration months" value={form.durationMonths} onChange={(event) => setForm((current) => ({ ...current, durationMonths: event.target.value }))} />
-        <button className="rounded-full bg-[var(--color-green)] px-4 py-3 font-semibold text-white" onClick={createProduct} type="button">
-          Add product
-        </button>
-      </section>
       <DataTable
         columns={[
           {
@@ -87,9 +126,19 @@ export default function InvestmentsPage() {
             header: "Status",
             render: (item) => <StatusBadge status={item.status} variant={item.status === "ACTIVE" ? "success" : "warning"} />,
           },
+          {
+            key: "detail",
+            header: "Detail",
+            render: (item) => (
+              <Link className="font-semibold text-[var(--color-green)]" href={`/admin/investments/${item.id}`}>
+                Open detail
+              </Link>
+            ),
+          },
         ]}
         data={rows}
         emptyDescription={products.error || "No investment products found."}
+        loading={products.loading}
       />
     </div>
   );

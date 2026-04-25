@@ -1,4 +1,4 @@
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'AUDITOR' | 'MEMBER';
+export type UserRole = 'SUPER_ADMIN' | 'MEMBER';
 
 export type MemberStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED';
 

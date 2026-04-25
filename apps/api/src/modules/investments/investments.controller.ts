@@ -7,7 +7,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { InvestmentsService } from './investments.service';
-import { SubscribeInvestmentDto, QueryInvestmentsDto } from './dto';
+import { SubscribeInvestmentDto, QueryInvestmentsDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -27,14 +27,14 @@ export class InvestmentsController {
   }
 
   @Post('products')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Create investment product' })
   createProduct(@Request() req: any, @Body() body: any) {
     return this.investmentsService.createProduct(req.user.id, body);
   }
 
   @Patch('products/:id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Update investment product' })
   updateProduct(@Param('id') id: string, @Request() req: any, @Body() body: any) {
     return this.investmentsService.updateProduct(id, req.user.id, body);
@@ -54,10 +54,17 @@ export class InvestmentsController {
   }
 
   @Get()
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'List investment subscriptions' })
   listAll(@Query() query: QueryInvestmentsDto) {
     return this.investmentsService.getAllInvestments(query);
+  }
+
+  @Get('products/:id')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get investment product detail with subscribers and defaulters' })
+  getProduct(@Param('id') id: string) {
+    return this.investmentsService.getProduct(id);
   }
 
   @Get('my')
@@ -68,8 +75,8 @@ export class InvestmentsController {
   }
 
   @Post('subscribe/:id/approve')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Approve an investment subscription (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Approve an investment subscription' })
   @ApiOkResponse({ description: 'Subscription approved' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   approveSubscription(@Param('id') id: string, @Request() req: any) {
@@ -77,7 +84,7 @@ export class InvestmentsController {
   }
 
   @Patch(':id/withdraw')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Withdraw matured investment' })
   withdraw(@Param('id') id: string, @Request() req: any) {
     return this.investmentsService.withdraw(id, req.user.id);

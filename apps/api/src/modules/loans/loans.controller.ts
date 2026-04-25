@@ -7,7 +7,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { LoansService } from './loans.service';
-import { ApplyLoanDto, QueryLoansDto, RepayLoanDto } from './dto';
+import { ApplyLoanDto, QueryLoansDto, RepayLoanDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -48,8 +48,8 @@ export class LoansController {
   }
 
   @Post(':id/approve')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Approve a loan (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Approve a loan' })
   @ApiOkResponse({ description: 'Loan approved' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   approve(@Param('id') id: string, @Request() req: any) {
@@ -57,15 +57,15 @@ export class LoansController {
   }
 
   @Patch(':id/approve')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Approve a loan (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Approve a loan' })
   approvePatch(@Param('id') id: string, @Request() req: any) {
     return this.loansService.approve(id, req.user.id);
   }
 
   @Post(':id/reject')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Reject a loan (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Reject a loan' })
   @ApiOkResponse({ description: 'Loan rejected' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   reject(@Param('id') id: string, @Request() req: any) {
@@ -73,15 +73,15 @@ export class LoansController {
   }
 
   @Patch(':id/reject')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Reject a loan (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Reject a loan' })
   rejectPatch(@Param('id') id: string, @Request() req: any) {
     return this.loansService.reject(id, req.user.id);
   }
 
   @Post(':id/disburse')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Disburse an approved loan (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Disburse an approved loan' })
   @ApiOkResponse({ description: 'Loan disbursed' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   disburse(@Param('id') id: string, @Request() req: any) {
@@ -89,8 +89,8 @@ export class LoansController {
   }
 
   @Patch(':id/disburse')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Disburse an approved loan (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Disburse an approved loan' })
   disbursePatch(@Param('id') id: string, @Request() req: any) {
     return this.loansService.disburse(id, req.user.id);
   }

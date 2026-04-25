@@ -5,6 +5,7 @@ import Link from "next/link";
 import { navLinks, siteConfig } from "@/data/content";
 import { Menu, X } from "lucide-react";
 import { clsx } from "clsx";
+import Image from "next/image";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -29,8 +30,16 @@ export default function Navbar() {
         {/* Logo */}
         <Link
           href="/"
-          className="font-display text-xl font-semibold text-coop-dark tracking-tight"
+          className="font-display text-xl flex items-center font-semibold text-coop-dark tracking-tight"
         >
+          <div className="flex h-10 w-10 shrink-0 items-center mr-2 justify-center overflow-hidden rounded-xl bg-white/10">
+            <Image
+              src="/logo.jpeg"
+              alt="Achievers Cooperative"
+              width={32}
+              height={32}
+            />
+          </div>
           {siteConfig.name}
         </Link>
 

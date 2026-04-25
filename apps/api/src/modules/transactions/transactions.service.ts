@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
-import { QueryTransactionsDto } from './dto';
+import { QueryTransactionsDto } from './dto/index';
 
 @Injectable()
 export class TransactionsService {

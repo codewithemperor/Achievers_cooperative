@@ -1,17 +1,14 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-
+  url      = env("DATABASE_URL")
 }
 
 enum UserRole {
   SUPER_ADMIN
-  ADMIN
-  AUDITOR
   MEMBER
 }
 
@@ -65,6 +62,7 @@ model User {
 model Member {
   id                   String                 @id @default(cuid())
   userId               String                 @unique
+  referrerId           String?
   membershipNumber     String                 @unique
   fullName             String
   phoneNumber          String
@@ -73,6 +71,8 @@ model Member {
   status               MemberStatus           @default(PENDING)
   joinedAt             DateTime               @default(now())
   user                 User                   @relation(fields: [userId], references: [id])
+  referrer             Member?                @relation("MemberReferrals", fields: [referrerId], references: [id])
+  referredMembers      Member[]               @relation("MemberReferrals")
   wallet               Wallet?
   savingsAccounts      SavingsAccount[]
   loanApplications     LoanApplication[]

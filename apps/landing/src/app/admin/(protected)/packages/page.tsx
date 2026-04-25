@@ -1,11 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useForm } from "react-hook-form";
+import { Button } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
+import { AdminModal } from "@/components/ui/admin-modal";
+import { NumberInput, SelectInput, TextInput } from "@/components/ui/form-input";
+import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 interface PackagesResponse {
   items: Array<{
@@ -18,17 +24,11 @@ interface PackagesResponse {
   }>;
 }
 
-interface PackageSubscriptionsResponse {
-  items: Array<{
-    id: string;
-    status: string;
-    amountPaid: number;
-    amountRemaining: number;
-    penaltyAccrued: number;
-    member: { fullName: string; membershipNumber: string };
-    package: { name: string };
-  }>;
-}
+const penaltyOptions: Array<{ id: string; label: string }> = [
+  { id: "FIXED", label: "Fixed Amount" },
+  { id: "PERCENTAGE", label: "Percentage" },
+  { id: "NONE", label: "No Penalty" },
+];
 
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
@@ -38,53 +38,79 @@ const currency = new Intl.NumberFormat("en-NG", {
 
 export default function PackagesPage() {
   const packages = useApi<PackagesResponse>("/packages");
-  const subscriptions = useApi<PackageSubscriptionsResponse>("/packages/subscriptions");
-  const defaulters = useApi<PackageSubscriptionsResponse>("/packages/defaulters");
-  const [form, setForm] = useState({
-    name: "",
-    totalAmount: "",
-    durationMonths: "",
-    penaltyType: "FIXED",
-    penaltyValue: "",
-    penaltyFrequency: "MONTHLY",
+  const [submitting, setSubmitting] = useState(false);
+  const { control, handleSubmit, reset } = useForm<{
+    name: string;
+    totalAmount: number | undefined;
+    durationMonths: number | undefined;
+    penaltyType: string;
+    penaltyValue: number | undefined;
+    penaltyFrequency: string;
+  }>({
+    defaultValues: {
+      name: "",
+      totalAmount: undefined,
+      durationMonths: undefined,
+      penaltyType: "FIXED",
+      penaltyValue: undefined,
+      penaltyFrequency: "MONTHLY",
+    },
   });
 
-  async function createPackage() {
-    await api.post("/packages", {
-      name: form.name,
-      totalAmount: Number(form.totalAmount),
-      durationMonths: Number(form.durationMonths),
-      penaltyType: form.penaltyType,
-      penaltyValue: Number(form.penaltyValue),
-      penaltyFrequency: form.penaltyFrequency,
-    });
-    setForm({
-      name: "",
-      totalAmount: "",
-      durationMonths: "",
-      penaltyType: "FIXED",
-      penaltyValue: "",
-      penaltyFrequency: "MONTHLY",
-    });
-    await packages.refetch();
-  }
+  const createPackage = handleSubmit(async (values) => {
+    try {
+      setSubmitting(true);
+      await api.post("/packages", {
+        name: values.name,
+        totalAmount: Number(values.totalAmount),
+        durationMonths: Number(values.durationMonths),
+        penaltyType: values.penaltyType,
+        penaltyValue: Number(values.penaltyValue),
+        penaltyFrequency: values.penaltyFrequency,
+      });
+      showSuccessToast("Package created successfully.");
+      reset();
+      await packages.refetch();
+    } catch (error: any) {
+      showErrorToast(error?.response?.data?.message || "Unable to create package.");
+    } finally {
+      setSubmitting(false);
+    }
+  });
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Packages"
         subtitle="Structured savings or repayment packages with penalty configuration and subscription visibility."
+        actions={
+          <AdminModal
+            description="Create a package and choose from the default penalty configuration options."
+            title="Add Package"
+            trigger={
+              <button
+                className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white"
+                type="button"
+              >
+                Add package
+              </button>
+            }
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <TextInput className="rounded-2xl md:col-span-2" control={control} label="Package Name" name="name" placeholder="Package name" />
+              <NumberInput className="rounded-2xl" control={control} label="Total Amount" name="totalAmount" placeholder="Total amount" min={0} />
+              <NumberInput className="rounded-2xl" control={control} label="Duration Months" name="durationMonths" placeholder="Duration months" min={1} />
+              <SelectInput className="rounded-2xl" control={control} label="Penalty Type" name="penaltyType" options={penaltyOptions} />
+              <NumberInput className="rounded-2xl" control={control} label="Penalty Value" name="penaltyValue" placeholder="Penalty value" min={0} />
+            </div>
+            <div className="mt-6 flex justify-end">
+              <Button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" isDisabled={submitting} onPress={() => void createPackage()}>
+                {submitting ? "Saving..." : "Save package"}
+              </Button>
+            </div>
+          </AdminModal>
+        }
       />
-      <section className="grid gap-3 rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6 md:grid-cols-6">
-        <input className="rounded-full border px-4 py-3" placeholder="Package name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
-        <input className="rounded-full border px-4 py-3" placeholder="Total amount" value={form.totalAmount} onChange={(event) => setForm((current) => ({ ...current, totalAmount: event.target.value }))} />
-        <input className="rounded-full border px-4 py-3" placeholder="Duration months" value={form.durationMonths} onChange={(event) => setForm((current) => ({ ...current, durationMonths: event.target.value }))} />
-        <input className="rounded-full border px-4 py-3" placeholder="Penalty type" value={form.penaltyType} onChange={(event) => setForm((current) => ({ ...current, penaltyType: event.target.value }))} />
-        <input className="rounded-full border px-4 py-3" placeholder="Penalty value" value={form.penaltyValue} onChange={(event) => setForm((current) => ({ ...current, penaltyValue: event.target.value }))} />
-        <button className="rounded-full bg-[var(--color-green)] px-4 py-3 font-semibold text-white" onClick={createPackage} type="button">
-          Add package
-        </button>
-      </section>
       <DataTable
         columns={[
           {
@@ -112,83 +138,20 @@ export default function PackagesPage() {
             header: "Status",
             render: (item) => <StatusBadge status={item.isActive ? "ACTIVE" : "INACTIVE"} variant={item.isActive ? "success" : "warning"} />,
           },
+          {
+            key: "detail",
+            header: "Detail",
+            render: (item) => (
+              <Link className="font-semibold text-[var(--color-green)]" href={`/admin/packages/${item.id}`}>
+                Open detail
+              </Link>
+            ),
+          },
         ]}
         data={packages.data?.items ?? []}
         emptyDescription={packages.error || "No packages have been configured yet."}
+        loading={packages.loading}
       />
-
-      <section className="grid gap-6 xl:grid-cols-2">
-        <div className="space-y-4">
-          <PageHeader
-            title="Subscriptions"
-            subtitle="Current package subscriptions by members."
-          />
-          <DataTable
-            columns={[
-              {
-                key: "member",
-                header: "Member",
-                render: (item) => (
-                  <div>
-                    <p className="font-semibold text-[var(--color-dark)]">{item.member.fullName}</p>
-                    <p className="text-xs">{item.member.membershipNumber}</p>
-                  </div>
-                ),
-              },
-              {
-                key: "package",
-                header: "Package",
-                render: (item) => item.package.name,
-              },
-              {
-                key: "progress",
-                header: "Progress",
-                render: (item) => `${currency.format(item.amountPaid)} paid`,
-              },
-              {
-                key: "status",
-                header: "Status",
-                render: (item) => <StatusBadge status={item.status} variant={item.status === "ACTIVE" ? "success" : "warning"} />,
-              },
-            ]}
-            data={subscriptions.data?.items ?? []}
-            emptyDescription={subscriptions.error || "No subscriptions found."}
-          />
-        </div>
-
-        <div className="space-y-4">
-          <PageHeader
-            title="Defaulters"
-            subtitle="Subscriptions with overdue amounts or accrued penalties."
-          />
-          <DataTable
-            columns={[
-              {
-                key: "member",
-                header: "Member",
-                render: (item) => item.member.fullName,
-              },
-              {
-                key: "package",
-                header: "Package",
-                render: (item) => item.package.name,
-              },
-              {
-                key: "remaining",
-                header: "Remaining",
-                render: (item) => currency.format(item.amountRemaining),
-              },
-              {
-                key: "penalty",
-                header: "Penalty",
-                render: (item) => currency.format(item.penaltyAccrued),
-              },
-            ]}
-            data={defaulters.data?.items ?? []}
-            emptyDescription={defaulters.error || "No current defaulters."}
-          />
-        </div>
-      </section>
     </div>
   );
 }

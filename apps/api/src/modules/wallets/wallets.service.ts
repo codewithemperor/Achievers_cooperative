@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { AuditService } from '../../common/services/audit.service';
-import { FundWalletDto } from './dto';
+import { FundWalletDto } from './dto/index';
 
 @Injectable()
 export class WalletsService {

@@ -3,7 +3,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { AuditService } from '../../common/services/audit.service';
-import { SubscribeInvestmentDto, QueryInvestmentsDto } from './dto';
+import { SubscribeInvestmentDto, QueryInvestmentsDto } from './dto/index';
 
 @Injectable()
 export class InvestmentsService {
@@ -52,6 +52,40 @@ export class InvestmentsService {
       annualRate: Number(created.annualRate),
       minimumAmount: Number(created.minimumAmount),
       maximumAmount: created.maximumAmount ? Number(created.maximumAmount) : null,
+    };
+  }
+
+  async getProduct(id: string) {
+    const product = await this.prisma.investmentProduct.findUnique({
+      where: { id },
+      include: {
+        subscriptions: {
+          include: {
+            member: { select: { id: true, fullName: true, membershipNumber: true } },
+          },
+          orderBy: { maturityDate: 'desc' },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Investment product not found');
+    }
+
+    const subscriptions = product.subscriptions.map((subscription) => ({
+      ...subscription,
+      principal: Number(subscription.principal),
+      isDefaulter: subscription.maturityDate < new Date() && subscription.status !== 'APPROVED',
+    }));
+
+    return {
+      ...product,
+      annualRate: Number(product.annualRate),
+      minimumAmount: Number(product.minimumAmount),
+      maximumAmount: product.maximumAmount ? Number(product.maximumAmount) : null,
+      subscriptions,
+      subscribers: subscriptions.filter((subscription) => !subscription.isDefaulter),
+      defaulters: subscriptions.filter((subscription) => subscription.isDefaulter),
     };
   }
 

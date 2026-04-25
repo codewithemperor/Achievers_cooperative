@@ -40,22 +40,6 @@ async function main() {
     },
   });
 
-  const adminUser = await prisma.user.create({
-    data: {
-      email: "operations@achievers.com",
-      passwordHash: adminPasswordHash,
-      role: "ADMIN",
-    },
-  });
-
-  const auditorUser = await prisma.user.create({
-    data: {
-      email: "audit@achievers.com",
-      passwordHash: adminPasswordHash,
-      role: "AUDITOR",
-    },
-  });
-
   // Member 1 - Active
   const member1User = await prisma.user.create({
     data: {
@@ -89,6 +73,7 @@ async function main() {
         create: {
           fullName: "Chidi Eze",
           phoneNumber: "+2348023456789",
+          referrerId: member1User.member?.id,
           membershipNumber: "ACH-000002",
           status: "ACTIVE",
           wallet: {
@@ -112,6 +97,7 @@ async function main() {
         create: {
           fullName: "Funke Adeyemi",
           phoneNumber: "+2348034567890",
+          referrerId: member1User.member?.id,
           membershipNumber: "ACH-000003",
           status: "PENDING",
           wallet: {
@@ -308,7 +294,7 @@ async function main() {
       { key: "BANK_ACCOUNT_NUMBER", value: "0123456789" },
       { key: "BANK_NAME", value: "Community Trust Bank" },
     ],
-    skipDuplicates: true,
+    skipDuplicates: true as never,
   });
 
   const cooperativeWallet = await prisma.cooperativeWallet.create({
@@ -327,7 +313,7 @@ async function main() {
         amount: 45000,
         category: "MEMBERSHIP_CHARGE",
         description: "Membership charges collected from funded wallets",
-        createdById: adminUser.id,
+        createdById: superAdmin.id,
       },
       {
         walletId: cooperativeWallet.id,
@@ -335,7 +321,7 @@ async function main() {
         amount: 50000,
         category: "OTHER_INCOME",
         description: "Administrative service fee recovery",
-        createdById: adminUser.id,
+        createdById: superAdmin.id,
       },
       {
         walletId: cooperativeWallet.id,
@@ -362,7 +348,7 @@ async function main() {
           amount: 80000,
           receiptUrl: "https://example.com/receipts/fund-002.jpg",
           status: "APPROVED",
-          verifiedById: adminUser.id,
+          verifiedById: superAdmin.id,
           verifiedAt: new Date(),
           netCreditAmount: 78400,
         },
@@ -438,7 +424,7 @@ async function main() {
         entityId: member1User.member?.id ?? "",
       },
       {
-        actorId: adminUser.id,
+        actorId: superAdmin.id,
         action: "APPROVE_LOAN",
         entityType: "LoanApplication",
         entityId: "seed-loan-1",
@@ -451,8 +437,6 @@ async function main() {
   console.log("");
   console.log("📋 Test Accounts:");
   console.log("   SUPER_ADMIN: admin@achievers.com / Admin@123");
-  console.log("   ADMIN:       operations@achievers.com / Admin@123");
-  console.log("   AUDITOR:     audit@achievers.com / Admin@123");
   console.log("   MEMBER:      adaeze@achievers.com / Member@123");
   console.log("   MEMBER:      chidi@achievers.com / Member@123");
   console.log("   MEMBER:      funke@achievers.com / Member@123");

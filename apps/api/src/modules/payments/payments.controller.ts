@@ -13,21 +13,21 @@ export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Get()
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'List payment receipts for review' })
   findAll() {
     return this.paymentsService.findAll();
   }
 
   @Get(':id')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Get payment detail' })
   findOne(@Param('id') id: string) {
     return this.paymentsService.findOne(id);
   }
 
   @Post()
-  @Roles('MEMBER', 'SUPER_ADMIN', 'ADMIN')
+  @Roles('MEMBER', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Upload payment receipt record' })
   create(
     @Request() req: any,
@@ -37,14 +37,14 @@ export class PaymentsController {
   }
 
   @Patch(':id/approve')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Approve payment and credit wallet' })
   approve(@Param('id') id: string, @Request() req: any) {
     return this.paymentsService.approve(id, req.user.id);
   }
 
   @Patch(':id/reject')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Reject payment' })
   reject(
     @Param('id') id: string,

@@ -15,12 +15,12 @@ import { Roles } from '../../common/decorators/roles.decorator';
 @ApiBearerAuth()
 @Controller('audit')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+@Roles('SUPER_ADMIN')
 export class AuditController {
   constructor(private readonly auditService: AuditModuleService) {}
 
   @Get('logs')
-  @ApiOperation({ summary: 'Get audit logs (admin/auditor)' })
+  @ApiOperation({ summary: 'Get audit logs' })
   @ApiOkResponse({ description: 'Paginated audit logs' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   getLogs(

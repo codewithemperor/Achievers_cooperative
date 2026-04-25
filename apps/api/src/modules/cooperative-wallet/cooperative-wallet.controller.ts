@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -9,7 +9,7 @@ import { CooperativeWalletService } from './cooperative-wallet.service';
 @ApiBearerAuth()
 @Controller('wallet/cooperative')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+@Roles('SUPER_ADMIN')
 export class CooperativeWalletController {
   constructor(private readonly cooperativeWalletService: CooperativeWalletService) {}
 
@@ -26,7 +26,7 @@ export class CooperativeWalletController {
   }
 
   @Post('entries')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Create cooperative wallet entry' })
   createEntry(
     @Request() req: any,
@@ -37,8 +37,34 @@ export class CooperativeWalletController {
       category: string;
       description: string;
       reference?: string;
+      createdAt?: string;
     },
   ) {
-    return this.cooperativeWalletService.createEntry(req.user.id, body);
+    return this.cooperativeWalletService.createEntry(req.user.id, {
+      ...body,
+      createdAt: body.createdAt ? new Date(body.createdAt) : undefined,
+    });
+  }
+
+  @Patch('entries/:id')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Update cooperative wallet entry' })
+  updateEntry(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      type: 'INCOME' | 'EXPENSE';
+      amount: number;
+      category: string;
+      description: string;
+      reference?: string;
+      createdAt?: string;
+    },
+  ) {
+    return this.cooperativeWalletService.updateEntry(req.user.id, id, {
+      ...body,
+      createdAt: body.createdAt ? new Date(body.createdAt) : undefined,
+    });
   }
 }

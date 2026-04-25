@@ -9,10 +9,11 @@ export const siteConfig = {
   description:
     "Achievers Cooperative helps members save consistently, access fair credit, and build long-term prosperity through accountable, member-led finance.",
   url: "https://achieverscooperative.org",
-  contactEmail: "hello@achieverscooperative.org",
-  contactPhone: "+234 800 2244 8377",
-  address: "14 Cooperative Way, Ikeja, Lagos, Nigeria",
-  foundedYear: 2003,
+  contactEmail: "achieverscooperative7124@gmail.com",
+  contactPhone: "+234 703 387 1122",
+  address: "NUT House, Beside hotel, Sasa Ibadan, Oyo State",
+  foundedYear: 2024,
+  workingHour: "Every Sunday, 10am to 11am",
   copyright: `© ${new Date().getFullYear()} Achievers Cooperative Association. All rights reserved.`,
 };
 
@@ -64,7 +65,7 @@ export const services = [
     slug: "credit-loans",
     title: "Credit & Affordable Loans",
     description:
-      "Access fair, member-centered loans with clear terms, transparent review, and repayment structures built for real households and businesses.",
+      "Access fair, member-centered loans with zero interest, clear terms, and repayment structures built for real households and businesses.",
     image: "/images/service-credit.jpg",
     imageAlt: "Handshake representing financial agreement",
   },
@@ -114,8 +115,8 @@ export const benefits = [
 ];
 
 export const statsNumbers = [
-  { value: "5,200+", label: "Active members" },
-  { value: "₦2.4B+", label: "Assets under management" },
+  { value: "40+", label: "Active members" },
+  { value: "₦12m+", label: "Assets under management" },
   { value: "22", label: "Years of operation" },
   { value: "98%", label: "Member satisfaction" },
 ];
@@ -180,11 +181,11 @@ export const newsArticles = [
   {
     slug: "annual-general-meeting-2025",
     category: "Governance",
-    date: "March 15, 2025",
+    date: "January 11, 2025",
     title: "Achievers Cooperative holds its 2025 Annual General Meeting",
     excerpt:
       "Members reviewed performance, approved key resolutions, and aligned on the next stage of growth for the cooperative.",
-    image: "/images/news-1.jpg",
+    image: "/images/news-1.jpeg",
   },
   {
     slug: "new-loan-product-launch",
@@ -193,17 +194,17 @@ export const newsArticles = [
     title: "New flexible micro-loan product introduced for members",
     excerpt:
       "The new product is designed to support small traders and entrepreneurs with practical, easier-to-access credit.",
-    image: "/images/news-2.jpg",
+    // image: "/images/news-2.jpg",
   },
-  {
-    slug: "community-farm-initiative",
-    category: "Community",
-    date: "January 10, 2025",
-    title: "Cooperative-backed farming initiative opens new livelihoods",
-    excerpt:
-      "A new agricultural initiative expands member opportunity while strengthening local food production and shared income.",
-    image: "/images/news-3.jpg",
-  },
+  // {
+  //   slug: "community-farm-initiative",
+  //   category: "Community",
+  //   date: "January 10, 2025",
+  //   title: "Cooperative-backed farming initiative opens new livelihoods",
+  //   excerpt:
+  //     "A new agricultural initiative expands member opportunity while strengthening local food production and shared income.",
+  //   image: "/images/news-3.jpg",
+  // },
   {
     slug: "digital-savings-platform",
     category: "Technology",
@@ -211,17 +212,17 @@ export const newsArticles = [
     title: "Digital savings platform improves access for members",
     excerpt:
       "Members can now track balances, review contributions, and engage more easily with cooperative services online.",
-    image: "/images/news-4.jpg",
+    // image: "/images/news-4.jpg",
   },
-  {
-    slug: "youth-empowerment-program",
-    category: "Education",
-    date: "November 18, 2024",
-    title: "Youth empowerment program expands financial literacy reach",
-    excerpt:
-      "The cooperative continues investing in education that equips younger participants with practical financial skills.",
-    image: "/images/news-5.jpg",
-  },
+  // {
+  //   slug: "youth-empowerment-program",
+  //   category: "Education",
+  //   date: "November 18, 2024",
+  //   title: "Youth empowerment program expands financial literacy reach",
+  //   excerpt:
+  //     "The cooperative continues investing in education that equips younger participants with practical financial skills.",
+  //   image: "/images/news-5.jpg",
+  // },
 ];
 
 // FAQ SECTION
@@ -240,7 +241,7 @@ export const faqs = [
   {
     question: "What is the minimum contribution requirement?",
     answer:
-      "The minimum share capital contribution is ₦10,000, with a one-time registration fee of ₦2,000. Members may increase their shares over time to deepen participation and dividend potential.",
+      "The minimum share capital contribution is ₦100,000, with a one-time registration fee of ₦20,000. Members may increase their shares over time to deepen participation and dividend potential.",
   },
   {
     question: "How are loans reviewed?",
@@ -317,28 +318,34 @@ Today, Achievers Cooperative manages over ₦2.4 billion in member assets and ha
   ],
   team: [
     {
-      name: "Ngozi Adeyemi",
-      role: "President & Co-founder",
+      name: "Rafiu Kabir Olanrewaju",
+      role: "President",
       bio: "A founding member who has helped guide the cooperative with steady focus on governance, trust, and member welfare.",
-      avatar: "/images/team-1.jpg",
+      avatar: "/images/team-1.jpeg",
     },
     {
-      name: "Babatunde Okafor",
-      role: "General Manager",
+      name: "Aderoju Isiak Gbadegesin",
+      role: "Vice President",
       bio: "Brings two decades of experience in cooperative finance and has helped scale operations while preserving member-first principles.",
-      avatar: "/images/team-2.jpg",
+      avatar: "/images/team-2.jpeg",
     },
     {
-      name: "Aisha Mohammed",
-      role: "Head of Credit & Loans",
-      bio: "Leads responsible credit review and works to ensure members can access financing through clear, fair processes.",
-      avatar: "/images/team-3.jpg",
-    },
-    {
-      name: "Femi Adebayo",
-      role: "Head of Member Services",
+      name: "Soliu Saheed Olasunkanmi",
+      role: "Secretary",
       bio: "Supports the day-to-day member experience and helps ensure that questions, concerns, and onboarding steps are handled well.",
-      avatar: "/images/team-4.jpg",
+      avatar: "/images/team-3.jpeg",
+    },
+    {
+      name: "Soliu Yusuf Olamikan",
+      role: "Treasurer",
+      bio: "Leads responsible credit review and works to ensure members can access financing through clear, fair processes.",
+      avatar: "/images/team-4.jpeg",
+    },
+    {
+      name: "John Adewale Gbadesin",
+      role: "Grand Patron",
+      bio: "Leads responsible credit review and works to ensure members can access financing through clear, fair processes.",
+      avatar: "/images/team-5.jpeg",
     },
   ],
 };

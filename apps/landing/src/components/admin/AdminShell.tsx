@@ -1,6 +1,7 @@
 "use client";
 
 import type { PropsWithChildren } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,9 +14,9 @@ import {
   Settings,
   TrendingUp,
   Users,
-  Wallet,
 } from "lucide-react";
 import clsx from "clsx";
+import { Drawer } from "@heroui/react";
 import { clearSession } from "@/lib/session";
 
 const navItems = [
@@ -26,52 +27,67 @@ const navItems = [
   { href: "/admin/investments", label: "Investments", icon: TrendingUp },
   { href: "/admin/packages", label: "Packages", icon: Package },
   { href: "/admin/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/admin/wallet", label: "Co-op Wallet", icon: Wallet },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
-export function AdminShell({ children }: PropsWithChildren) {
+function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(232,224,208,0.95),rgba(245,240,232,1)_48%,rgba(255,255,255,0.98)_100%)] text-[var(--color-dark)]">
-      <div className="mx-auto flex min-h-screen max-w-[1600px]">
-        <aside className="hidden w-80 shrink-0 border-r border-[rgba(26,46,26,0.1)] bg-[rgba(255,255,255,0.75)] px-6 py-8 backdrop-blur xl:block">
-          <div className="rounded-[2rem] bg-[linear-gradient(160deg,rgba(26,46,26,1),rgba(61,122,53,0.94))] p-6 text-white shadow-[0_24px_60px_rgba(26,46,26,0.2)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[rgba(245,240,232,0.82)]">
-              Achievers Cooperative
-            </p>
-            <h2 className="mt-3 text-2xl font-semibold">Admin Workspace</h2>
-            <p className="mt-2 text-sm text-[rgba(245,240,232,0.74)]">
-              Operations, auditability, and member service in one place.
-            </p>
-          </div>
+    <div className="flex h-full flex-col  py-8">
+      {/* Logo + Name */}
+      <div className="mb-8 flex items-center gap-3 px-6">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10">
+          <Image
+            src="/logo.jpeg"
+            alt="Achievers Cooperative"
+            width={32}
+            height={32}
+          />
+        </div>
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-widest text-white/50">
+            Cooperative
+          </p>
+          <p className="text-sm font-bold leading-tight text-white">
+            Achievers Cooperative
+          </p>
+        </div>
+      </div>
 
-          <nav className="mt-8 space-y-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+      {/* Nav */}
+      <nav className="flex-1 space-y-1 px-6 overflow-y-auto">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active =
+            item.href === "/admin"
+              ? pathname === "/admin"
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={clsx(
-                    "flex items-center gap-3 rounded-[1.2rem] px-4 py-3 text-sm font-medium transition",
-                    active
-                      ? "bg-[rgba(45,90,39,0.11)] text-[var(--color-dark)]"
-                      : "text-[var(--color-coop-muted)] hover:bg-white hover:text-[var(--color-dark)]",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavClick}
+              className={clsx(
+                "flex items-center gap-3 rounded-[1.2rem] px-4 py-3 text-sm font-medium transition",
+                active
+                  ? "bg-white text-(--color-dark)"
+                  : "text-[rgba(245,240,232,0.82)] hover:bg-[rgba(255,255,255,0.16)] hover:text-white",
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
 
+      {/* Logout */}
+      <div className="mt-6 shrink-0 border-t border-white/10 pt-6">
+        <div className="px-6">
           <button
-            className="mt-8 rounded-full border border-[rgba(26,46,26,0.14)] px-5 py-3 text-sm font-semibold text-[var(--color-dark)]"
+            className="w-full rounded-full border border-[rgba(255,255,255,0.24)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 "
             onClick={() => {
               clearSession();
               window.location.href = "/admin/auth/login";
@@ -80,29 +96,87 @@ export function AdminShell({ children }: PropsWithChildren) {
           >
             Log Out
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const sidebarGradient =
+  "bg-[linear-gradient(180deg,rgba(26,46,26,1),rgba(45,90,39,0.98),rgba(61,122,53,0.95))]";
+
+export function AdminShell({ children }: PropsWithChildren) {
+  const pathname = usePathname();
+
+  const breadcrumb =
+    pathname === "/admin"
+      ? "Dashboard overview"
+      : pathname.replace("/admin/", "").replaceAll("/", " / ");
+
+  return (
+    <div className="min-h-screen bg-white text-(--color-dark)">
+      <div className="mx-auto flex min-h-screen max-w-400">
+        {/* ── Desktop sidebar ── */}
+        <aside
+          className={clsx(
+            "hidden xl:flex xl:w-80 xl:shrink-0",
+            "sticky top-0 h-screen max-h-screen flex-col",
+            "border-r border-[rgba(26,46,26,0.18)]",
+            sidebarGradient,
+          )}
+        >
+          <SidebarContent />
         </aside>
 
+        {/* ── Main column ── */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 border-b border-[rgba(26,46,26,0.08)] bg-[rgba(245,240,232,0.82)] px-5 py-4 backdrop-blur md:px-8">
+          {/* ── Header ── */}
+          <header className="sticky top-0 z-30 border-b border-[rgba(26,46,26,0.08)] bg-white px-5 py-4 md:px-8">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--color-dark)] text-white xl:hidden">
-                  <Menu className="h-5 w-5" />
-                </div>
+                {/* Mobile menu trigger via HeroUI Drawer */}
+                <Drawer>
+                  <Drawer.Trigger
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl bg-(--color-dark)text-white xl:hidden"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </Drawer.Trigger>
+
+                  <Drawer.Backdrop variant="blur">
+                    <Drawer.Content
+                      placement="left"
+                      className="w-72 max-w-[85vw]"
+                    >
+                      <Drawer.Dialog
+                        className={clsx("h-full", sidebarGradient)}
+                        aria-label="Navigation"
+                      >
+                        <Drawer.Handle className="bg-white/20" />
+                        <Drawer.CloseTrigger className="text-white/70 hover:text-white" />
+                        {/* Render nav inside drawer; close on link click */}
+                        <Drawer.Body className="p-0">
+                          {/* We embed SidebarContent but need close fn — use uncontrolled approach */}
+                          <SidebarContent />
+                        </Drawer.Body>
+                      </Drawer.Dialog>
+                    </Drawer.Content>
+                  </Drawer.Backdrop>
+                </Drawer>
+
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--color-mid)]">
-                    Admin
-                  </p>
-                  <p className="text-sm text-[var(--color-coop-muted)]">
-                    {pathname === "/admin" ? "Dashboard overview" : pathname.replace("/admin/", "").replaceAll("/", " / ")}
+                  <p className="text-sm capitalize text-(--color-coop-muted)">
+                    {breadcrumb}
                   </p>
                 </div>
               </div>
-              <div className="rounded-full border border-[rgba(26,46,26,0.1)] bg-white px-4 py-2 text-sm text-[var(--color-coop-muted)]">
+
+              <div className="rounded-full border border-[rgba(26,46,26,0.1)] bg-white px-4 py-2 text-sm text-(--color-coop-muted)">
                 Secure internal workspace
               </div>
             </div>
           </header>
+
           <main className="flex-1 px-5 py-6 md:px-8">{children}</main>
         </div>
       </div>

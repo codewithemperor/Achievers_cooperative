@@ -52,9 +52,13 @@ export default async function NewsArticlePage({
       <article className="section-padding mx-auto max-w-[900px] py-20">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-xs text-coop-muted mb-10">
-          <Link href="/" className="hover:text-coop-dark transition-colors">Home</Link>
+          <Link href="/" className="hover:text-coop-dark transition-colors">
+            Home
+          </Link>
           <span>/</span>
-          <Link href="/news" className="hover:text-coop-dark transition-colors">News</Link>
+          <Link href="/news" className="hover:text-coop-dark transition-colors">
+            News
+          </Link>
           <span>/</span>
           <span className="text-coop-dark">{article.title}</span>
         </div>
@@ -75,7 +79,10 @@ export default async function NewsArticlePage({
         {/* Cover image */}
         <div className="relative h-64 md:h-96 rounded-4xl overflow-hidden mb-12 bg-coop-sand">
           <Image
-            src={articleImages[articleIndex % articleImages.length]}
+            src={
+              article.image ||
+              articleImages[articleIndex % articleImages.length]
+            }
             alt={article.title}
             fill
             className="object-cover"
@@ -89,13 +96,22 @@ export default async function NewsArticlePage({
             {article.excerpt}
           </p>
           <p>
-            Unity Cooperative Association continues to serve its members with dedication and transparency. This development marks another milestone in our journey toward building a more equitable financial ecosystem for all members and the wider community.
+            Achievers Cooperative Association continues to serve its members with
+            dedication and transparency. This development marks another
+            milestone in our journey toward building a more equitable financial
+            ecosystem for all members and the wider community.
           </p>
           <p>
-            Our cooperative model ensures that every decision made at the institutional level reflects the interests and voices of our membership. We remain committed to democratic governance, fair financial practices, and sustainable community development.
+            Our cooperative model ensures that every decision made at the
+            institutional level reflects the interests and voices of our
+            membership. We remain committed to democratic governance, fair
+            financial practices, and sustainable community development.
           </p>
           <p>
-            Members who wish to learn more or participate in related programs are encouraged to visit any of our branch offices or reach out through our digital platform. Together, we continue to build prosperity through collective action.
+            Members who wish to learn more or participate in related programs
+            are encouraged to visit any of our branch offices or reach out
+            through our digital platform. Together, we continue to build
+            prosperity through collective action.
           </p>
         </div>
       </article>

@@ -1,6 +1,10 @@
-import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class ApplyLoanDto {
+  @IsOptional()
+  @IsString()
+  memberId?: string;
+
   @IsNumber()
   @Min(1000)
   amount!: number;
@@ -31,4 +35,3 @@ export class RepayLoanDto {
   @Min(100)
   amount!: number;
 }
-import { IsNotEmpty } from 'class-validator';

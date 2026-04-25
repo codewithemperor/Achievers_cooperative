@@ -69,7 +69,7 @@ export default function HeroSection() {
               </div>
               <div className="relative overflow-hidden rounded-3xl bg-coop-sand">
                 <Image
-                  src="https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=600&q=80"
+                  src="/images/hero-2.jpeg"
                   alt="Cooperative gathering"
                   fill
                   className="object-cover"
@@ -77,7 +77,7 @@ export default function HeroSection() {
               </div>
               <div className="relative overflow-hidden rounded-3xl bg-coop-green/30">
                 <Image
-                  src="https://images.unsplash.com/photo-1464863979621-258859e62245?w=600&q=80"
+                  src="/images/hero-3.jpeg"
                   alt="Members working together"
                   fill
                   className="object-cover"

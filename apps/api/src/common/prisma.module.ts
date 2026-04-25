@@ -4,6 +4,7 @@ import { AuditService } from './services/audit.service';
 import { WalletService } from './services/wallet.service';
 import { NotificationService } from './services/notification.service';
 import { MembershipChargeService } from './services/membership-charge.service';
+import { MailService } from './services/mail.service';
 
 @Global()
 @Module({
@@ -13,6 +14,7 @@ import { MembershipChargeService } from './services/membership-charge.service';
     WalletService,
     NotificationService,
     MembershipChargeService,
+    MailService,
   ],
   exports: [
     PrismaService,
@@ -20,6 +22,7 @@ import { MembershipChargeService } from './services/membership-charge.service';
     WalletService,
     NotificationService,
     MembershipChargeService,
+    MailService,
   ],
 })
 export class PrismaModule {}

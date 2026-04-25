@@ -18,7 +18,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { MembersService } from './members.service';
-import { UpdateMemberDto, UpdateMemberStatusDto, QueryMembersDto } from './dto';
+import { UpdateMemberDto, UpdateMemberStatusDto, QueryMembersDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -31,8 +31,8 @@ export class MembersController {
   constructor(private readonly membersService: MembersService) {}
 
   @Get()
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
-  @ApiOperation({ summary: 'List all members (admin only)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'List all members' })
   @ApiOkResponse({ description: 'Paginated member list' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   findAll(@Query() query: QueryMembersDto) {
@@ -47,7 +47,7 @@ export class MembersController {
   }
 
   @Get('search')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Search members by name or email' })
   search(@Query('query') query: string) {
     return this.membersService.search(query);
@@ -61,7 +61,7 @@ export class MembersController {
   }
 
   @Post()
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Create member profile' })
   create(
     @Request() req: any,
@@ -71,6 +71,7 @@ export class MembersController {
       fullName: string;
       phoneNumber: string;
       address?: string;
+      referrerId?: string;
     },
   ) {
     return this.membersService.create(req.user.id, body);
@@ -84,15 +85,15 @@ export class MembersController {
   }
 
   @Patch(':id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Update member by ID' })
   updateById(@Param('id') id: string, @Request() req: any, @Body() dto: UpdateMemberDto) {
     return this.membersService.updateById(id, dto, req.user.id);
   }
 
   @Patch(':id/status')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Update member status (admin only)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Update member status' })
   @ApiOkResponse({ description: 'Updated status' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   updateStatus(
@@ -113,8 +114,15 @@ export class MembersController {
     return this.membersService.updateAvatar(id, body.avatarUrl, req.user.id);
   }
 
+  @Post(':id/reset-password')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Send a password reset OTP to a member' })
+  resetPassword(@Param('id') id: string, @Request() req: any) {
+    return this.membersService.resetPassword(id, req.user.id);
+  }
+
   @Delete(':id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Delete member record' })
   remove(@Param('id') id: string, @Request() req: any) {
     return this.membersService.remove(id, req.user.id);

@@ -22,7 +22,7 @@ export default function PrivacyPolicyPage() {
               1. Information We Collect
             </h2>
             <p>
-              Unity Cooperative Association collects information necessary to provide cooperative financial services. This includes your name, contact information, national identification number, and financial details necessary to process membership applications, savings plans, and loan requests.
+              Achievers Cooperative Association collects information necessary to provide cooperative financial services. This includes your name, contact information, national identification number, and financial details necessary to process membership applications, savings plans, and loan requests.
             </p>
           </section>
 

@@ -7,7 +7,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
-import { QueryTransactionsDto } from './dto';
+import { QueryTransactionsDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -20,8 +20,8 @@ export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
   @Get()
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
-  @ApiOperation({ summary: 'List all transactions (admin/auditor)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'List all transactions' })
   @ApiOkResponse({ description: 'Paginated transactions' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   findAll(@Query() query: QueryTransactionsDto) {
@@ -29,7 +29,7 @@ export class TransactionsController {
   }
 
   @Get('export')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'AUDITOR')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Export transactions as CSV' })
   async export(@Res() res: any) {
     const csv = await this.transactionsService.exportCsv();
@@ -46,8 +46,8 @@ export class TransactionsController {
   }
 
   @Post(':id/approve')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Approve a transaction (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Approve a transaction' })
   @ApiOkResponse({ description: 'Transaction approved' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   approve(@Param('id') id: string, @Request() req: any) {
@@ -55,8 +55,8 @@ export class TransactionsController {
   }
 
   @Post(':id/reject')
-  @Roles('SUPER_ADMIN', 'ADMIN')
-  @ApiOperation({ summary: 'Reject a transaction (admin)' })
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Reject a transaction' })
   @ApiOkResponse({ description: 'Transaction rejected' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   reject(@Param('id') id: string, @Request() req: any) {

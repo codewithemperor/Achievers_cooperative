@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
+import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
+import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 interface LoanDetail {
   id: string;
@@ -13,6 +14,8 @@ interface LoanDetail {
   tenorMonths: number;
   purpose: string;
   status: string;
+  disbursedAt?: string | null;
+  rejectedAt?: string | null;
   member: { fullName: string; membershipNumber: string };
 }
 
@@ -25,15 +28,22 @@ const currency = new Intl.NumberFormat("en-NG", {
 export default function LoanDetailPage() {
   const params = useParams<{ id: string }>();
   const loan = useApi<LoanDetail>(`/loans/${params.id}`);
-  const [working, setWorking] = useState(false);
+  const isNewLoan = loan.data?.status === "PENDING";
+  const isApprovedLoan = loan.data?.status === "APPROVED" && !loan.data?.disbursedAt;
+  const actionSuccessMessage: Record<"approve" | "reject" | "disburse", string> = {
+    approve: "Loan approved successfully.",
+    reject: "Loan rejected successfully.",
+    disburse: "Loan disbursed successfully.",
+  };
 
   async function runAction(action: "approve" | "reject" | "disburse") {
     try {
-      setWorking(true);
       await api.patch(`/loans/${params.id}/${action}`);
+      showSuccessToast(actionSuccessMessage[action]);
       await loan.refetch();
-    } finally {
-      setWorking(false);
+    } catch (error: any) {
+      showErrorToast(error?.response?.data?.message || `Unable to ${action} loan.`);
+      throw error;
     }
   }
 
@@ -44,15 +54,36 @@ export default function LoanDetailPage() {
         subtitle="Review the selected loan application and its member context."
         actions={
           <>
-            <button className="rounded-full border px-4 py-2 text-sm" disabled={working} onClick={() => runAction("approve")} type="button">
-              Approve
-            </button>
-            <button className="rounded-full border px-4 py-2 text-sm" disabled={working} onClick={() => runAction("reject")} type="button">
-              Reject
-            </button>
-            <button className="rounded-full bg-[var(--color-green)] px-4 py-2 text-sm font-semibold text-white" disabled={working} onClick={() => runAction("disburse")} type="button">
-              Disburse
-            </button>
+            {isNewLoan ? (
+              <>
+                <ConfirmActionButton
+                  confirmMessage="Approve this pending loan request and move it to the disbursement stage."
+                  confirmTitle="Approve loan request?"
+                  label="Approve"
+                  onConfirm={() => runAction("approve")}
+                  pendingLabel="Approving..."
+                  tone="success"
+                />
+                <ConfirmActionButton
+                  confirmMessage="Reject this pending loan request. The action cannot be undone from this page."
+                  confirmTitle="Reject loan request?"
+                  label="Reject"
+                  onConfirm={() => runAction("reject")}
+                  pendingLabel="Rejecting..."
+                  tone="danger"
+                />
+              </>
+            ) : null}
+            {isApprovedLoan ? (
+              <ConfirmActionButton
+                confirmMessage="Disburse this approved loan and credit the member wallet immediately."
+                confirmTitle="Disburse approved loan?"
+                label="Disburse"
+                onConfirm={() => runAction("disburse")}
+                pendingLabel="Disbursing..."
+                tone="success"
+              />
+            ) : null}
           </>
         }
       />
@@ -67,7 +98,10 @@ export default function LoanDetailPage() {
           <p className="mt-2 text-2xl font-semibold text-[var(--color-dark)]">{currency.format(loan.data?.amount ?? 0)}</p>
           <p className="mt-1 text-sm">{loan.data?.tenorMonths ?? 0} month tenor</p>
           <div className="mt-4">
-            <StatusBadge status={loan.data?.status || "UNKNOWN"} variant="info" />
+            <StatusBadge
+              status={loan.data?.disbursedAt ? "DISBURSED" : loan.data?.status || "UNKNOWN"}
+              variant={loan.data?.disbursedAt ? "success" : loan.data?.status === "REJECTED" ? "danger" : loan.data?.status === "APPROVED" ? "success" : "warning"}
+            />
           </div>
         </div>
       </div>

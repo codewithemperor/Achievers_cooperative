@@ -30,8 +30,8 @@ export default function AdminLoginPage() {
       const response = await api.post("/auth/login", values);
       const user = response.data.user;
 
-      if (!["ADMIN", "SUPER_ADMIN", "AUDITOR"].includes(user.role)) {
-        setError("This login is reserved for administrators.");
+      if (user.role !== "SUPER_ADMIN") {
+        setError("This login is reserved for super administrators.");
         return;
       }
 
