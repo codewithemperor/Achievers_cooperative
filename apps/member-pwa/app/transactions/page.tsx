@@ -1,180 +1,79 @@
-import { Card, Chip } from "@heroui/react";
-import { formatCurrency } from "@achievers/utils";
+"use client";
 
-const mockTransactions = [
-  {
-    id: "1",
-    type: "FUNDING",
-    amount: 50000,
-    status: "APPROVED",
-    date: "Apr 8, 2026",
-    ref: "TXN-001",
-  },
-  {
-    id: "2",
-    type: "LOAN_REPAYMENT",
-    amount: -15000,
-    status: "APPROVED",
-    date: "Apr 7, 2026",
-    ref: "TXN-002",
-  },
-  {
-    id: "3",
-    type: "SAVINGS",
-    amount: -20000,
-    status: "APPROVED",
-    date: "Apr 5, 2026",
-    ref: "TXN-003",
-  },
-  {
-    id: "4",
-    type: "FUNDING",
-    amount: 30000,
-    status: "PENDING",
-    date: "Apr 4, 2026",
-    ref: "TXN-004",
-  },
-  {
-    id: "5",
-    type: "INVESTMENT",
-    amount: -50000,
-    status: "APPROVED",
-    date: "Apr 1, 2026",
-    ref: "TXN-005",
-  },
-  {
-    id: "6",
-    type: "LOAN_DISBURSEMENT",
-    amount: 100000,
-    status: "APPROVED",
-    date: "Mar 28, 2026",
-    ref: "TXN-006",
-  },
-  {
-    id: "7",
-    type: "FUNDING",
-    amount: 200000,
-    status: "APPROVED",
-    date: "Mar 15, 2026",
-    ref: "TXN-007",
-  },
-  {
-    id: "8",
-    type: "SAVINGS",
-    amount: -30000,
-    status: "APPROVED",
-    date: "Mar 1, 2026",
-    ref: "TXN-008",
-  },
-];
+import { useMemo, useState } from "react";
+import { useMemberData } from "../lib/use-member-data";
 
-const statusColor = {
-  APPROVED: "success" as const,
-  PENDING: "warning" as const,
-  REJECTED: "danger" as const,
-};
+interface TransactionsPayload {
+  items: Array<{
+    id: string;
+    type: string;
+    amount: number;
+    status: string;
+    reference?: string | null;
+    createdAt: string;
+  }>;
+}
 
-const typeLabel: Record<string, string> = {
-  FUNDING: "Wallet Funding",
-  LOAN_REPAYMENT: "Loan Repayment",
-  SAVINGS: "Savings Contribution",
-  LOAN_DISBURSEMENT: "Loan Disbursement",
-  INVESTMENT: "Investment",
-};
+const fallback: TransactionsPayload = { items: [] };
+const money = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
 
 export default function TransactionsPage() {
-  return (
-    <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
-      <h1 className="text-xl font-semibold text-[var(--brand-ink)]">
-        Transactions
-      </h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Complete history of all your transactions
-      </p>
+  const [filter, setFilter] = useState("ALL");
+  const { data } = useMemberData<TransactionsPayload>("/wallet/transactions?limit=50", fallback);
 
-      {/* Filters */}
-      <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-        {["All", "Funding", "Loans", "Savings", "Investments"].map((filter) => (
+  const filteredItems = useMemo(() => {
+    if (filter === "ALL") return data.items;
+    return data.items.filter((item) => item.type === filter);
+  }, [data.items, filter]);
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <h1 className="text-2xl font-semibold text-[var(--brand-ink)]">Transactions</h1>
+        <p className="mt-1 text-sm text-[var(--brand-moss)]">Filter and review wallet activity from the NestJS transaction history.</p>
+      </section>
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {["ALL", "WALLET_FUNDING", "LOAN_REPAYMENT", "WEEKLY_COOPERATIVE", "MEMBERSHIP_FEE"].map((item) => (
           <button
-            key={filter}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
-              filter === "All"
-                ? "bg-[var(--brand-ink)] text-white"
-                : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-            }`}
+            key={item}
+            className={
+              filter === item
+                ? "rounded-full bg-[var(--brand-green)] px-4 py-2 text-xs font-semibold text-white"
+                : "rounded-full border border-[var(--brand-stroke)] bg-white px-4 py-2 text-xs font-semibold text-[var(--brand-ink)]"
+            }
+            onClick={() => setFilter(item)}
+            type="button"
           >
-            {filter}
+            {item === "ALL" ? "All" : item.replaceAll("_", " ")}
           </button>
         ))}
       </div>
 
-      {/* Transactions */}
-      <div className="mt-4 space-y-2">
-        {mockTransactions.map((tx) => (
-          <div
-            key={tx.id}
-            className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`flex h-9 w-9 items-center justify-center rounded-lg ${tx.amount > 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}
-              >
-                {tx.amount > 0 ? (
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 4.5v15m7.5-7.5h-15"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M19.5 12h-15"
-                    />
-                  </svg>
-                )}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--brand-ink)]">
-                  {typeLabel[tx.type] || tx.type}
-                </p>
-                <p className="text-xs text-slate-400">
-                  {tx.date} · {tx.ref}
-                </p>
+      <div className="space-y-3">
+        {filteredItems.length ? (
+          filteredItems.map((transaction) => (
+            <div key={transaction.id} className="rounded-[1.5rem] border border-[var(--brand-stroke)] bg-white p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-[var(--brand-ink)]">{transaction.type.replaceAll("_", " ")}</p>
+                  <p className="mt-1 text-xs text-[var(--brand-moss)]">
+                    {new Date(transaction.createdAt).toLocaleString("en-NG")}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--brand-moss)]">{transaction.reference || "No reference"}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-[var(--brand-ink)]">{money.format(transaction.amount)}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--brand-moss)]">{transaction.status}</p>
+                </div>
               </div>
             </div>
-            <div className="text-right">
-              <p
-                className={`text-sm font-semibold ${tx.amount > 0 ? "text-green-600" : "text-slate-700"}`}
-              >
-                {tx.amount > 0 ? "+" : ""}
-                {formatCurrency(Math.abs(tx.amount))}
-              </p>
-              <Chip
-                size="sm"
-                color={statusColor[tx.status as keyof typeof statusColor]}
-                variant="soft"
-              >
-                {tx.status}
-              </Chip>
-            </div>
+          ))
+        ) : (
+          <div className="rounded-[1.5rem] border border-dashed border-[var(--brand-stroke)] bg-white p-6 text-sm text-[var(--brand-moss)]">
+            No transactions match the selected filter yet.
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

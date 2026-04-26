@@ -1,16 +1,81 @@
+// @ts-nocheck
 import * as bcrypt from "bcryptjs";
 
 import { prisma } from "../prisma";
 
-async function main() {
-  console.log("🌱 Seeding Achievers Cooperative database...");
+function monthsFromNow(months: number) {
+  const date = new Date();
+  date.setMonth(date.getMonth() + months);
+  return date;
+}
 
-  // Hash password
+async function createMemberUser(input: {
+  email: string;
+  passwordHash: string;
+  fullName: string;
+  phoneNumber: string;
+  membershipNumber: string;
+  status: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "WITHDRAWN";
+  referrerId?: string;
+  homeAddress: string;
+  stateOfOrigin: string;
+  dateOfBirth: string;
+  occupation: string;
+  maritalStatus: "SINGLE" | "MARRIED" | "DIVORCED" | "WIDOWED";
+  identificationNumber: string;
+  identificationPicture: string;
+  identificationType: "VOTERS_CARD" | "NIN" | "NATIONAL_PASSPORT";
+  avatarUrl?: string;
+  availableBalance?: number;
+  pendingBalance?: number;
+  totalFunded?: number;
+  totalCharges?: number;
+}) {
+  return prisma.user.create({
+    data: {
+      email: input.email,
+      passwordHash: input.passwordHash,
+      role: "MEMBER",
+      member: {
+        create: {
+          fullName: input.fullName,
+          phoneNumber: input.phoneNumber,
+          membershipNumber: input.membershipNumber,
+          status: input.status,
+          referrerId: input.referrerId,
+          address: input.homeAddress,
+          homeAddress: input.homeAddress,
+          stateOfOrigin: input.stateOfOrigin,
+          dateOfBirth: new Date(input.dateOfBirth),
+          occupation: input.occupation,
+          maritalStatus: input.maritalStatus,
+          identificationNumber: input.identificationNumber,
+          identificationPicture: input.identificationPicture,
+          identificationType: input.identificationType,
+          avatarUrl: input.avatarUrl,
+          wallet: {
+            create: {
+              availableBalance: input.availableBalance ?? 0,
+              pendingBalance: input.pendingBalance ?? 0,
+              totalFunded: input.totalFunded ?? input.availableBalance ?? 0,
+              totalCharges: input.totalCharges ?? 0,
+              currency: "NGN",
+            },
+          },
+        },
+      },
+    },
+    include: { member: { include: { wallet: true } } },
+  });
+}
+
+async function main() {
+  console.log("Seeding Achievers Cooperative database...");
+
   const adminPasswordHash = await bcrypt.hash("Admin@123", 12);
   const memberPasswordHash = await bcrypt.hash("Member@123", 12);
 
-  // Clean up (for idempotent seeding)
-  console.log("🧹 Cleaning existing data...");
+  console.log("Cleaning existing data...");
   await prisma.auditEvent.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.cooperativeEntry.deleteMany();
@@ -28,9 +93,7 @@ async function main() {
   await prisma.systemConfig.deleteMany();
   await prisma.user.deleteMany();
 
-  // ─── USERS & MEMBERS ─────────────────────────────────────
-
-  console.log("👤 Creating users and members...");
+  console.log("Creating users and members...");
 
   const superAdmin = await prisma.user.create({
     data: {
@@ -40,80 +103,75 @@ async function main() {
     },
   });
 
-  // Member 1 - Active
-  const member1User = await prisma.user.create({
-    data: {
-      email: "adaeze@achievers.com",
-      passwordHash: memberPasswordHash,
-      role: "MEMBER",
-      member: {
-        create: {
-          fullName: "Adaeze Okonkwo",
-          phoneNumber: "+2348012345678",
-          membershipNumber: "ACH-000001",
-          status: "ACTIVE",
-          wallet: {
-            create: {
-              availableBalance: 150000,
-            },
-          },
-        },
-      },
-    },
-    include: { member: { include: { wallet: true } } },
+  const member1User = await createMemberUser({
+    email: "adaeze@achievers.com",
+    passwordHash: memberPasswordHash,
+    fullName: "Adaeze Okonkwo",
+    phoneNumber: "08012345678",
+    membershipNumber: "ACH-000001",
+    status: "ACTIVE",
+    homeAddress: "12 Palm Avenue, Enugu",
+    stateOfOrigin: "Enugu",
+    dateOfBirth: "1990-04-12",
+    occupation: "Trader",
+    maritalStatus: "MARRIED",
+    identificationNumber: "70123456789",
+    identificationPicture: "https://example.com/ids/adaeze-nin.jpg",
+    identificationType: "NIN",
+    avatarUrl: "https://example.com/avatars/adaeze.jpg",
+    availableBalance: 150000,
+    pendingBalance: 5000,
+    totalFunded: 180000,
+    totalCharges: 25000,
   });
 
-  // Member 2 - Active
-  const member2User = await prisma.user.create({
-    data: {
-      email: "chidi@achievers.com",
-      passwordHash: memberPasswordHash,
-      role: "MEMBER",
-      member: {
-        create: {
-          fullName: "Chidi Eze",
-          phoneNumber: "+2348023456789",
-          referrerId: member1User.member?.id,
-          membershipNumber: "ACH-000002",
-          status: "ACTIVE",
-          wallet: {
-            create: {
-              availableBalance: 250000,
-            },
-          },
-        },
-      },
-    },
-    include: { member: { include: { wallet: true } } },
+  const member2User = await createMemberUser({
+    email: "chidi@achievers.com",
+    passwordHash: memberPasswordHash,
+    fullName: "Chidi Eze",
+    phoneNumber: "08023456789",
+    membershipNumber: "ACH-000002",
+    status: "ACTIVE",
+    referrerId: member1User.member?.id,
+    homeAddress: "44 Market Road, Awka",
+    stateOfOrigin: "Anambra",
+    dateOfBirth: "1988-09-25",
+    occupation: "Engineer",
+    maritalStatus: "SINGLE",
+    identificationNumber: "A12345678",
+    identificationPicture: "https://example.com/ids/chidi-passport.jpg",
+    identificationType: "NATIONAL_PASSPORT",
+    avatarUrl: "https://example.com/avatars/chidi.jpg",
+    availableBalance: 250000,
+    pendingBalance: 0,
+    totalFunded: 320000,
+    totalCharges: 40000,
   });
 
-  // Member 3 - Pending
-  const member3User = await prisma.user.create({
-    data: {
-      email: "funke@achievers.com",
-      passwordHash: memberPasswordHash,
-      role: "MEMBER",
-      member: {
-        create: {
-          fullName: "Funke Adeyemi",
-          phoneNumber: "+2348034567890",
-          referrerId: member1User.member?.id,
-          membershipNumber: "ACH-000003",
-          status: "PENDING",
-          wallet: {
-            create: {
-              availableBalance: 0,
-            },
-          },
-        },
-      },
-    },
-    include: { member: { include: { wallet: true } } },
+  const member3User = await createMemberUser({
+    email: "funke@achievers.com",
+    passwordHash: memberPasswordHash,
+    fullName: "Funke Adeyemi",
+    phoneNumber: "08034567890",
+    membershipNumber: "ACH-000003",
+    status: "INACTIVE",
+    referrerId: member1User.member?.id,
+    homeAddress: "6 Liberty Street, Ibadan",
+    stateOfOrigin: "Oyo",
+    dateOfBirth: "1994-01-16",
+    occupation: "Teacher",
+    maritalStatus: "MARRIED",
+    identificationNumber: "VIN-33445566",
+    identificationPicture: "https://example.com/ids/funke-voters-card.jpg",
+    identificationType: "VOTERS_CARD",
+    avatarUrl: "https://example.com/avatars/funke.jpg",
+    availableBalance: 0,
+    pendingBalance: 0,
+    totalFunded: 0,
+    totalCharges: 0,
   });
 
-  // ─── INVESTMENT PRODUCTS ──────────────────────────────────
-
-  console.log("📊 Creating investment products...");
+  console.log("Creating investment products...");
 
   const product1 = await prisma.investmentProduct.create({
     data: {
@@ -135,57 +193,87 @@ async function main() {
     },
   });
 
-  // ─── SAMPLE TRANSACTIONS ──────────────────────────────────
-
-  console.log("💰 Creating sample transactions...");
+  console.log("Creating sample transactions...");
 
   if (member1User.member?.wallet) {
-    await prisma.transaction.create({
-      data: {
-        walletId: member1User.member.wallet.id,
-        type: "FUNDING",
-        amount: 150000,
-        status: "APPROVED",
-        reference: "FUND-SEED-001",
-      },
-    });
-
-    await prisma.transaction.create({
-      data: {
-        walletId: member1User.member.wallet.id,
-        type: "SAVINGS",
-        amount: 20000,
-        status: "APPROVED",
-        reference: "SAVE-SEED-001",
-      },
+    await prisma.transaction.createMany({
+      data: [
+        {
+          walletId: member1User.member.wallet.id,
+          type: "WALLET_FUNDING",
+          amount: 150000,
+          status: "APPROVED",
+          reference: "FUND-SEED-001",
+          category: "wallet",
+          description: "Initial wallet funding",
+          editable: false,
+          lockReason: "Seeded approved funding entry",
+        },
+        {
+          walletId: member1User.member.wallet.id,
+          type: "MEMBERSHIP_FEE",
+          amount: 5000,
+          status: "APPROVED",
+          reference: "MF-SEED-001",
+          category: "fee",
+          description: "Membership fee charge",
+          editable: false,
+          lockReason: "System fee charge",
+        },
+        {
+          walletId: member1User.member.wallet.id,
+          type: "SAVINGS",
+          amount: 20000,
+          status: "APPROVED",
+          reference: "SAVE-SEED-001",
+          category: "savings",
+          description: "Savings contribution",
+          editable: false,
+        },
+      ],
     });
   }
 
   if (member2User.member?.wallet) {
-    await prisma.transaction.create({
-      data: {
-        walletId: member2User.member.wallet.id,
-        type: "FUNDING",
-        amount: 250000,
-        status: "APPROVED",
-        reference: "FUND-SEED-002",
-      },
-    });
-
-    await prisma.transaction.create({
-      data: {
-        walletId: member2User.member.wallet.id,
-        type: "INVESTMENT",
-        amount: 100000,
-        status: "APPROVED",
-        reference: "INV-SEED-001",
-      },
+    await prisma.transaction.createMany({
+      data: [
+        {
+          walletId: member2User.member.wallet.id,
+          type: "WALLET_FUNDING",
+          amount: 250000,
+          status: "APPROVED",
+          reference: "FUND-SEED-002",
+          category: "wallet",
+          description: "Initial wallet funding",
+          editable: false,
+          lockReason: "Seeded approved funding entry",
+        },
+        {
+          walletId: member2User.member.wallet.id,
+          type: "INVESTMENT_DEPOSIT",
+          amount: 100000,
+          status: "APPROVED",
+          reference: "INV-SEED-001",
+          category: "investment",
+          description: "Investment principal contribution",
+          editable: false,
+        },
+        {
+          walletId: member2User.member.wallet.id,
+          type: "WEEKLY_COOPERATIVE",
+          amount: 10000,
+          status: "APPROVED",
+          reference: "COOP-SEED-001",
+          category: "cooperative",
+          description: "Weekly cooperative deduction",
+          editable: false,
+          lockReason: "Automated deduction",
+        },
+      ],
     });
   }
 
-  // ─── SAVINGS ACCOUNTS ─────────────────────────────────────
-
-  console.log("🏦 Creating savings accounts...");
+  console.log("Creating savings accounts...");
 
   if (member1User.member) {
     await prisma.savingsAccount.create({
@@ -207,53 +295,39 @@ async function main() {
     });
   }
 
-  // ─── LOAN APPLICATIONS ────────────────────────────────────
+  console.log("Creating sample loan applications...");
 
-  console.log("📝 Creating sample loan applications...");
-
-  if (member1User.member) {
+  if (member1User.member && member2User.member) {
     await prisma.loanApplication.create({
       data: {
         memberId: member1User.member.id,
+        guarantorOneId: member2User.member.id,
         amount: 100000,
         tenorMonths: 6,
         purpose: "Business expansion",
         status: "APPROVED",
-      },
-    });
-
-    await prisma.loanApplication.create({
-      data: {
-        memberId: member1User.member.id,
-        amount: 50000,
-        tenorMonths: 3,
-        purpose: "School fees",
-        status: "PENDING",
+        approvedAt: new Date(),
+        remainingBalance: 40000,
       },
     });
   }
 
-  if (member2User.member) {
+  if (member2User.member && member1User.member && member3User.member) {
     await prisma.loanApplication.create({
       data: {
         memberId: member2User.member.id,
+        guarantorOneId: member1User.member.id,
+        guarantorTwoId: member3User.member.id,
         amount: 200000,
         tenorMonths: 12,
         purpose: "Equipment purchase",
         status: "PENDING",
+        remainingBalance: 200000,
       },
     });
   }
 
-  // ─── INVESTMENT SUBSCRIPTIONS ─────────────────────────────
-
-  console.log("📈 Creating investment subscriptions...");
-
-  const maturityDate1 = new Date();
-  maturityDate1.setMonth(maturityDate1.getMonth() + 6);
-
-  const maturityDate2 = new Date();
-  maturityDate2.setMonth(maturityDate2.getMonth() + 12);
+  console.log("Creating investment subscriptions...");
 
   if (member1User.member) {
     await prisma.investmentSubscription.create({
@@ -261,7 +335,7 @@ async function main() {
         memberId: member1User.member.id,
         productId: product1.id,
         principal: 50000,
-        maturityDate: maturityDate1,
+        maturityDate: monthsFromNow(6),
         status: "APPROVED",
       },
     });
@@ -273,23 +347,20 @@ async function main() {
         memberId: member2User.member.id,
         productId: product2.id,
         principal: 100000,
-        maturityDate: maturityDate2,
+        maturityDate: monthsFromNow(12),
         status: "APPROVED",
       },
     });
   }
 
-  // ─── SYSTEM CONFIG ────────────────────────────────────────
-
-  console.log("⚙️  Creating system config...");
+  console.log("Creating system config...");
 
   await prisma.systemConfig.createMany({
     data: [
-      { key: "MEMBERSHIP_CHARGE_RATE", value: "0.02" },
-      { key: "LOAN_INTEREST_RATE", value: "0.05" },
-      { key: "MINIMUM_SAVINGS_CONTRIBUTION", value: "1000" },
-      { key: "MAX_LOAN_MULTIPLIER", value: "3" },
-      { key: "LOAN_DEFAULT_DURATION_DAYS", value: "30" },
+      { key: "MEMBERSHIP_FEE_AMOUNT", value: "5000" },
+      { key: "COOPERATIVE_DEDUCTION_DAY", value: "MONDAY" },
+      { key: "COOPERATIVE_DEDUCTION_AMOUNT", value: "10000" },
+      { key: "MEMBER_TERMS_HTML", value: "<p>Members agree to weekly deductions, cooperative rules, and accurate profile documentation.</p>" },
       { key: "BANK_ACCOUNT_NAME", value: "Achievers Cooperative Society" },
       { key: "BANK_ACCOUNT_NUMBER", value: "0123456789" },
       { key: "BANK_NAME", value: "Community Trust Bank" },
@@ -311,15 +382,15 @@ async function main() {
         walletId: cooperativeWallet.id,
         type: "INCOME",
         amount: 45000,
-        category: "MEMBERSHIP_CHARGE",
-        description: "Membership charges collected from funded wallets",
+        category: "MEMBERSHIP_FEE",
+        description: "Membership fees collected from members",
         createdById: superAdmin.id,
       },
       {
         walletId: cooperativeWallet.id,
         type: "INCOME",
         amount: 50000,
-        category: "OTHER_INCOME",
+        category: "SERVICE_FEE",
         description: "Administrative service fee recovery",
         createdById: superAdmin.id,
       },
@@ -405,9 +476,7 @@ async function main() {
     });
   }
 
-  // ─── AUDIT EVENTS ─────────────────────────────────────────
-
-  console.log("📋 Creating audit events...");
+  console.log("Creating audit events...");
 
   await prisma.auditEvent.createMany({
     data: [
@@ -433,23 +502,23 @@ async function main() {
   });
 
   console.log("");
-  console.log("✅ Seed completed successfully!");
+  console.log("Seed completed successfully!");
   console.log("");
-  console.log("📋 Test Accounts:");
-  console.log("   SUPER_ADMIN: admin@achievers.com / Admin@123");
-  console.log("   MEMBER:      adaeze@achievers.com / Member@123");
-  console.log("   MEMBER:      chidi@achievers.com / Member@123");
-  console.log("   MEMBER:      funke@achievers.com / Member@123");
+  console.log("Test Accounts:");
+  console.log("  SUPER_ADMIN: admin@achievers.com / Admin@123");
+  console.log("  MEMBER:      adaeze@achievers.com / Member@123");
+  console.log("  MEMBER:      chidi@achievers.com / Member@123");
+  console.log("  MEMBER:      funke@achievers.com / Member@123");
   console.log("");
-  console.log("💰 Member Wallets:");
-  console.log(`   Adaeze: ₦150,000`);
-  console.log(`   Chidi:  ₦250,000`);
-  console.log(`   Funke:  ₦0 (pending)`);
+  console.log("Member Wallets:");
+  console.log("  Adaeze: NGN 150,000");
+  console.log("  Chidi:  NGN 250,000");
+  console.log("  Funke:  NGN 0 (inactive)");
 }
 
 main()
   .catch((error) => {
-    console.error("❌ Seed failed:", error);
+    console.error("Seed failed:", error);
     process.exit(1);
   })
   .finally(async () => {

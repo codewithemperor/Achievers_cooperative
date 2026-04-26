@@ -5,6 +5,8 @@ import { WalletService } from './services/wallet.service';
 import { NotificationService } from './services/notification.service';
 import { MembershipChargeService } from './services/membership-charge.service';
 import { MailService } from './services/mail.service';
+import { WeeklyDeductionsService } from './services/weekly-deductions.service';
+import { CloudinaryService } from './services/cloudinary.service';
 
 @Global()
 @Module({
@@ -15,6 +17,8 @@ import { MailService } from './services/mail.service';
     NotificationService,
     MembershipChargeService,
     MailService,
+    WeeklyDeductionsService,
+    CloudinaryService,
   ],
   exports: [
     PrismaService,
@@ -23,6 +27,8 @@ import { MailService } from './services/mail.service';
     NotificationService,
     MembershipChargeService,
     MailService,
+    WeeklyDeductionsService,
+    CloudinaryService,
   ],
 })
 export class PrismaModule {}

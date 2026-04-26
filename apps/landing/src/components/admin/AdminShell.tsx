@@ -1,6 +1,6 @@
 "use client";
 
-import type { PropsWithChildren } from "react";
+import { useState, type PropsWithChildren } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -16,7 +16,6 @@ import {
   Users,
 } from "lucide-react";
 import clsx from "clsx";
-import { Drawer } from "@heroui/react";
 import { clearSession } from "@/lib/session";
 
 const navItems = [
@@ -34,29 +33,18 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full flex-col  py-8">
-      {/* Logo + Name */}
+    <div className="flex h-full flex-col py-8">
       <div className="mb-8 flex items-center gap-3 px-6">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10">
-          <Image
-            src="/logo.jpeg"
-            alt="Achievers Cooperative"
-            width={32}
-            height={32}
-          />
+          <Image src="/logo.jpeg" alt="Achievers Cooperative" width={32} height={32} />
         </div>
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-widest text-white/50">
-            Cooperative
-          </p>
-          <p className="text-sm font-bold leading-tight text-white">
-            Achievers Cooperative
-          </p>
+          <p className="text-[11px] font-medium uppercase tracking-widest text-white/50">Cooperative</p>
+          <p className="text-sm font-bold leading-tight text-white">Achievers Cooperative</p>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 space-y-1 px-6 overflow-y-auto">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-6">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active =
@@ -72,7 +60,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
               className={clsx(
                 "flex items-center gap-3 rounded-[1.2rem] px-4 py-3 text-sm font-medium transition",
                 active
-                  ? "bg-white text-(--color-dark)"
+                  ? "bg-white text-[var(--color-dark)]"
                   : "text-[rgba(245,240,232,0.82)] hover:bg-[rgba(255,255,255,0.16)] hover:text-white",
               )}
             >
@@ -83,11 +71,10 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         })}
       </nav>
 
-      {/* Logout */}
       <div className="mt-6 shrink-0 border-t border-white/10 pt-6">
         <div className="px-6">
           <button
-            className="w-full rounded-full border border-[rgba(255,255,255,0.24)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 "
+            className="w-full rounded-full border border-[rgba(255,255,255,0.24)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
             onClick={() => {
               clearSession();
               window.location.href = "/admin/auth/login";
@@ -107,71 +94,42 @@ const sidebarGradient =
 
 export function AdminShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const breadcrumb =
-    pathname === "/admin"
-      ? "Dashboard overview"
-      : pathname.replace("/admin/", "").replaceAll("/", " / ");
+    pathname === "/admin" ? "Dashboard overview" : pathname.replace("/admin/", "").replaceAll("/", " / ");
 
   return (
-    <div className="min-h-screen bg-white text-(--color-dark)">
+    <div className="min-h-screen bg-white text-[var(--color-dark)]">
       <div className="mx-auto flex min-h-screen max-w-400">
-        {/* ── Desktop sidebar ── */}
         <aside
           className={clsx(
-            "hidden xl:flex xl:w-80 xl:shrink-0",
-            "sticky top-0 h-screen max-h-screen flex-col",
-            "border-r border-[rgba(26,46,26,0.18)]",
+            "sticky top-0 hidden h-screen max-h-screen shrink-0 flex-col border-r border-[rgba(26,46,26,0.18)] xl:flex xl:w-80",
             sidebarGradient,
           )}
         >
           <SidebarContent />
         </aside>
 
-        {/* ── Main column ── */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* ── Header ── */}
           <header className="sticky top-0 z-30 border-b border-[rgba(26,46,26,0.08)] bg-white px-5 py-4 md:px-8">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                {/* Mobile menu trigger via HeroUI Drawer */}
-                <Drawer>
-                  <Drawer.Trigger
-                    className="flex h-11 w-11 items-center justify-center rounded-2xl bg-(--color-dark)text-white xl:hidden"
-                    aria-label="Open menu"
-                  >
-                    <Menu className="h-5 w-5" />
-                  </Drawer.Trigger>
-
-                  <Drawer.Backdrop variant="blur">
-                    <Drawer.Content
-                      placement="left"
-                      className="w-72 max-w-[85vw]"
-                    >
-                      <Drawer.Dialog
-                        className={clsx("h-full", sidebarGradient)}
-                        aria-label="Navigation"
-                      >
-                        <Drawer.Handle className="bg-white/20" />
-                        <Drawer.CloseTrigger className="text-white/70 hover:text-white" />
-                        {/* Render nav inside drawer; close on link click */}
-                        <Drawer.Body className="p-0">
-                          {/* We embed SidebarContent but need close fn — use uncontrolled approach */}
-                          <SidebarContent />
-                        </Drawer.Body>
-                      </Drawer.Dialog>
-                    </Drawer.Content>
-                  </Drawer.Backdrop>
-                </Drawer>
+                <button
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--color-dark)] text-white xl:hidden"
+                  aria-label="Open menu"
+                  onClick={() => setIsDrawerOpen(true)}
+                  type="button"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
 
                 <div>
-                  <p className="text-sm capitalize text-(--color-coop-muted)">
-                    {breadcrumb}
-                  </p>
+                  <p className="text-sm capitalize text-[var(--color-coop-muted)]">{breadcrumb}</p>
                 </div>
               </div>
 
-              <div className="rounded-full border border-[rgba(26,46,26,0.1)] bg-white px-4 py-2 text-sm text-(--color-coop-muted)">
+              <div className="rounded-full border border-[rgba(26,46,26,0.1)] bg-white px-4 py-2 text-sm text-[var(--color-coop-muted)]">
                 Secure internal workspace
               </div>
             </div>
@@ -180,6 +138,34 @@ export function AdminShell({ children }: PropsWithChildren) {
           <main className="flex-1 px-5 py-6 md:px-8">{children}</main>
         </div>
       </div>
+
+      {isDrawerOpen ? (
+        <div className="fixed inset-0 z-50 xl:hidden">
+          <button
+            aria-label="Close menu"
+            className="absolute inset-0 bg-[rgba(15,23,15,0.38)] backdrop-blur-sm"
+            onClick={() => setIsDrawerOpen(false)}
+            type="button"
+          />
+          <aside
+            className={clsx(
+              "relative z-10 h-full w-72 max-w-[85vw] border-r border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.28)]",
+              sidebarGradient,
+            )}
+          >
+            <div className="flex justify-end px-4 pt-4">
+              <button
+                className="rounded-full border border-white/15 px-3 py-1 text-sm text-white/80 transition hover:text-white"
+                onClick={() => setIsDrawerOpen(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <SidebarContent onNavClick={() => setIsDrawerOpen(false)} />
+          </aside>
+        </div>
+      ) : null}
     </div>
   );
 }

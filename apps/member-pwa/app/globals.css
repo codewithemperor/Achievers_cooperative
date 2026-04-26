@@ -1,13 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8f9fb;
-  --foreground: #13213a;
-  --brand-ink: #13213a;
-  --brand-navy: #1d3557;
-  --brand-gold: #c89b3c;
-  --brand-sand: #f6f1e8;
-  --brand-mist: #edf3f8;
+  --background: #f5f0e8;
+  --foreground: #1f3a21;
+  --brand-ink: #244226;
+  --brand-surface: #fffdf8;
+  --brand-green: #2d5a27;
+  --brand-green-soft: #e5efe2;
+  --brand-moss: #5d755d;
+  --brand-sand: #e8e0d0;
+  --brand-stroke: rgba(26, 46, 26, 0.1);
   --brand-white: #ffffff;
 }
 
@@ -22,9 +24,20 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: var(--background);
+  background:
+    radial-gradient(circle at top, rgba(106, 171, 94, 0.1), transparent 35%),
+    linear-gradient(180deg, #faf7f1 0%, var(--background) 42%, #f3ece0 100%);
   color: var(--foreground);
-  font-family: var(--font-geist-sans, "Segoe UI", sans-serif);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: Georgia, "Times New Roman", serif;
 }
 
 a {

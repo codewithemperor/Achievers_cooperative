@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class QueryTransactionsDto {
   @IsOptional()
@@ -14,4 +14,19 @@ export class QueryTransactionsDto {
 
   @IsOptional()
   limit?: number = 20;
+}
+
+export class UpdateTransactionDto {
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
 }

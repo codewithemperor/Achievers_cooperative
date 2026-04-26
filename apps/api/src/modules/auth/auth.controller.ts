@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiCreatedResponse, ApiOkResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto } from './dto/index';
+import { ChangePasswordDto, RegisterDto, LoginDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('auth')
@@ -57,5 +57,14 @@ export class AuthController {
   @ApiOkResponse({ description: 'Returns current user profile' })
   async getMe(@Request() req: any) {
     return this.authService.getMe(req.user.id);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change current user password' })
+  @ApiOkResponse({ description: 'Password changed successfully' })
+  async changePassword(@Request() req: any, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(req.user.id, dto);
   }
 }

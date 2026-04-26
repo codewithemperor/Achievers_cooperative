@@ -1,85 +1,62 @@
-import { Card, Chip } from "@heroui/react";
+"use client";
 
-const mockNotifications = [
-  {
-    id: "1",
-    title: "Wallet Funded",
-    message:
-      "Your wallet has been credited with ₦50,000 after successful payment verification.",
-    time: "2 hours ago",
-    read: false,
-  },
-  {
-    id: "2",
-    title: "Loan Application Update",
-    message:
-      "Your loan application for ₦100,000 has been approved. Funds will be disbursed shortly.",
-    time: "1 day ago",
-    read: false,
-  },
-  {
-    id: "3",
-    title: "Savings Contribution",
-    message:
-      "Your monthly savings contribution of ₦20,000 has been processed successfully.",
-    time: "3 days ago",
-    read: true,
-  },
-  {
-    id: "4",
-    title: "Welcome to Achievers",
-    message:
-      "Your account has been activated. You now have full access to all member services.",
-    time: "1 week ago",
-    read: true,
-  },
-];
+import { getApiBaseUrl, getMemberToken } from "../lib/member-api";
+import { useMemberData } from "../lib/use-member-data";
+
+interface NotificationsPayload {
+  unreadCount: number;
+  items: Array<{
+    id: string;
+    title: string;
+    message: string;
+    readAt?: string | null;
+    createdAt: string;
+  }>;
+}
 
 export default function NotificationsPage() {
+  const notifications = useMemberData<NotificationsPayload>("/notifications", { unreadCount: 0, items: [] });
+
+  async function markAllRead() {
+    await fetch(`${getApiBaseUrl()}/notifications/read-all`, {
+      method: "POST",
+      headers: {
+        ...(getMemberToken() ? { Authorization: `Bearer ${getMemberToken()}` } : {}),
+      },
+    });
+    window.location.reload();
+  }
+
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <section className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-[var(--brand-ink)]">
-            Notifications
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Stay updated on your account activity
-          </p>
+          <h1 className="text-2xl font-semibold text-[var(--brand-ink)]">Notifications</h1>
+          <p className="mt-1 text-sm text-[var(--brand-moss)]">Unread notifications: {notifications.data.unreadCount}</p>
         </div>
-        <button className="text-xs font-medium text-[var(--brand-gold)] hover:underline">
+        <button className="rounded-full border border-[var(--brand-stroke)] bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)]" onClick={() => void markAllRead()} type="button">
           Mark all read
         </button>
-      </div>
+      </section>
 
-      <div className="mt-4 space-y-2">
-        {mockNotifications.map((notif) => (
-          <Card
-            key={notif.id}
-            className={`border bg-white ${notif.read ? "border-slate-200" : "border-[var(--brand-gold)] bg-[var(--brand-mist)]"}`}
-          >
-            <Card.Content className="p-4">
-              <div className="flex items-start gap-3">
-                {!notif.read && (
-                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--brand-gold)]" />
-                )}
-                <div className={!notif.read ? "" : "pl-5"}>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-[var(--brand-ink)]">
-                      {notif.title}
-                    </p>
-                    <span className="text-[11px] text-slate-400">
-                      {notif.time}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    {notif.message}
-                  </p>
+      <div className="space-y-3">
+        {notifications.data.items.length ? (
+          notifications.data.items.map((item) => (
+            <div key={item.id} className={`rounded-[1.5rem] border bg-white p-4 ${item.readAt ? "border-[var(--brand-stroke)]" : "border-[var(--brand-green)]"}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-[var(--brand-ink)]">{item.title}</p>
+                  <p className="mt-1 text-sm text-[var(--brand-moss)]">{item.message}</p>
                 </div>
+                <p className="text-xs text-[var(--brand-moss)]">{new Date(item.createdAt).toLocaleDateString("en-NG")}</p>
               </div>
-            </Card.Content>
-          </Card>
-        ))}
+            </div>
+          ))
+        ) : (
+          <div className="rounded-[1.5rem] border border-dashed border-[var(--brand-stroke)] bg-white p-6 text-sm text-[var(--brand-moss)]">
+            You do not have any notifications yet.
+          </div>
+        )}
       </div>
     </div>
   );

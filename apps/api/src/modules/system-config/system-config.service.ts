@@ -10,6 +10,25 @@ export class SystemConfigService {
   ) {}
 
   async getAll() {
+    await Promise.all(
+      [
+        ['MEMBERSHIP_FEE_AMOUNT', '1000'],
+        ['COOPERATIVE_DEDUCTION_DAY', 'MONDAY'],
+        ['COOPERATIVE_DEDUCTION_AMOUNT', '1000'],
+        ['MEMBER_TERMS_HTML', '<p>Welcome to Achievers Cooperative.</p>'],
+        ['COOPERATIVE_DEDUCTION_LAST_RUN', ''],
+        ['BANK_ACCOUNT_NAME', 'Achievers Cooperative Society'],
+        ['BANK_ACCOUNT_NUMBER', '0123456789'],
+        ['BANK_NAME', 'Community Trust Bank'],
+      ].map(([key, value]) =>
+        this.prisma.systemConfig.upsert({
+          where: { key },
+          update: {},
+          create: { key, value },
+        }),
+      ),
+    );
+
     return this.prisma.systemConfig.findMany({
       orderBy: { key: 'asc' },
     });

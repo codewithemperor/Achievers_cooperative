@@ -13,9 +13,23 @@ enum UserRole {
 }
 
 enum MemberStatus {
-  PENDING
   ACTIVE
+  INACTIVE
   SUSPENDED
+  WITHDRAWN
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+enum IdentificationType {
+  VOTERS_CARD
+  NIN
+  NATIONAL_PASSPORT
 }
 
 enum TransactionType {
@@ -30,6 +44,11 @@ enum TransactionType {
   INVESTMENT_RETURN
   PACKAGE_SUBSCRIPTION
   PACKAGE_PENALTY
+  MEMBERSHIP_FEE
+  WEEKLY_COOPERATIVE
+  MANUAL_ADJUSTMENT
+  ADMIN_REFUND
+  FEE_WAIVER
 }
 
 enum CooperativeEntryType {
@@ -60,25 +79,35 @@ model User {
 }
 
 model Member {
-  id                   String                 @id @default(cuid())
-  userId               String                 @unique
-  referrerId           String?
-  membershipNumber     String                 @unique
-  fullName             String
-  phoneNumber          String
-  address              String?
-  avatarUrl            String?
-  status               MemberStatus           @default(PENDING)
-  joinedAt             DateTime               @default(now())
-  user                 User                   @relation(fields: [userId], references: [id])
-  referrer             Member?                @relation("MemberReferrals", fields: [referrerId], references: [id])
-  referredMembers      Member[]               @relation("MemberReferrals")
-  wallet               Wallet?
-  savingsAccounts      SavingsAccount[]
-  loanApplications     LoanApplication[]
-  investments          InvestmentSubscription[]
-  payments             Payment[]
-  packageSubscriptions PackageSubscription[]
+  id                    String                 @id @default(cuid())
+  userId                String                 @unique
+  referrerId            String?
+  membershipNumber      String                 @unique
+  fullName              String
+  phoneNumber           String
+  address               String?
+  homeAddress           String
+  stateOfOrigin         String
+  dateOfBirth           DateTime
+  occupation            String
+  maritalStatus         MaritalStatus
+  identificationNumber  String
+  identificationPicture String
+  identificationType    IdentificationType
+  avatarUrl             String?
+  status                MemberStatus           @default(ACTIVE)
+  joinedAt              DateTime               @default(now())
+  user                  User                   @relation(fields: [userId], references: [id])
+  referrer              Member?                @relation("MemberReferrals", fields: [referrerId], references: [id])
+  referredMembers       Member[]               @relation("MemberReferrals")
+  wallet                Wallet?
+  savingsAccounts       SavingsAccount[]
+  loanApplications      LoanApplication[]
+  investments           InvestmentSubscription[]
+  payments              Payment[]
+  packageSubscriptions  PackageSubscription[]
+  guaranteedLoansOne    LoanApplication[]      @relation("LoanGuarantorOne")
+  guaranteedLoansTwo    LoanApplication[]      @relation("LoanGuarantorTwo")
 }
 
 model Wallet {
@@ -94,14 +123,20 @@ model Wallet {
 }
 
 model Transaction {
-  id         String          @id @default(cuid())
-  walletId   String
-  type       TransactionType
-  amount     Decimal
-  status     ApprovalStatus  @default(PENDING)
-  reference  String?         @unique
-  createdAt  DateTime        @default(now())
-  wallet     Wallet          @relation(fields: [walletId], references: [id])
+  id          String          @id @default(cuid())
+  walletId    String
+  type        TransactionType
+  amount      Decimal
+  status      ApprovalStatus  @default(PENDING)
+  reference   String?         @unique
+  category    String?
+  description String?
+  editable    Boolean         @default(false)
+  lockReason  String?
+  metadata    Json?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  wallet      Wallet          @relation(fields: [walletId], references: [id])
 }
 
 model SavingsAccount {
@@ -115,6 +150,8 @@ model SavingsAccount {
 model LoanApplication {
   id               String         @id @default(cuid())
   memberId         String
+  guarantorOneId   String?
+  guarantorTwoId   String?
   amount           Decimal
   tenorMonths      Int
   purpose          String
@@ -125,6 +162,8 @@ model LoanApplication {
   disbursedAt      DateTime?
   remainingBalance Decimal        @default(0)
   member           Member         @relation(fields: [memberId], references: [id])
+  guarantorOne     Member?        @relation("LoanGuarantorOne", fields: [guarantorOneId], references: [id])
+  guarantorTwo     Member?        @relation("LoanGuarantorTwo", fields: [guarantorTwoId], references: [id])
 }
 
 model InvestmentProduct {

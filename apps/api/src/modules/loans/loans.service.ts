@@ -22,9 +22,52 @@ export class LoansService {
         : await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');
 
+    const existingActiveLoan = await this.prisma.loanApplication.findFirst({
+      where: {
+        memberId: member.id,
+        OR: [
+          { status: 'APPROVED', remainingBalance: { gt: 0 } },
+          { disbursedAt: { not: null }, remainingBalance: { gt: 0 } },
+        ],
+      },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    if (existingActiveLoan) {
+      throw new BadRequestException('This member has an active loan. Please repay it before applying for a new one.');
+    }
+
+    if (dto.guarantorOneId && dto.guarantorOneId === member.id) {
+      throw new BadRequestException('A member cannot guarantee their own loan.');
+    }
+
+    if (dto.guarantorTwoId && dto.guarantorTwoId === member.id) {
+      throw new BadRequestException('A member cannot guarantee their own loan.');
+    }
+
+    if (dto.guarantorOneId && dto.guarantorTwoId && dto.guarantorOneId === dto.guarantorTwoId) {
+      throw new BadRequestException('Select two different guarantors.');
+    }
+
+    if (dto.guarantorOneId) {
+      const guarantor = await this.prisma.member.findUnique({ where: { id: dto.guarantorOneId } });
+      if (!guarantor) {
+        throw new NotFoundException('Selected guarantor 1 does not exist.');
+      }
+    }
+
+    if (dto.guarantorTwoId) {
+      const guarantor = await this.prisma.member.findUnique({ where: { id: dto.guarantorTwoId } });
+      if (!guarantor) {
+        throw new NotFoundException('Selected guarantor 2 does not exist.');
+      }
+    }
+
     const loan = await this.prisma.loanApplication.create({
       data: {
         memberId: member.id,
+        guarantorOneId: dto.guarantorOneId,
+        guarantorTwoId: dto.guarantorTwoId,
         amount: dto.amount,
         tenorMonths: dto.tenorMonths,
         purpose: dto.purpose,
@@ -71,6 +114,8 @@ export class LoansService {
               user: { select: { email: true } },
             },
           },
+          guarantorOne: { select: { id: true, fullName: true, membershipNumber: true } },
+          guarantorTwo: { select: { id: true, fullName: true, membershipNumber: true } },
         },
       }),
       this.prisma.loanApplication.count({ where }),
@@ -80,6 +125,13 @@ export class LoansService {
       items: items.map((l) => ({
         ...l,
         amount: Number(l.amount),
+        remainingBalance: Number(l.remainingBalance),
+        lifecycleStatus: l.disbursedAt ? 'DISBURSED' : l.status,
+        amountPaidSoFar: Math.max(Number(l.amount) - Number(l.remainingBalance), 0),
+        repaymentProgress:
+          Number(l.amount) > 0
+            ? Math.min((Math.max(Number(l.amount) - Number(l.remainingBalance), 0) / Number(l.amount)) * 100, 100)
+            : 0,
       })),
       total,
       page,
@@ -94,16 +146,79 @@ export class LoansService {
         member: {
           include: {
             user: { select: { email: true } },
+            wallet: true,
           },
         },
+        guarantorOne: { select: { id: true, fullName: true, membershipNumber: true } },
+        guarantorTwo: { select: { id: true, fullName: true, membershipNumber: true } },
       },
     });
 
     if (!loan) throw new NotFoundException('Loan application not found');
 
+    const relatedTransactions = loan.member.wallet
+      ? await this.prisma.transaction.findMany({
+          where: {
+            walletId: loan.member.wallet.id,
+            OR: [
+              { metadata: { path: ['loanId'], equals: loan.id } },
+              { type: 'LOAN_DISBURSEMENT' },
+              { type: 'LOAN_REPAYMENT' },
+            ],
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+      : [];
+
+    const amount = Number(loan.amount);
+    const remainingBalance = Number(loan.remainingBalance);
+    const amountPaidSoFar = Math.max(amount - remainingBalance, 0);
+    const repaymentProgress = amount > 0 ? Math.min((amountPaidSoFar / amount) * 100, 100) : 0;
+    const installmentAmount = loan.tenorMonths > 0 ? amount / loan.tenorMonths : amount;
+
+    const paymentSchedule = Array.from({ length: Math.max(loan.tenorMonths, 1) }).map((_, index) => {
+      const anchorDate = loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt;
+      const dueDate = new Date(anchorDate);
+      dueDate.setMonth(dueDate.getMonth() + index + 1);
+      const dueAmount = Math.round(installmentAmount * 100) / 100;
+      const cumulativeDue = dueAmount * (index + 1);
+
+      return {
+        installment: index + 1,
+        dueDate,
+        amount: dueAmount,
+        status: amountPaidSoFar >= cumulativeDue ? 'PAID' : 'UNPAID',
+      };
+    });
+
+    const timeline = [
+      { label: 'Applied', date: loan.submittedAt, status: 'completed' },
+      loan.approvedAt ? { label: 'Approved', date: loan.approvedAt, status: 'completed' } : null,
+      loan.disbursedAt ? { label: 'Disbursed', date: loan.disbursedAt, status: 'completed' } : null,
+      loan.rejectedAt ? { label: 'Rejected', date: loan.rejectedAt, status: 'completed' } : null,
+      ...relatedTransactions
+        .filter((item) => item.type === 'LOAN_REPAYMENT')
+        .map((item) => ({
+          label: 'Repayment',
+          date: item.createdAt,
+          status: item.status.toLowerCase(),
+          amount: Number(item.amount),
+          reference: item.reference,
+        })),
+    ].filter(Boolean);
+
     return {
       ...loan,
-      amount: Number(loan.amount),
+      amount,
+      remainingBalance,
+      amountPaidSoFar,
+      repaymentProgress,
+      paymentSchedule,
+      timeline,
+      relatedTransactions: relatedTransactions.map((item) => ({
+        ...item,
+        amount: Number(item.amount),
+      })),
     };
   }
 
@@ -168,12 +283,13 @@ export class LoansService {
     if (loan.status !== 'APPROVED') throw new BadRequestException('Loan must be approved first');
 
     const reference = `LOAN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    await this.walletService.creditWallet(
-      loan.memberId,
-      Number(loan.amount),
-      'LOAN_DISBURSEMENT',
-      reference,
-    );
+    await this.walletService.creditWallet(loan.memberId, Number(loan.amount), 'LOAN_DISBURSEMENT', reference, {
+      category: 'loan disbursement',
+      description: `Loan disbursement for ${loan.member.fullName}`,
+      editable: false,
+      lockReason: 'Loan disbursement transactions are tied to loan records and cannot be edited.',
+      metadata: { loanId: loan.id },
+    });
 
     const updated = await this.prisma.loanApplication.update({
       where: { id },
@@ -203,11 +319,17 @@ export class LoansService {
 
     const loan = await this.prisma.loanApplication.findUnique({ where: { id } });
     if (!loan) throw new NotFoundException('Loan not found');
-    if (!['APPROVED'].includes(loan.status)) throw new BadRequestException('Loan is not active');
+    if (!loan.disbursedAt) throw new BadRequestException('Loan is not active until it has been disbursed');
     if (loan.memberId !== member.id) throw new BadRequestException('Not your loan');
 
     const reference = `REPAY-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    await this.walletService.debitWallet(member.id, dto.amount, 'LOAN_REPAYMENT', reference);
+    await this.walletService.debitWallet(member.id, dto.amount, 'LOAN_REPAYMENT', reference, {
+      category: 'loan repayment',
+      description: `Loan repayment for loan ${loan.id}`,
+      editable: false,
+      lockReason: 'Loan repayment transactions are system-generated and cannot be edited.',
+      metadata: { loanId: loan.id },
+    });
 
     await this.prisma.loanApplication.update({
       where: { id },

@@ -1,6 +1,10 @@
 export type UserRole = 'SUPER_ADMIN' | 'MEMBER';
 
-export type MemberStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+export type MemberStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'WITHDRAWN';
+
+export type MaritalStatus = 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED';
+
+export type IdentificationType = 'VOTERS_CARD' | 'NIN' | 'NATIONAL_PASSPORT';
 
 export type TransactionType =
   | 'FUNDING'
@@ -13,6 +17,11 @@ export type TransactionType =
   | 'INVESTMENT_DEPOSIT'
   | 'INVESTMENT_RETURN'
   | 'PACKAGE_SUBSCRIPTION'
-  | 'PACKAGE_PENALTY';
+  | 'PACKAGE_PENALTY'
+  | 'MEMBERSHIP_FEE'
+  | 'WEEKLY_COOPERATIVE'
+  | 'MANUAL_ADJUSTMENT'
+  | 'ADMIN_REFUND'
+  | 'FEE_WAIVER';
 
 export type CooperativeEntryType = 'INCOME' | 'EXPENSE';

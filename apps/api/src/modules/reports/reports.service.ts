@@ -9,7 +9,7 @@ export class ReportsService {
     const [
       totalMembers,
       activeMembers,
-      pendingMembers,
+      inactiveMembers,
       totalWalletBalance,
       totalSavings,
       totalLoansDisbursed,
@@ -19,7 +19,7 @@ export class ReportsService {
     ] = await Promise.all([
       this.prisma.member.count(),
       this.prisma.member.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.member.count({ where: { status: 'PENDING' } }),
+      this.prisma.member.count({ where: { status: 'INACTIVE' } }),
       this.prisma.wallet.aggregate({ _sum: { availableBalance: true } }),
       this.prisma.savingsAccount.aggregate({ _sum: { balance: true } }),
       this.prisma.loanApplication.aggregate({
@@ -38,7 +38,7 @@ export class ReportsService {
       members: {
         total: totalMembers,
         active: activeMembers,
-        pending: pendingMembers,
+        pending: inactiveMembers,
       },
       wallet: {
         totalBalance: Number(totalWalletBalance._sum.availableBalance ?? 0),

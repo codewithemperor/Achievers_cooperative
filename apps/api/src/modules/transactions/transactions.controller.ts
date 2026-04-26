@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -7,7 +7,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
-import { QueryTransactionsDto } from './dto/index';
+import { QueryTransactionsDto, UpdateTransactionDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -43,6 +43,13 @@ export class TransactionsController {
   @ApiOkResponse({ description: 'Transaction details' })
   findOne(@Param('id') id: string) {
     return this.transactionsService.findOne(id);
+  }
+
+  @Patch(':id')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Update an editable transaction' })
+  update(@Param('id') id: string, @Body() dto: UpdateTransactionDto, @Request() req: any) {
+    return this.transactionsService.update(id, dto, req.user.id);
   }
 
   @Post(':id/approve')

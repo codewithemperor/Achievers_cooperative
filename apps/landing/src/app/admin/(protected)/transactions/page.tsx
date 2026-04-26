@@ -1,28 +1,45 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Lock, Pencil } from "lucide-react";
 import { Button, Skeleton } from "@heroui/react";
-import { parseDate } from "@internationalized/date";
 import { useForm } from "react-hook-form";
 import { AdminModal } from "@/components/ui/admin-modal";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
-import {
-  DatePickerInput,
-  NumberInput,
-  SelectInput,
-  TextInput,
-  TextareaInput,
-} from "@/components/ui/form-input";
+import { NumberInput, TextInput, TextareaInput } from "@/components/ui/form-input";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
+
+interface MemberTransactionsResponse {
+  items: Array<{
+    id: string;
+    type: string;
+    amount: number;
+    status: string;
+    reference?: string | null;
+    category?: string | null;
+    description?: string | null;
+    editable: boolean;
+    lockReason?: string | null;
+    createdAt: string;
+    wallet: {
+      member: {
+        fullName: string;
+        membershipNumber: string;
+      };
+    };
+  }>;
+}
 
 interface TreasurySummary {
   balance: number;
   totalIncome: number;
   totalExpense: number;
+  memberWalletHoldings: number;
+  combinedHoldings: number;
 }
 
 interface TreasuryEntriesResponse {
@@ -37,12 +54,18 @@ interface TreasuryEntriesResponse {
   }>;
 }
 
-interface TransactionFormValues {
-  type: string;
+interface TreasuryEntryValues {
+  type: "INCOME" | "EXPENSE";
+  amount: number | undefined;
   category: string;
   description: string;
+  reference: string;
+}
+
+interface EditTransactionValues {
   amount: number | undefined;
-  createdAt: ReturnType<typeof parseDate>;
+  category: string;
+  description: string;
 }
 
 const currency = new Intl.NumberFormat("en-NG", {
@@ -51,30 +74,27 @@ const currency = new Intl.NumberFormat("en-NG", {
   maximumFractionDigits: 0,
 });
 
-const typeOptions = [
-  { id: "INCOME", label: "Income" },
-  { id: "EXPENSE", label: "Expenses" },
-];
+function variantForStatus(status: string) {
+  if (status === "APPROVED") return "success";
+  if (status === "REJECTED") return "danger";
+  return "warning";
+}
 
-function TreasuryForm({
-  initialValues,
-  submitLabel,
-  pendingLabel,
+function TransactionEditForm({
+  item,
   onSubmit,
+  onSuccess,
 }: {
-  initialValues?: TreasuryEntriesResponse["items"][number];
-  submitLabel: string;
-  pendingLabel: string;
-  onSubmit: (values: TransactionFormValues) => Promise<void>;
+  item: MemberTransactionsResponse["items"][number];
+  onSubmit: (values: EditTransactionValues) => Promise<void>;
+  onSuccess?: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
-  const { control, handleSubmit } = useForm<TransactionFormValues>({
+  const { control, handleSubmit } = useForm<EditTransactionValues>({
     defaultValues: {
-      type: initialValues?.type ?? "INCOME",
-      category: initialValues?.category ?? "",
-      description: initialValues?.description ?? "",
-      amount: initialValues?.amount ?? undefined,
-      createdAt: parseDate((initialValues?.createdAt ?? new Date().toISOString()).slice(0, 10)),
+      amount: item.amount,
+      category: item.category || "",
+      description: item.description || "",
     },
   });
 
@@ -82,6 +102,7 @@ function TreasuryForm({
     try {
       setSubmitting(true);
       await onSubmit(values);
+      onSuccess?.();
     } finally {
       setSubmitting(false);
     }
@@ -89,52 +110,14 @@ function TreasuryForm({
 
   return (
     <>
-      <div className="grid gap-4 grid-cols-1">
-        <SelectInput
-          className="rounded-2xl"
-          control={control}
-          label="Type"
-          name="type"
-          options={typeOptions}
-        />
-        <DatePickerInput
-          className="rounded-2xl"
-          control={control}
-          label="Date"
-          name="createdAt"
-        />
-        <TextInput
-          className="rounded-2xl "
-          control={control}
-          label="Transaction Name"
-          name="category"
-          placeholder="Loan disbursed, bank deposit, member payment"
-        />
-        <NumberInput
-          className="rounded-2xl"
-          control={control}
-          label="Amount"
-          name="amount"
-          placeholder="Amount"
-          min={0}
-        />
-        <TextareaInput
-          className="rounded-2xl"
-          control={control}
-          label="Description"
-          name="description"
-          placeholder="Add a clear note about this bank movement"
-          rows={4}
-        />
+      <div className="grid gap-4">
+        <NumberInput className="rounded-2xl" control={control} label="Amount" name="amount" min={0} />
+        <TextInput className="rounded-2xl" control={control} label="Category" name="category" placeholder="Manual adjustment" />
+        <TextareaInput className="rounded-2xl" control={control} label="Description" name="description" placeholder="Why this transaction is being edited" rows={4} />
       </div>
-
       <div className="mt-6 flex justify-end">
-        <Button
-          className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white"
-          isDisabled={submitting}
-          onPress={() => void submit()}
-        >
-          {submitting ? pendingLabel : submitLabel}
+        <Button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" isDisabled={submitting} onPress={() => void submit()}>
+          {submitting ? "Saving..." : "Save changes"}
         </Button>
       </div>
     </>
@@ -142,147 +125,244 @@ function TreasuryForm({
 }
 
 export default function TransactionsPage() {
+  const [tab, setTab] = useState<"member" | "treasury">("treasury");
+  const memberTransactions = useApi<MemberTransactionsResponse>("/transactions");
   const wallet = useApi<TreasurySummary>("/wallet/cooperative");
-  const entries = useApi<TreasuryEntriesResponse>("/wallet/cooperative/entries");
+  const treasuryEntries = useApi<TreasuryEntriesResponse>("/wallet/cooperative/entries");
+  const [creatingEntry, setCreatingEntry] = useState(false);
+  const { control, handleSubmit, reset, setValue, watch } = useForm<TreasuryEntryValues>({
+    defaultValues: {
+      type: "INCOME",
+      amount: undefined,
+      category: "",
+      description: "",
+      reference: "",
+    },
+  });
 
-  async function createEntry(values: TransactionFormValues) {
+  const treasuryRows = useMemo(() => treasuryEntries.data?.items ?? [], [treasuryEntries.data]);
+
+  async function updateTransaction(id: string, values: EditTransactionValues) {
     try {
-      await api.post("/wallet/cooperative/entries", {
-        type: values.type,
-        category: values.category,
-        description: values.description,
-        amount: Number(values.amount),
-        createdAt: values.createdAt.toString(),
-      });
-      showSuccessToast("Treasury transaction added successfully.");
-      await Promise.all([wallet.refetch(), entries.refetch()]);
+      await api.patch(`/transactions/${id}`, values);
+      showSuccessToast("Transaction updated successfully.");
+      await memberTransactions.refetch();
     } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to add treasury transaction.");
+      showErrorToast(error?.response?.data?.message || "Unable to update transaction.");
       throw error;
     }
   }
 
-  async function updateEntry(id: string, values: TransactionFormValues) {
-    try {
-      await api.patch(`/wallet/cooperative/entries/${id}`, {
-        type: values.type,
-        category: values.category,
-        description: values.description,
-        amount: Number(values.amount),
-        createdAt: values.createdAt.toString(),
-      });
-      showSuccessToast("Treasury transaction updated successfully.");
-      await Promise.all([wallet.refetch(), entries.refetch()]);
-    } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to update treasury transaction.");
-      throw error;
-    }
-  }
+  const createTreasuryEntry = (close?: () => void) =>
+    handleSubmit(async (values) => {
+      try {
+        setCreatingEntry(true);
+        await api.post("/wallet/cooperative/entries", {
+          type: values.type,
+          amount: Number(values.amount),
+          category: values.category,
+          description: values.description,
+          reference: values.reference || undefined,
+        });
+        showSuccessToast("Treasury entry added successfully.");
+        reset();
+        await Promise.all([wallet.refetch(), treasuryEntries.refetch()]);
+        close?.();
+      } catch (error: any) {
+        showErrorToast(error?.response?.data?.message || "Unable to add treasury entry.");
+      } finally {
+        setCreatingEntry(false);
+      }
+    });
+
+  const summaryCards = (
+    <div className="grid gap-4 md:grid-cols-4">
+      {wallet.loading ? (
+        Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32 rounded-[2rem]" />)
+      ) : (
+        <>
+          <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
+            <p className="text-sm text-[var(--color-coop-muted)]">Treasury Cash</p>
+            <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">{currency.format(wallet.data?.balance ?? 0)}</p>
+          </div>
+          <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
+            <p className="text-sm text-[var(--color-coop-muted)]">Member Wallet Holdings</p>
+            <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">{currency.format(wallet.data?.memberWalletHoldings ?? 0)}</p>
+          </div>
+          <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
+            <p className="text-sm text-[var(--color-coop-muted)]">Money At Hand</p>
+            <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">{currency.format(wallet.data?.combinedHoldings ?? 0)}</p>
+          </div>
+          <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
+            <p className="text-sm text-[var(--color-coop-muted)]">Net Treasury Flow</p>
+            <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">
+              {currency.format((wallet.data?.totalIncome ?? 0) - (wallet.data?.totalExpense ?? 0))}
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Transactions"
-        subtitle="Treasury inflow and outflow entries that reflect the cooperative's real bank position."
+        subtitle="Review member wallet activity, auto-generated deductions, and treasury entries in one admin workspace."
         actions={
           <AdminModal
-            description="Record treasury inflow or outflow as a bank movement."
-            title="Add Treasury Transaction"
+            description="Create a treasury income or expense entry and watch the summary cards update immediately."
+            title="Add Treasury Entry"
             trigger={
               <button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" type="button">
                 Add transaction
               </button>
             }
           >
-            <TreasuryForm
-              onSubmit={createEntry}
-              pendingLabel="Saving..."
-              submitLabel="Save transaction"
-            />
+            {({ close }) => (
+              <>
+                <div className="grid gap-4">
+                  <select
+                    className="min-h-12 rounded-2xl border border-[rgba(26,46,26,0.12)] bg-white px-4 text-sm text-[var(--color-dark)] outline-none"
+                    onChange={(event) => setValue("type", event.target.value as "INCOME" | "EXPENSE")}
+                    value={watch("type")}
+                  >
+                    <option value="INCOME">Income</option>
+                    <option value="EXPENSE">Expense</option>
+                  </select>
+                  <NumberInput className="rounded-2xl" control={control} label="Amount" name={"amount" as never} min={0} />
+                  <TextInput className="rounded-2xl" control={control} label="Category" name={"category" as never} placeholder="Operations" />
+                  <TextareaInput className="rounded-2xl" control={control} label="Description" name={"description" as never} placeholder="Describe this entry" rows={4} />
+                  <TextInput className="rounded-2xl" control={control} label="Reference" name={"reference" as never} placeholder="Optional reference" />
+                </div>
+                <div className="mt-6 flex justify-end">
+                  <Button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" isDisabled={creatingEntry} onPress={() => void createTreasuryEntry(close)()}>
+                    {creatingEntry ? "Saving..." : "Create entry"}
+                  </Button>
+                </div>
+              </>
+            )}
           </AdminModal>
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {wallet.loading ? (
-          Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-32 rounded-[2rem]" />)
-        ) : (
-          <>
-            <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
-              <p className="text-sm text-[var(--color-coop-muted)]">Current Balance</p>
-              <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">{currency.format(wallet.data?.balance ?? 0)}</p>
-            </div>
-            <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
-              <p className="text-sm text-[var(--color-coop-muted)]">Total Income</p>
-              <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">{currency.format(wallet.data?.totalIncome ?? 0)}</p>
-            </div>
-            <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
-              <p className="text-sm text-[var(--color-coop-muted)]">Total Expense</p>
-              <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">{currency.format(wallet.data?.totalExpense ?? 0)}</p>
-            </div>
-          </>
-        )}
+      <div className="flex flex-wrap gap-2">
+        <button
+          className={tab === "member" ? "rounded-full bg-[var(--color-dark)] px-4 py-2 text-sm font-semibold text-white" : "rounded-full border border-[rgba(26,46,26,0.12)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-dark)]"}
+          onClick={() => setTab("member")}
+          type="button"
+        >
+          Member Transactions
+        </button>
+        <button
+          className={tab === "treasury" ? "rounded-full bg-[var(--color-dark)] px-4 py-2 text-sm font-semibold text-white" : "rounded-full border border-[rgba(26,46,26,0.12)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-dark)]"}
+          onClick={() => setTab("treasury")}
+          type="button"
+        >
+          Treasury Ledger
+        </button>
       </div>
 
-      <DataTable
-        columns={[
-          {
-            key: "type",
-            header: "Type",
-            render: (item) => (
-              <span className={item.type === "INCOME" ? "font-semibold text-[var(--color-green)]" : "font-semibold text-[#b42318]"}>
-                {item.type}
-              </span>
-            ),
-          },
-          {
-            key: "category",
-            header: "Name",
-            render: (item) => <span className="font-semibold text-[var(--color-dark)]">{item.category}</span>,
-          },
-          {
-            key: "description",
-            header: "Description",
-            render: (item) => item.description,
-          },
-          {
-            key: "amount",
-            header: "Amount",
-            render: (item) => currency.format(item.amount),
-          },
-          {
-            key: "createdAt",
-            header: "Created At",
-            render: (item) => new Date(item.createdAt).toLocaleDateString("en-NG"),
-          },
-          {
-            key: "actions",
-            header: "Edit",
-            render: (item) => (
-              <AdminModal
-                description="Update this treasury entry without changing the config of the rest of the ledger."
-                title="Edit Treasury Transaction"
-                trigger={
-                  <button className="inline-flex items-center gap-2 font-semibold text-[var(--color-green)]" type="button">
-                    <Pencil className="h-4 w-4" />
-                    Edit
-                  </button>
-                }
-              >
-                <TreasuryForm
-                  initialValues={item}
-                  onSubmit={(values) => updateEntry(item.id, values)}
-                  pendingLabel="Updating..."
-                  submitLabel="Update transaction"
-                />
-              </AdminModal>
-            ),
-          },
-        ]}
-        data={entries.data?.items ?? []}
-        emptyDescription={entries.error || "No treasury transactions found."}
-        loading={entries.loading}
-      />
+      {summaryCards}
+
+      {tab === "member" ? (
+        <DataTable
+          columns={[
+            {
+              key: "member",
+              header: "Member",
+              render: (item) => (
+                <div>
+                  <p className="font-semibold text-[var(--color-dark)]">{item.wallet.member.fullName}</p>
+                  <p className="text-xs text-[var(--color-coop-muted)]">{item.wallet.member.membershipNumber}</p>
+                </div>
+              ),
+            },
+            {
+              key: "type",
+              header: "Type",
+              render: (item) => (
+                <div>
+                  <p className="font-semibold text-[var(--color-dark)]">{item.type.replaceAll("_", " ")}</p>
+                  <p className="text-xs text-[var(--color-coop-muted)]">{item.category || "No category"}</p>
+                </div>
+              ),
+            },
+            {
+              key: "amount",
+              header: "Amount",
+              render: (item) => currency.format(item.amount),
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (item) => <StatusBadge status={item.status} variant={variantForStatus(item.status) as any} />,
+            },
+            {
+              key: "edit",
+              header: "Edit",
+              render: (item) =>
+                item.editable ? (
+                  <AdminModal
+                    description="Only manual/admin-created transactions can be edited. Changes are written to the audit trail."
+                    title="Edit Transaction"
+                    trigger={
+                      <button className="inline-flex items-center gap-2 font-semibold text-[var(--color-green)]" type="button">
+                        <Pencil className="h-4 w-4" />
+                        Edit
+                      </button>
+                    }
+                  >
+                    {({ close }) => <TransactionEditForm item={item} onSubmit={(values) => updateTransaction(item.id, values)} onSuccess={close} />}
+                  </AdminModal>
+                ) : (
+                  <div className="inline-flex items-center gap-2 text-sm text-[var(--color-coop-muted)]" title={item.lockReason || "This transaction cannot be edited."}>
+                    <Lock className="h-4 w-4" />
+                    Locked
+                  </div>
+                ),
+            },
+          ]}
+          data={memberTransactions.data?.items ?? []}
+          emptyDescription={memberTransactions.error || "No member transactions found."}
+          loading={memberTransactions.loading}
+        />
+      ) : (
+        <>
+          <DataTable
+            columns={[
+              {
+                key: "type",
+                header: "Type",
+                render: (item) => <span className={item.type === "INCOME" ? "font-semibold text-[var(--color-green)]" : "font-semibold text-[#b42318]"}>{item.type}</span>,
+              },
+              {
+                key: "category",
+                header: "Name",
+                render: (item) => <span className="font-semibold text-[var(--color-dark)]">{item.category}</span>,
+              },
+              {
+                key: "description",
+                header: "Description",
+                render: (item) => item.description,
+              },
+              {
+                key: "amount",
+                header: "Amount",
+                render: (item) => currency.format(item.amount),
+              },
+              {
+                key: "createdAt",
+                header: "Created At",
+                render: (item) => new Date(item.createdAt).toLocaleDateString("en-NG"),
+              },
+            ]}
+            data={treasuryRows}
+            emptyDescription={treasuryEntries.error || "No treasury transactions found."}
+            loading={treasuryEntries.loading}
+          />
+        </>
+      )}
     </div>
   );
 }

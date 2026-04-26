@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "npm run db:generate && node node_modules/typescript/lib/tsc.js -p tsconfig.build.json",
+    "build": "bun run db:generate && node node_modules/typescript/lib/tsc.js -p tsconfig.build.json",
     "vercel-build": "npm run build",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",

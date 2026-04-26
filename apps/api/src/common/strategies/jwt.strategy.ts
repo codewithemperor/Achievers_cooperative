@@ -7,13 +7,13 @@ import { PrismaService } from '../prisma.service';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    config: ConfigService,
+    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.get<string>('JWT_SECRET') ?? 'achievers-cooperative-jwt-secret',
+      secretOrKey: process.env.JWT_SECRET || 'achievers-cooperative-jwt-secret',
     });
   }
 

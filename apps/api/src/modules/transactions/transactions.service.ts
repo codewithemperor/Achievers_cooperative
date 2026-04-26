@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
-import { QueryTransactionsDto } from './dto/index';
+import { UpdateTransactionDto, QueryTransactionsDto } from './dto/index';
 
 @Injectable()
 export class TransactionsService {
@@ -71,6 +71,40 @@ export class TransactionsService {
     return {
       ...transaction,
       amount: Number(transaction.amount),
+    };
+  }
+
+  async update(id: string, dto: UpdateTransactionDto, actorId: string) {
+    const transaction = await this.prisma.transaction.findUnique({ where: { id } });
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    if (!transaction.editable) {
+      throw new BadRequestException(transaction.lockReason || 'This transaction is locked and cannot be edited.');
+    }
+
+    const updated = await this.prisma.transaction.update({
+      where: { id },
+      data: {
+        ...(dto.amount !== undefined && { amount: dto.amount }),
+        ...(dto.category !== undefined && { category: dto.category }),
+        ...(dto.description !== undefined && { description: dto.description }),
+      },
+    });
+
+    await this.audit.log(actorId, 'UPDATE_TRANSACTION', 'Transaction', id, {
+      previous: {
+        amount: Number(transaction.amount),
+        category: transaction.category,
+        description: transaction.description,
+      },
+      next: dto,
+    });
+
+    return {
+      ...updated,
+      amount: Number(updated.amount),
     };
   }
 

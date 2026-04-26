@@ -55,19 +55,25 @@ export class WalletsService {
     const result = await this.walletService.creditWallet(
       member.id,
       dto.amount,
-      'FUNDING',
+      'WALLET_FUNDING',
       reference,
+      {
+        category: 'wallet funding',
+        description: 'Wallet funded by member',
+        editable: false,
+        lockReason: 'Wallet funding transactions are generated from funding activity and cannot be edited.',
+      },
     );
 
-    await this.audit.log(userId, 'FUND_WALLET', 'Wallet', result.wallet.id, {
+    await this.audit.log(userId, 'FUND_WALLET', 'Wallet', result.wallet!.id, {
       amount: dto.amount,
       reference,
     });
 
     return {
       wallet: {
-        availableBalance: Number(result.wallet.availableBalance),
-        currency: result.wallet.currency,
+        availableBalance: Number(result.wallet!.availableBalance),
+        currency: result.wallet!.currency,
       },
       transaction: {
         id: result.transaction.id,

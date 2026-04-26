@@ -107,7 +107,12 @@ export class PaymentsService {
     const { charge, netAmount } = await this.membershipChargeService.applyCharge(grossAmount);
     const reference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
-    await this.walletService.creditWallet(payment.memberId, netAmount, 'WALLET_FUNDING', reference);
+    await this.walletService.creditWallet(payment.memberId, netAmount, 'WALLET_FUNDING', reference, {
+      category: 'wallet funding',
+      description: `Approved wallet funding for ${payment.member.fullName}`,
+      editable: false,
+      lockReason: 'Wallet funding transactions come from verified payment records and cannot be edited.',
+    });
 
     await this.prisma.wallet.update({
       where: { memberId: payment.memberId },
@@ -126,6 +131,10 @@ export class PaymentsService {
             amount: charge,
             status: 'APPROVED',
             reference: `${reference}-CHARGE`,
+            category: 'processing charge',
+            description: `Funding charge applied to ${payment.member.fullName}`,
+            editable: false,
+            lockReason: 'System-generated funding charges cannot be edited.',
           },
         });
       }

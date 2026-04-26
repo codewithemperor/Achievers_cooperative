@@ -39,11 +39,21 @@ export class CooperativeWalletService {
 
   async getSummary() {
     const wallet = await this.ensureWallet();
+    const memberWalletAggregate = await this.prisma.wallet.aggregate({
+      _sum: { availableBalance: true, pendingBalance: true },
+    });
+    const memberWalletHoldings =
+      Number(memberWalletAggregate._sum.availableBalance ?? 0) +
+      Number(memberWalletAggregate._sum.pendingBalance ?? 0);
+    const treasuryBalance = Number(wallet.balance);
+
     return {
       id: wallet.id,
-      balance: Number(wallet.balance),
+      balance: treasuryBalance,
       totalIncome: Number(wallet.totalIncome),
       totalExpense: Number(wallet.totalExpense),
+      memberWalletHoldings,
+      combinedHoldings: treasuryBalance + memberWalletHoldings,
     };
   }
 

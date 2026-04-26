@@ -5,6 +5,14 @@ export class ApplyLoanDto {
   @IsString()
   memberId?: string;
 
+  @IsOptional()
+  @IsString()
+  guarantorOneId?: string;
+
+  @IsOptional()
+  @IsString()
+  guarantorTwoId?: string;
+
   @IsNumber()
   @Min(1000)
   amount!: number;

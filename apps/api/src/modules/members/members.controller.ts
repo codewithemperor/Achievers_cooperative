@@ -18,7 +18,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { MembersService } from './members.service';
-import { UpdateMemberDto, UpdateMemberStatusDto, QueryMembersDto } from './dto/index';
+import { CreateMemberDto, UpdateMemberDto, UpdateMemberStatusDto, QueryMembersDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -46,6 +46,12 @@ export class MembersController {
     return this.membersService.findByUserId(req.user.id);
   }
 
+  @Get('me/dashboard')
+  @ApiOperation({ summary: 'Get member dashboard payload' })
+  getMyDashboard(@Request() req: any) {
+    return this.membersService.getDashboard(req.user.id);
+  }
+
   @Get('search')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Search members by name or email' })
@@ -53,7 +59,15 @@ export class MembersController {
     return this.membersService.search(query);
   }
 
+  @Get('guarantors')
+  @Roles('MEMBER', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'List active members available as guarantors' })
+  guarantors(@Request() req: any) {
+    return this.membersService.listGuarantorOptions(req.user.id);
+  }
+
   @Get(':id')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Get member by ID' })
   @ApiOkResponse({ description: 'Member details' })
   findOne(@Param('id') id: string) {
@@ -65,14 +79,7 @@ export class MembersController {
   @ApiOperation({ summary: 'Create member profile' })
   create(
     @Request() req: any,
-    @Body()
-    body: {
-      email: string;
-      fullName: string;
-      phoneNumber: string;
-      address?: string;
-      referrerId?: string;
-    },
+    @Body() body: CreateMemberDto,
   ) {
     return this.membersService.create(req.user.id, body);
   }
@@ -105,6 +112,7 @@ export class MembersController {
   }
 
   @Post(':id/avatar')
+  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Update member avatar url' })
   updateAvatar(
     @Param('id') id: string,
@@ -123,7 +131,7 @@ export class MembersController {
 
   @Delete(':id')
   @Roles('SUPER_ADMIN')
-  @ApiOperation({ summary: 'Delete member record' })
+  @ApiOperation({ summary: 'Withdraw member without hard deleting their record' })
   remove(@Param('id') id: string, @Request() req: any) {
     return this.membersService.remove(id, req.user.id);
   }

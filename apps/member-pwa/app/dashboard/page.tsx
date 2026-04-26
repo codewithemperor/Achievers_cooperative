@@ -1,225 +1,208 @@
+"use client";
+
 import Link from "next/link";
-import { Card, Chip } from "@heroui/react";
-import { formatCurrency } from "@achievers/utils";
+import { useMemberData } from "../lib/use-member-data";
 
-const mockBalance = 245000;
-const mockSavings = 150000;
-const mockInvestments = 75000;
+interface DashboardPayload {
+  profile: {
+    fullName: string;
+    membershipNumber: string;
+    status: string;
+    joinedAt: string;
+  };
+  wallet: {
+    availableBalance: number;
+    pendingBalance: number;
+    currency: string;
+  };
+  summary: {
+    totalSavings: number;
+    totalInvestments: number;
+    transactionCount: number;
+    activeLoan: { remainingBalance: number } | null;
+  };
+  recentTransactions: Array<{
+    id: string;
+    type: string;
+    amount: number;
+    status: string;
+    createdAt: string;
+  }>;
+  cooperativeAccount: {
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+  };
+}
 
-const recentTransactions = [
-  {
-    id: "1",
-    type: "FUNDING",
-    amount: 50000,
-    status: "APPROVED",
-    date: "Apr 8, 2026",
+const fallbackData: DashboardPayload = {
+  profile: {
+    fullName: "Member",
+    membershipNumber: "ACH-000000",
+    status: "ACTIVE",
+    joinedAt: new Date().toISOString(),
   },
-  {
-    id: "2",
-    type: "LOAN_REPAYMENT",
-    amount: -15000,
-    status: "APPROVED",
-    date: "Apr 7, 2026",
+  wallet: {
+    availableBalance: 0,
+    pendingBalance: 0,
+    currency: "NGN",
   },
-  {
-    id: "3",
-    type: "SAVINGS",
-    amount: -20000,
-    status: "APPROVED",
-    date: "Apr 5, 2026",
+  summary: {
+    totalSavings: 0,
+    totalInvestments: 0,
+    transactionCount: 0,
+    activeLoan: null,
   },
-  {
-    id: "4",
-    type: "FUNDING",
-    amount: 30000,
-    status: "PENDING",
-    date: "Apr 4, 2026",
+  recentTransactions: [],
+  cooperativeAccount: {
+    bankName: "Community Trust Bank",
+    accountName: "Achievers Cooperative Society",
+    accountNumber: "0123456789",
   },
-  {
-    id: "5",
-    type: "INVESTMENT",
-    amount: -50000,
-    status: "APPROVED",
-    date: "Apr 1, 2026",
-  },
-];
+};
 
 const quickActions = [
-  { label: "Add Money", href: "/wallet", icon: "➕" },
-  { label: "Apply Loan", href: "/loans", icon: "📋" },
-  { label: "Save", href: "/savings", icon: "💰" },
-  { label: "Invest", href: "/investments", icon: "📈" },
+  { label: "Add Money", href: "/wallet" },
+  { label: "Loans", href: "/loans" },
+  { label: "Savings", href: "/savings" },
+  { label: "Packages", href: "/dashboard" },
+  { label: "Investments", href: "/investments" },
+  { label: "Transactions", href: "/transactions" },
+  { label: "Support", href: "/profile" },
 ];
 
-const statusColor = {
-  APPROVED: "success" as const,
-  PENDING: "warning" as const,
-  REJECTED: "danger" as const,
-};
-
-const typeLabel: Record<string, string> = {
-  FUNDING: "Wallet Funding",
-  LOAN_REPAYMENT: "Loan Repayment",
-  SAVINGS: "Savings Contribution",
-  LOAN_DISBURSEMENT: "Loan Disbursement",
-  INVESTMENT: "Investment",
-};
+const money = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
 
 export default function DashboardPage() {
-  return (
-    <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
-      {/* Greeting */}
-      <div className="mb-6">
-        <p className="text-sm text-slate-500">Good morning,</p>
-        <h1 className="text-xl font-semibold text-[var(--brand-ink)]">
-          John Doe
-        </h1>
-        <p className="text-xs text-slate-400">Member #ACH-001</p>
-      </div>
+  const { data, error } = useMemberData<DashboardPayload>("/members/me/dashboard", fallbackData);
 
-      {/* Balance Card */}
-      <Card className="mb-6 border-0 bg-[var(--brand-ink)]">
-        <Card.Content className="p-5">
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-            Available Balance
-          </p>
-          <p className="mt-1 text-3xl font-bold text-white">
-            {formatCurrency(mockBalance)}
-          </p>
-          <div className="mt-4 flex gap-3 text-xs">
+  return (
+    <div className="space-y-6">
+      <section className="rounded-[2rem] bg-[linear-gradient(145deg,#17321e,#2d5a27,#5f7c54)] p-6 text-white shadow-[0_20px_50px_rgba(23,50,30,0.18)]">
+        <p className="text-sm text-white/70">Welcome back</p>
+        <h1 className="mt-1 text-2xl font-semibold">{data.profile.fullName}</h1>
+        <p className="mt-1 text-sm text-white/70">{data.profile.membershipNumber}</p>
+        <div className="mt-6 rounded-[1.5rem] bg-white/10 p-5 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.18em] text-white/70">Wallet balance</p>
+          <p className="mt-2 text-3xl font-semibold">{money.format(data.wallet.availableBalance)}</p>
+          <div className="mt-4">
+            <Link
+              href="/wallet"
+              className="inline-flex items-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-green)]"
+            >
+              Add money to wallet
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
-              <p className="text-slate-400">Savings</p>
-              <p className="font-semibold text-white">
-                {formatCurrency(mockSavings)}
-              </p>
+              <p className="text-xs text-white/70">Pending deductions</p>
+              <p className="mt-1 font-medium">{money.format(data.wallet.pendingBalance)}</p>
             </div>
-            <div className="border-l border-slate-600 pl-3">
-              <p className="text-slate-400">Investments</p>
-              <p className="font-semibold text-white">
-                {formatCurrency(mockInvestments)}
-              </p>
+            <div>
+              <p className="text-xs text-white/70">Active loan balance</p>
+              <p className="mt-1 font-medium">{money.format(data.summary.activeLoan?.remainingBalance ?? 0)}</p>
             </div>
           </div>
-        </Card.Content>
-      </Card>
-
-      {/* Quick Actions */}
-      <div className="mb-6 grid grid-cols-4 gap-3">
-        {quickActions.map((action) => (
-          <Link key={action.label} href={action.href}>
-            <div className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-3 text-center transition-colors hover:border-slate-300">
-              <span className="text-lg">{action.icon}</span>
-              <span className="text-[11px] font-medium text-slate-600">
-                {action.label}
-              </span>
-            </div>
-          </Link>
-        ))}
-      </div>
-
-      {/* Summary */}
-      <div className="mb-6 grid grid-cols-3 gap-3">
-        <Card className="border border-slate-200 bg-white">
-          <Card.Content className="p-4 text-center">
-            <p className="text-xs text-slate-400">Active Loans</p>
-            <p className="mt-1 text-xl font-bold text-[var(--brand-ink)]">1</p>
-          </Card.Content>
-        </Card>
-        <Card className="border border-slate-200 bg-white">
-          <Card.Content className="p-4 text-center">
-            <p className="text-xs text-slate-400">Transactions</p>
-            <p className="mt-1 text-xl font-bold text-[var(--brand-ink)]">24</p>
-          </Card.Content>
-        </Card>
-        <Card className="border border-slate-200 bg-white">
-          <Card.Content className="p-4 text-center">
-            <p className="text-xs text-slate-400">Status</p>
-            <Chip size="sm" color="success" variant="soft">
-              Active
-            </Chip>
-          </Card.Content>
-        </Card>
-      </div>
-
-      {/* Recent Transactions */}
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[var(--brand-ink)]">
-            Recent Transactions
-          </h2>
-          <Link
-            href="/transactions"
-            className="text-xs font-medium text-[var(--brand-gold)] hover:underline"
-          >
-            View All
-          </Link>
         </div>
-        <div className="space-y-2">
-          {recentTransactions.map((tx) => (
-            <div
-              key={tx.id}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4"
+      </section>
+
+      <section className="rounded-[2rem] border border-[var(--brand-stroke)] bg-[var(--brand-surface)] p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--brand-ink)]">Cooperative account details</h2>
+            <p className="mt-2 text-sm text-[var(--brand-moss)]">
+              Use these details when funding your wallet, then upload the payment receipt for approval.
+            </p>
+          </div>
+          <button
+            className="rounded-full border border-[var(--brand-stroke)] bg-white px-4 py-2 text-xs font-semibold text-[var(--brand-ink)]"
+            onClick={() => void navigator.clipboard.writeText(data.cooperativeAccount.accountNumber)}
+            type="button"
+          >
+            Copy account number
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-[1.4rem] border border-[var(--brand-stroke)] bg-white p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-[var(--brand-moss)]">Bank</p>
+            <p className="mt-2 text-sm font-semibold text-[var(--brand-ink)]">{data.cooperativeAccount.bankName || "-"}</p>
+          </div>
+          <div className="rounded-[1.4rem] border border-[var(--brand-stroke)] bg-white p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-[var(--brand-moss)]">Account name</p>
+            <p className="mt-2 text-sm font-semibold text-[var(--brand-ink)]">{data.cooperativeAccount.accountName || "-"}</p>
+          </div>
+          <div className="rounded-[1.4rem] border border-[var(--brand-stroke)] bg-white p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-[var(--brand-moss)]">Account number</p>
+            <p className="mt-2 text-sm font-semibold text-[var(--brand-ink)]">{data.cooperativeAccount.accountNumber || "-"}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[1.6rem] border border-[var(--brand-stroke)] bg-[var(--brand-surface)] p-4">
+          <p className="text-sm text-[var(--brand-moss)]">Total savings</p>
+          <p className="mt-2 text-xl font-semibold text-[var(--brand-ink)]">{money.format(data.summary.totalSavings)}</p>
+        </div>
+        <div className="rounded-[1.6rem] border border-[var(--brand-stroke)] bg-[var(--brand-surface)] p-4">
+          <p className="text-sm text-[var(--brand-moss)]">Investments</p>
+          <p className="mt-2 text-xl font-semibold text-[var(--brand-ink)]">{money.format(data.summary.totalInvestments)}</p>
+        </div>
+        <div className="rounded-[1.6rem] border border-[var(--brand-stroke)] bg-[var(--brand-surface)] p-4">
+          <p className="text-sm text-[var(--brand-moss)]">Transactions</p>
+          <p className="mt-2 text-xl font-semibold text-[var(--brand-ink)]">{data.summary.transactionCount}</p>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-[var(--brand-stroke)] bg-[var(--brand-surface)] p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-[var(--brand-ink)]">Quick actions</h2>
+          {error ? <span className="text-xs text-[var(--brand-moss)]">Showing fallback data</span> : null}
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {quickActions.map((action) => (
+            <Link
+              className="rounded-[1.4rem] border border-[var(--brand-stroke)] bg-white px-4 py-4 text-sm font-semibold text-[var(--brand-ink)] transition hover:border-[var(--brand-green)] hover:text-[var(--brand-green)]"
+              href={action.href}
+              key={action.label}
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${tx.amount > 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}
-                >
-                  {tx.amount > 0 ? (
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 4.5v15m7.5-7.5h-15"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M19.5 12h-15"
-                      />
-                    </svg>
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[var(--brand-ink)]">
-                    {typeLabel[tx.type] || tx.type}
-                  </p>
-                  <p className="text-xs text-slate-400">{tx.date}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p
-                  className={`text-sm font-semibold ${tx.amount > 0 ? "text-green-600" : "text-slate-700"}`}
-                >
-                  {tx.amount > 0 ? "+" : ""}
-                  {formatCurrency(Math.abs(tx.amount))}
-                </p>
-                <Chip
-                  size="sm"
-                  color={statusColor[tx.status as keyof typeof statusColor]}
-                  variant="soft"
-                >
-                  {tx.status}
-                </Chip>
-              </div>
-            </div>
+              {action.label}
+            </Link>
           ))}
         </div>
-      </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-[var(--brand-stroke)] bg-[var(--brand-surface)] p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-[var(--brand-ink)]">Recent activity</h2>
+          <Link href="/transactions" className="text-sm font-semibold text-[var(--brand-green)]">
+            View all
+          </Link>
+        </div>
+        <div className="space-y-3">
+          {data.recentTransactions.length ? (
+            data.recentTransactions.map((transaction) => (
+              <div key={transaction.id} className="rounded-[1.4rem] border border-[var(--brand-stroke)] bg-white p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-[var(--brand-ink)]">{transaction.type.replaceAll("_", " ")}</p>
+                    <p className="mt-1 text-xs text-[var(--brand-moss)]">
+                      {new Date(transaction.createdAt).toLocaleDateString("en-NG")}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-[var(--brand-ink)]">{money.format(transaction.amount)}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--brand-moss)]">{transaction.status}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-[1.4rem] border border-dashed border-[var(--brand-stroke)] bg-white p-6 text-sm text-[var(--brand-moss)]">
+              Recent transaction activity will appear here once your member session is connected.
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

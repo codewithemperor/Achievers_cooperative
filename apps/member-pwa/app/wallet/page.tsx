@@ -1,279 +1,173 @@
 "use client";
 
-import Link from "next/link";
-import { Card, Input, Button, Chip, Separator } from "@heroui/react";
-import { formatCurrency } from "@achievers/utils";
-import { FormField } from "@achievers/ui";
 import { useState } from "react";
+import { MemberModal } from "../components/member-modal";
+import { getApiBaseUrl, getMemberToken, uploadMemberImage } from "../lib/member-api";
+import { useMemberData } from "../lib/use-member-data";
 
-const mockWallet = {
-  availableBalance: 245000,
-  pendingBalance: 30000,
-  currency: "NGN",
-};
+interface WalletPayload {
+  availableBalance: number;
+  pendingBalance: number;
+  currency: string;
+}
 
-const mockTransactions = [
-  {
-    id: "1",
-    type: "FUNDING",
-    amount: 50000,
-    status: "APPROVED",
-    date: "Apr 8, 2026",
-    ref: "TXN-001",
-  },
-  {
-    id: "2",
-    type: "LOAN_REPAYMENT",
-    amount: -15000,
-    status: "APPROVED",
-    date: "Apr 7, 2026",
-    ref: "TXN-002",
-  },
-  {
-    id: "3",
-    type: "SAVINGS",
-    amount: -20000,
-    status: "APPROVED",
-    date: "Apr 5, 2026",
-    ref: "TXN-003",
-  },
-  {
-    id: "4",
-    type: "FUNDING",
-    amount: 30000,
-    status: "PENDING",
-    date: "Apr 4, 2026",
-    ref: "TXN-004",
-  },
-  {
-    id: "5",
-    type: "INVESTMENT",
-    amount: -50000,
-    status: "APPROVED",
-    date: "Apr 1, 2026",
-    ref: "TXN-005",
-  },
-  {
-    id: "6",
-    type: "FUNDING",
-    amount: 100000,
-    status: "APPROVED",
-    date: "Mar 28, 2026",
-    ref: "TXN-006",
-  },
-];
+interface TransactionsPayload {
+  items: Array<{
+    id: string;
+    type: string;
+    amount: number;
+    status: string;
+    reference?: string | null;
+    createdAt: string;
+  }>;
+}
 
-const statusColor = {
-  APPROVED: "success" as const,
-  PENDING: "warning" as const,
-  REJECTED: "danger" as const,
-};
-
-const typeLabel: Record<string, string> = {
-  FUNDING: "Wallet Funding",
-  LOAN_REPAYMENT: "Loan Repayment",
-  SAVINGS: "Savings Contribution",
-  LOAN_DISBURSEMENT: "Loan Disbursement",
-  INVESTMENT: "Investment",
-};
+const emptyWallet: WalletPayload = { availableBalance: 0, pendingBalance: 0, currency: "NGN" };
+const emptyTransactions: TransactionsPayload = { items: [] };
+const money = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
 
 export default function WalletPage() {
-  const [showFundForm, setShowFundForm] = useState(false);
-  const [fundAmount, setFundAmount] = useState("");
-  const chargeRate = 0.02;
-  const amount = parseFloat(fundAmount) || 0;
-  const charge = amount * chargeRate;
-  const netAmount = amount - charge;
+  const wallet = useMemberData<WalletPayload>("/wallet/me", emptyWallet);
+  const transactions = useMemberData<TransactionsPayload>("/wallet/transactions?limit=12", emptyTransactions);
+  const [funding, setFunding] = useState({ amount: "", receiptUrl: "" });
+  const [message, setMessage] = useState<string | null>(null);
+  const [isFundingModalOpen, setIsFundingModalOpen] = useState(false);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+
+  async function onUploadReceipt(file: File | null) {
+    if (!file) return;
+
+    try {
+      setUploadingReceipt(true);
+      const upload = await uploadMemberImage(file, "payment-receipt");
+      setFunding((current) => ({ ...current, receiptUrl: upload.url }));
+    } catch {
+      setMessage("Unable to upload receipt right now.");
+    } finally {
+      setUploadingReceipt(false);
+    }
+  }
+
+  async function submitFundingRequest() {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/payments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getMemberToken() ? { Authorization: `Bearer ${getMemberToken()}` } : {}),
+        },
+        body: JSON.stringify({
+          amount: Number(funding.amount),
+          receiptUrl: funding.receiptUrl || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to submit funding request");
+      }
+
+      setMessage("Funding request submitted for admin review.");
+      setFunding({ amount: "", receiptUrl: "" });
+      setIsFundingModalOpen(false);
+    } catch {
+      setMessage("Unable to submit funding request right now.");
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
-      <h1 className="text-xl font-semibold text-[var(--brand-ink)]">Wallet</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Manage your wallet balance and transactions
-      </p>
+    <div className="space-y-6">
+      <section className="rounded-[2rem] bg-[linear-gradient(145deg,#17321e,#2d5a27)] p-6 text-white">
+        <p className="text-xs uppercase tracking-[0.18em] text-white/70">Wallet</p>
+        <p className="mt-2 text-3xl font-semibold">{money.format(wallet.data.availableBalance)}</p>
+        <p className="mt-2 text-sm text-white/70">Pending deductions: {money.format(wallet.data.pendingBalance)}</p>
+      </section>
 
-      {/* Balance */}
-      <Card className="mt-4 border-0 bg-[var(--brand-ink)]">
-        <Card.Content className="p-5">
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-            Available Balance
-          </p>
-          <p className="mt-1 text-3xl font-bold text-white">
-            {formatCurrency(mockWallet.availableBalance)}
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full bg-yellow-400" />
-            <span className="text-xs text-slate-300">
-              Pending: {formatCurrency(mockWallet.pendingBalance)}
-            </span>
-          </div>
-          <Button
-            className="mt-4 w-full bg-[var(--brand-gold)] text-[var(--brand-ink)]"
-            size="lg"
-            onPress={() => setShowFundForm(!showFundForm)}
-          >
-            {showFundForm ? "Cancel" : "Add Money"}
-          </Button>
-        </Card.Content>
-      </Card>
-
-      {/* Fund Form */}
-      {showFundForm && (
-        <Card className="mt-4 border border-slate-200 bg-white">
-          <Card.Content className="p-5">
-            <h3 className="text-base font-semibold text-[var(--brand-ink)]">
-              Fund Your Wallet
-            </h3>
-            <p className="mt-1 text-xs text-slate-400">
-              Transfer to the account below and upload your receipt
-            </p>
-
-            <div className="mt-4 rounded-lg bg-[var(--brand-mist)] p-4">
-              <p className="text-xs font-medium text-slate-600">
-                Bank Transfer Details
-              </p>
-              <div className="mt-2 space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Bank</span>
-                  <span className="font-medium text-[var(--brand-ink)]">
-                    Guaranty Trust Bank
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Account Number</span>
-                  <span className="font-medium text-[var(--brand-ink)]">
-                    0123456789
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Account Name</span>
-                  <span className="font-medium text-[var(--brand-ink)]">
-                    Achievers Cooperative
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <form
-              className="mt-4 space-y-4"
-              onSubmit={(e) => e.preventDefault()}
-            >
-              <FormField label="Amount (₦)">
-                <Input
-                  type="number"
-                  placeholder="Enter amount"
-                  variant="secondary"
-                  value={fundAmount}
-                  onChange={(e) => setFundAmount(e.target.value)}
-                />
-              </FormField>
-
-              {amount > 0 && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <div className="flex justify-between text-slate-500">
-                    <span>Amount</span>
-                    <span>{formatCurrency(amount)}</span>
-                  </div>
-                  <div className="mt-1 flex justify-between text-slate-500">
-                    <span>
-                      Membership charge ({(chargeRate * 100).toFixed(0)}%)
-                    </span>
-                    <span className="text-red-500">
-                      -{formatCurrency(charge)}
-                    </span>
-                  </div>
-                  <Separator className="my-2" />
-                  <div className="flex justify-between font-semibold text-[var(--brand-ink)]">
-                    <span>You receive</span>
-                    <span>{formatCurrency(netAmount)}</span>
-                  </div>
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                className="w-full bg-[var(--brand-ink)] text-white"
-              >
-                Submit Funding Request
-              </Button>
-            </form>
-          </Card.Content>
-        </Card>
-      )}
-
-      {/* Transaction History */}
-      <div className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold text-[var(--brand-ink)]">
-          Transaction History
-        </h2>
-        <div className="space-y-2">
-          {mockTransactions.map((tx) => (
-            <div
-              key={tx.id}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${tx.amount > 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}
-                >
-                  {tx.amount > 0 ? (
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 4.5v15m7.5-7.5h-15"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M19.5 12h-15"
-                      />
-                    </svg>
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[var(--brand-ink)]">
-                    {typeLabel[tx.type]}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {tx.date} · {tx.ref}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p
-                  className={`text-sm font-semibold ${tx.amount > 0 ? "text-green-600" : "text-slate-700"}`}
-                >
-                  {tx.amount > 0 ? "+" : ""}
-                  {formatCurrency(Math.abs(tx.amount))}
-                </p>
-                <Chip
-                  size="sm"
-                  color={statusColor[tx.status as keyof typeof statusColor]}
-                  variant="soft"
-                >
-                  {tx.status}
-                </Chip>
-              </div>
-            </div>
-          ))}
+      {message ? (
+        <div className="rounded-[1.5rem] border border-[var(--brand-stroke)] bg-white px-4 py-3 text-sm text-[var(--brand-ink)]">
+          {message}
         </div>
-      </div>
+      ) : null}
+
+      <section className="rounded-[2rem] border border-[var(--brand-stroke)] bg-[var(--brand-surface)] p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--brand-ink)]">Fund wallet</h2>
+            <p className="mt-2 text-sm text-[var(--brand-moss)]">
+              Submit a funding receipt for admin approval. Pending deductions will auto-clear after credit where possible.
+            </p>
+          </div>
+          <button
+            className="rounded-2xl bg-[var(--brand-green)] px-4 py-3 text-sm font-semibold text-white"
+            onClick={() => setIsFundingModalOpen(true)}
+            type="button"
+          >
+            Add money
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-[var(--brand-stroke)] bg-[var(--brand-surface)] p-5">
+        <h2 className="text-lg font-semibold text-[var(--brand-ink)]">Recent wallet activity</h2>
+        <div className="mt-4 space-y-3">
+          {transactions.data.items.length ? (
+            transactions.data.items.map((item) => (
+              <div key={item.id} className="rounded-[1.4rem] border border-[var(--brand-stroke)] bg-white p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-[var(--brand-ink)]">{item.type.replaceAll("_", " ")}</p>
+                    <p className="mt-1 text-xs text-[var(--brand-moss)]">{item.reference || "No reference"}</p>
+                    <p className="mt-1 text-xs text-[var(--brand-moss)]">{new Date(item.createdAt).toLocaleString("en-NG")}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-[var(--brand-ink)]">{money.format(item.amount)}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--brand-moss)]">{item.status}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-[1.4rem] border border-dashed border-[var(--brand-stroke)] bg-white p-6 text-sm text-[var(--brand-moss)]">
+              Wallet activity will appear here once your member session is connected.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <MemberModal
+        isOpen={isFundingModalOpen}
+        onClose={() => setIsFundingModalOpen(false)}
+        title="Add money to wallet"
+        description="Create a wallet funding request for admin approval."
+      >
+        <div className="grid gap-4">
+          <input
+            className="min-h-12 rounded-2xl border border-[var(--brand-stroke)] bg-white px-4 text-sm outline-none"
+            onChange={(event) => setFunding((current) => ({ ...current, amount: event.target.value }))}
+            placeholder="Amount"
+            type="number"
+            value={funding.amount}
+          />
+          <input
+            accept="image/*"
+            className="min-h-12 rounded-2xl border border-[var(--brand-stroke)] bg-white px-4 py-3 text-sm outline-none"
+            onChange={(event) => void onUploadReceipt(event.target.files?.[0] ?? null)}
+            type="file"
+          />
+          {funding.receiptUrl ? (
+            <div className="rounded-2xl border border-[var(--brand-stroke)] bg-white p-3 text-sm text-[var(--brand-ink)]">
+              Receipt uploaded successfully.
+            </div>
+          ) : null}
+          <button
+            className="rounded-2xl bg-[var(--brand-green)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            disabled={uploadingReceipt}
+            onClick={() => void submitFundingRequest()}
+            type="button"
+          >
+            {uploadingReceipt ? "Uploading receipt..." : "Submit funding request"}
+          </button>
+        </div>
+      </MemberModal>
     </div>
   );
 }
