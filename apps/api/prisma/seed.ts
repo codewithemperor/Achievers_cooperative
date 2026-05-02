@@ -355,18 +355,19 @@ async function main() {
 
   console.log("Creating system config...");
 
-  await prisma.systemConfig.createMany({
-    data: [
-      { key: "MEMBERSHIP_FEE_AMOUNT", value: "5000" },
-      { key: "COOPERATIVE_DEDUCTION_DAY", value: "MONDAY" },
-      { key: "COOPERATIVE_DEDUCTION_AMOUNT", value: "10000" },
-      { key: "MEMBER_TERMS_HTML", value: "<p>Members agree to weekly deductions, cooperative rules, and accurate profile documentation.</p>" },
-      { key: "BANK_ACCOUNT_NAME", value: "Achievers Cooperative Society" },
-      { key: "BANK_ACCOUNT_NUMBER", value: "0123456789" },
-      { key: "BANK_NAME", value: "Community Trust Bank" },
-    ],
-    skipDuplicates: true as never,
-  });
+  const systemConfigs = [
+    { key: "MEMBERSHIP_FEE_AMOUNT", value: "5000" },
+    { key: "COOPERATIVE_DEDUCTION_DAY", value: "MONDAY" },
+    { key: "COOPERATIVE_DEDUCTION_AMOUNT", value: "10000" },
+    { key: "MEMBER_TERMS_HTML", value: "<p>Members agree to weekly deductions, cooperative rules, and accurate profile documentation.</p>" },
+    { key: "BANK_ACCOUNT_NAME", value: "Achievers Cooperative Society" },
+    { key: "BANK_ACCOUNT_NUMBER", value: "0123456789" },
+    { key: "BANK_NAME", value: "Community Trust Bank" },
+  ];
+
+  for (const config of systemConfigs) {
+    await prisma.systemConfig.create({ data: config });
+  }
 
   const cooperativeWallet = await prisma.cooperativeWallet.create({
     data: {

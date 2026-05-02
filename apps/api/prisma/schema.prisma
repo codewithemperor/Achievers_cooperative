@@ -62,6 +62,16 @@ enum ApprovalStatus {
   REJECTED
 }
 
+enum LoanStatus {
+  PENDING
+  APPROVED
+  DISBURSED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  REJECTED
+}
+
 model User {
   id                     String      @id @default(cuid())
   email                  String      @unique
@@ -108,6 +118,7 @@ model Member {
   packageSubscriptions  PackageSubscription[]
   guaranteedLoansOne    LoanApplication[]      @relation("LoanGuarantorOne")
   guaranteedLoansTwo    LoanApplication[]      @relation("LoanGuarantorTwo")
+  bankAccounts          BankAccount[]
 }
 
 model Wallet {
@@ -155,15 +166,18 @@ model LoanApplication {
   amount           Decimal
   tenorMonths      Int
   purpose          String
-  status           ApprovalStatus @default(PENDING)
+  status           LoanStatus     @default(PENDING)
   submittedAt      DateTime       @default(now())
   approvedAt       DateTime?
   rejectedAt       DateTime?
   disbursedAt      DateTime?
+  dueDate          DateTime?
   remainingBalance Decimal        @default(0)
+  bankAccountId    String?
   member           Member         @relation(fields: [memberId], references: [id])
   guarantorOne     Member?        @relation("LoanGuarantorOne", fields: [guarantorOneId], references: [id])
   guarantorTwo     Member?        @relation("LoanGuarantorTwo", fields: [guarantorTwoId], references: [id])
+  bankAccount      BankAccount?   @relation(fields: [bankAccountId], references: [id])
 }
 
 model InvestmentProduct {
@@ -270,6 +284,21 @@ model CooperativeWallet {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   entries      CooperativeEntry[]
+}
+
+model BankAccount {
+  id            String    @id @default(cuid())
+  memberId      String
+  bankName      String
+  accountNumber String
+  accountName   String
+  isDefault     Boolean   @default(false)
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  member        Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  loanApplications LoanApplication[]
+
+  @@unique([memberId, accountNumber])
 }
 
 model CooperativeEntry {

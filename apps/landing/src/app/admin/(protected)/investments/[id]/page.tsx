@@ -1,8 +1,10 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { Landmark, TrendingUp, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { StatCard } from "@/components/ui/stat-card";
 import { useApi } from "@/hooks/useApi";
 
 interface InvestmentDetail {
@@ -16,20 +18,10 @@ interface InvestmentDetail {
   subscriptions: Array<{
     id: string;
     principal: number;
+    maturityDate: string;
+    maturityAmount: number;
     status: string;
     isDefaulter: boolean;
-    member: { id: string; fullName: string; membershipNumber: string };
-  }>;
-  subscribers: Array<{
-    id: string;
-    principal: number;
-    status: string;
-    member: { id: string; fullName: string; membershipNumber: string };
-  }>;
-  defaulters: Array<{
-    id: string;
-    principal: number;
-    status: string;
     member: { id: string; fullName: string; membershipNumber: string };
   }>;
 }
@@ -40,78 +32,62 @@ const currency = new Intl.NumberFormat("en-NG", {
   maximumFractionDigits: 0,
 });
 
-function PersonCard({ principal, status, title, membershipNumber }: { title: string; membershipNumber: string; principal: number; status: string }) {
-  return (
-    <div className="rounded-[1.25rem] bg-[rgba(245,240,232,0.76)] p-4">
-      <p className="font-semibold text-[var(--color-dark)]">{title}</p>
-      <p className="mt-1 text-xs text-[var(--color-coop-muted)]">{membershipNumber}</p>
-      <p className="mt-3 text-sm text-[var(--color-dark)]">{currency.format(principal)}</p>
-      <div className="mt-2">
-        <StatusBadge status={status} variant={status === "APPROVED" ? "success" : "warning"} />
-      </div>
-    </div>
-  );
-}
-
 export default function InvestmentDetailPage() {
   const params = useParams<{ id: string }>();
   const investment = useApi<InvestmentDetail>(`/investments/products/${params.id}`);
+  const subscriptions = investment.data?.subscriptions ?? [];
+  const totalInvested = subscriptions.reduce((sum, item) => sum + item.principal, 0);
+  const totalMaturity = subscriptions.reduce((sum, item) => sum + item.maturityAmount, 0);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={investment.data?.name || "Investment detail"}
-        subtitle="Review full investment data, subscriber activity, and defaulter visibility from one page."
+        subtitle="Track product totals, expected payout, and every subscriber in a single table."
       />
 
       <section className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-[1.5rem] bg-white p-5 shadow-[0_18px_45px_rgba(26,46,26,0.06)]">
-          <p className="text-sm text-[var(--color-coop-muted)]">Annual rate</p>
-          <p className="mt-2 text-2xl font-semibold text-[var(--color-dark)]">{investment.data?.annualRate ?? 0}%</p>
-        </div>
-        <div className="rounded-[1.5rem] bg-white p-5 shadow-[0_18px_45px_rgba(26,46,26,0.06)]">
-          <p className="text-sm text-[var(--color-coop-muted)]">Minimum amount</p>
-          <p className="mt-2 text-2xl font-semibold text-[var(--color-dark)]">{currency.format(investment.data?.minimumAmount ?? 0)}</p>
-        </div>
-        <div className="rounded-[1.5rem] bg-white p-5 shadow-[0_18px_45px_rgba(26,46,26,0.06)]">
-          <p className="text-sm text-[var(--color-coop-muted)]">Duration</p>
-          <p className="mt-2 text-2xl font-semibold text-[var(--color-dark)]">{investment.data?.durationMonths ?? 0} months</p>
-        </div>
-        <div className="rounded-[1.5rem] bg-white p-5 shadow-[0_18px_45px_rgba(26,46,26,0.06)]">
-          <p className="text-sm text-[var(--color-coop-muted)]">Status</p>
-          <div className="mt-2">
-            <StatusBadge status={investment.data?.status || "UNKNOWN"} variant={investment.data?.status === "ACTIVE" ? "success" : "warning"} />
-          </div>
-        </div>
+        <StatCard title="Annual Rate" value={`${investment.data?.annualRate ?? 0}%`} icon={<TrendingUp className="h-5 w-5" />} accent="green" />
+        <StatCard title="Minimum Amount" value={currency.format(investment.data?.minimumAmount ?? 0)} icon={<Landmark className="h-5 w-5" />} accent="blue" />
+        <StatCard title="Amount Invested" value={currency.format(totalInvested)} icon={<Users className="h-5 w-5" />} accent="amber" />
+        <StatCard title="Maturity Payout" value={currency.format(totalMaturity)} icon={<TrendingUp className="h-5 w-5" />} accent="dark" />
       </section>
 
-      <section className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[var(--color-dark)]">Subscribers</h2>
-        <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {(investment.data?.subscribers ?? []).map((subscriber) => (
-            <PersonCard
-              key={subscriber.id}
-              membershipNumber={subscriber.member.membershipNumber}
-              principal={subscriber.principal}
-              status={subscriber.status}
-              title={subscriber.member.fullName}
-            />
-          ))}
+      <section className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-[var(--text-900)]">Subscribers</h2>
+          <StatusBadge status={investment.data?.status || "UNKNOWN"} variant={investment.data?.status === "ACTIVE" ? "success" : "warning"} />
         </div>
-      </section>
-
-      <section className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[var(--color-dark)]">Defaulters</h2>
-        <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {(investment.data?.defaulters ?? []).map((subscriber) => (
-            <PersonCard
-              key={subscriber.id}
-              membershipNumber={subscriber.member.membershipNumber}
-              principal={subscriber.principal}
-              status={subscriber.status}
-              title={subscriber.member.fullName}
-            />
-          ))}
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-[var(--background-200)] text-[var(--text-400)]">
+              <tr>
+                <th className="px-3 py-3 font-semibold">Subscriber</th>
+                <th className="px-3 py-3 font-semibold">Principal</th>
+                <th className="px-3 py-3 font-semibold">Maturity Date</th>
+                <th className="px-3 py-3 font-semibold">Maturity Amount</th>
+                <th className="px-3 py-3 font-semibold">Status</th>
+                <th className="px-3 py-3 font-semibold">Defaulting</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subscriptions.map((subscriber) => (
+                <tr key={subscriber.id} className="border-b border-[var(--background-100)]">
+                  <td className="px-3 py-3">
+                    <p className="font-semibold text-[var(--text-900)]">{subscriber.member.fullName}</p>
+                    <p className="text-xs text-[var(--text-400)]">{subscriber.member.membershipNumber}</p>
+                  </td>
+                  <td className="px-3 py-3">{currency.format(subscriber.principal)}</td>
+                  <td className="px-3 py-3">{new Date(subscriber.maturityDate).toLocaleDateString("en-NG")}</td>
+                  <td className="px-3 py-3">{currency.format(subscriber.maturityAmount)}</td>
+                  <td className="px-3 py-3">
+                    <StatusBadge status={subscriber.status} variant={subscriber.status === "APPROVED" ? "success" : "warning"} />
+                  </td>
+                  <td className="px-3 py-3">{subscriber.isDefaulter ? "Yes" : "No"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>

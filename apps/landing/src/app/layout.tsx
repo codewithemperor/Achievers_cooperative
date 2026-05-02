@@ -1,20 +1,29 @@
-import type { Metadata } from "next";
-import { DM_Sans, Playfair_Display } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Glory, Figtree } from "next/font/google";
 // import "@heroui/react/dist/styles.css";
 import "./globals.css";
 import { siteConfig } from "@/data/content";
 import { Providers } from "@/components/ui/Providers";
 import AppChrome from "@/components/layout/AppChrome";
 
-const displayFont = Playfair_Display({
+const displayFont = Glory({
   subsets: ["latin"],
   variable: "--font-display-family",
 });
 
-const bodyFont = DM_Sans({
+const bodyFont = Figtree({
   subsets: ["latin"],
   variable: "--font-body-family",
 });
+
+export const viewport: Viewport = {
+  themeColor: "#166534",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   title: {
@@ -30,6 +39,10 @@ export const metadata: Metadata = {
     siteName: siteConfig.name,
     type: "website",
   },
+  icons: {
+    icon: "/logo.jpeg",
+    apple: "/logo.jpeg",
+  },
 };
 
 export default function RootLayout({
@@ -39,6 +52,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/logo.jpeg" />
+        <link rel="apple-touch-icon" href="/logo.jpeg" />
+      </head>
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
         <Providers>
           <AppChrome>{children}</AppChrome>

@@ -60,8 +60,8 @@ const statusOptions = ["ACTIVE", "INACTIVE", "SUSPENDED", "WITHDRAWN"];
 
 function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-5 sm:p-6">
-      <h2 className="text-xl font-semibold text-[var(--color-dark)]">{title}</h2>
+    <section className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-5 sm:p-6">
+      <h2 className="text-xl font-semibold text-[var(--text-900)]">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -128,7 +128,7 @@ export default function MemberDetailPage() {
               title="Update Member Status"
               trigger={
                 <button
-                  className="inline-flex items-center gap-2 rounded-full border border-[rgba(26,46,26,0.12)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-dark)]"
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-900)]"
                   onClick={() => setSelectedStatus(member.data?.status || "ACTIVE")}
                   type="button"
                 >
@@ -139,11 +139,11 @@ export default function MemberDetailPage() {
             >
               {({ close }) => (
                 <div className="space-y-4">
-                  <div className="rounded-[1.25rem] bg-[rgba(245,240,232,0.72)] p-4 text-sm text-[var(--color-dark)]">
+                  <div className="rounded-[1.25rem] bg-[var(--background-50)/72] p-4 text-sm text-[var(--text-900)]">
                     Current status: <span className="font-semibold">{(member.data?.status || "UNKNOWN").replaceAll("_", " ")}</span>
                   </div>
                   <select
-                    className="min-h-12 w-full rounded-2xl border border-[rgba(26,46,26,0.12)] px-4 text-sm text-[var(--color-dark)] outline-none"
+                    className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm text-[var(--text-900)] outline-none"
                     onChange={(event) => setSelectedStatus(event.target.value)}
                     value={selectedStatus}
                   >
@@ -155,7 +155,7 @@ export default function MemberDetailPage() {
                   </select>
                   <div className="flex justify-end">
                     <button
-                      className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white"
+                      className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
                       disabled={updatingStatus}
                       onClick={async () => {
                         await updateStatus(selectedStatus);
@@ -178,51 +178,51 @@ export default function MemberDetailPage() {
           <DetailCard title="Personal Information">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <p className="text-sm text-[var(--color-coop-muted)]">Membership number</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.membershipNumber || "-"}</p>
+                <p className="text-sm text-[var(--text-400)]">Membership number</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.membershipNumber || "-"}</p>
               </div>
               <div>
-                <p className="text-sm text-[var(--color-coop-muted)]">Join date</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">
+                <p className="text-sm text-[var(--text-400)]">Join date</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">
                   {member.data?.joinedAt ? new Date(member.data.joinedAt).toLocaleDateString("en-NG") : "-"}
                 </p>
               </div>
               <div className="sm:col-span-2">
-                <p className="text-sm text-[var(--color-coop-muted)]">Email</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.user.email || "-"}</p>
+                <p className="text-sm text-[var(--text-400)]">Email</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.user.email || "-"}</p>
               </div>
               <div>
-                <p className="text-sm text-[var(--color-coop-muted)]">Phone</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.phoneNumber || "-"}</p>
+                <p className="text-sm text-[var(--text-400)]">Phone</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.phoneNumber || "-"}</p>
               </div>
               <div className="sm:col-span-2">
-                <p className="text-sm text-[var(--color-coop-muted)]">Home address</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.homeAddress || "-"}</p>
+                <p className="text-sm text-[var(--text-400)]">Home address</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.homeAddress || "-"}</p>
               </div>
               <div>
-                <p className="text-sm text-[var(--color-coop-muted)]">State of origin</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.stateOfOrigin || "-"}</p>
+                <p className="text-sm text-[var(--text-400)]">State of origin</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.stateOfOrigin || "-"}</p>
               </div>
               <div>
-                <p className="text-sm text-[var(--color-coop-muted)]">Date of birth</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">
+                <p className="text-sm text-[var(--text-400)]">Date of birth</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">
                   {member.data?.dateOfBirth ? new Date(member.data.dateOfBirth).toLocaleDateString("en-NG") : "-"}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-[var(--color-coop-muted)]">Occupation</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.occupation || "-"}</p>
+                <p className="text-sm text-[var(--text-400)]">Occupation</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.occupation || "-"}</p>
               </div>
               <div>
-                <p className="text-sm text-[var(--color-coop-muted)]">Marital status</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.maritalStatus.replaceAll("_", " ") || "-"}</p>
+                <p className="text-sm text-[var(--text-400)]">Marital status</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.maritalStatus.replaceAll("_", " ") || "-"}</p>
               </div>
               <div>
-                <p className="text-sm text-[var(--color-coop-muted)]">Referrer</p>
-                <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.referrer?.fullName || "No referrer assigned"}</p>
+                <p className="text-sm text-[var(--text-400)]">Referrer</p>
+                <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.referrer?.fullName || "No referrer assigned"}</p>
               </div>
               <div>
-                <p className="text-sm text-[var(--color-coop-muted)]">Status</p>
+                <p className="text-sm text-[var(--text-400)]">Status</p>
                 <div className="mt-2">
                   <StatusBadge status={member.data?.status || "UNKNOWN"} variant={statusVariant(member.data?.status) as any} />
                 </div>
@@ -234,12 +234,12 @@ export default function MemberDetailPage() {
             <div className="grid gap-4 sm:grid-cols-[1fr_220px]">
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-[var(--color-coop-muted)]">Identification type</p>
-                  <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.identificationType.replaceAll("_", " ") || "-"}</p>
+                  <p className="text-sm text-[var(--text-400)]">Identification type</p>
+                  <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.identificationType.replaceAll("_", " ") || "-"}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-[var(--color-coop-muted)]">Identification number</p>
-                  <p className="mt-1 font-semibold text-[var(--color-dark)]">{member.data?.identificationNumber || "-"}</p>
+                  <p className="text-sm text-[var(--text-400)]">Identification number</p>
+                  <p className="mt-1 font-semibold text-[var(--text-900)]">{member.data?.identificationNumber || "-"}</p>
                 </div>
               </div>
               <div>
@@ -249,7 +249,7 @@ export default function MemberDetailPage() {
                     trigger={
                       <img
                         alt="Identification document"
-                        className="h-40 w-full cursor-zoom-in rounded-[1.5rem] border border-[rgba(26,46,26,0.08)] object-cover"
+                        className="h-40 w-full cursor-zoom-in rounded-[1.5rem] border border-[var(--primary-900)/8] object-cover"
                         src={member.data.identificationPicture}
                       />
                     }
@@ -261,7 +261,7 @@ export default function MemberDetailPage() {
                     />
                   </AdminModal>
                 ) : (
-                  <div className="flex h-40 items-center justify-center rounded-[1.5rem] border border-dashed border-[rgba(26,46,26,0.16)] text-sm text-[var(--color-coop-muted)]">
+                  <div className="flex h-40 items-center justify-center rounded-[1.5rem] border border-dashed border-[var(--primary-900)/16] text-sm text-[var(--text-400)]">
                     No ID image
                   </div>
                 )}
@@ -274,14 +274,14 @@ export default function MemberDetailPage() {
           <DetailCard title="Account Summary">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-[1.5rem] bg-[rgba(245,240,232,0.8)] p-4">
-                <p className="text-sm text-[var(--color-coop-muted)]">Available balance</p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--color-dark)]">
+                <p className="text-sm text-[var(--text-400)]">Available balance</p>
+                <p className="mt-2 text-2xl font-semibold text-[var(--text-900)]">
                   {currency.format(member.data?.wallet?.availableBalance ?? 0)}
                 </p>
               </div>
               <div className="rounded-[1.5rem] bg-[rgba(245,240,232,0.8)] p-4">
-                <p className="text-sm text-[var(--color-coop-muted)]">Pending deductions</p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--color-dark)]">
+                <p className="text-sm text-[var(--text-400)]">Pending deductions</p>
+                <p className="mt-2 text-2xl font-semibold text-[var(--text-900)]">
                   {currency.format(member.data?.wallet?.pendingBalance ?? 0)}
                 </p>
               </div>
@@ -294,12 +294,12 @@ export default function MemberDetailPage() {
                 <div key={transaction.id} className="rounded-[1.25rem] bg-[rgba(245,240,232,0.76)] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-[var(--color-dark)]">{transaction.type.replaceAll("_", " ")}</p>
-                      <p className="mt-1 text-xs text-[var(--color-coop-muted)]">{transaction.reference || "No reference"}</p>
+                      <p className="font-semibold text-[var(--text-900)]">{transaction.type.replaceAll("_", " ")}</p>
+                      <p className="mt-1 text-xs text-[var(--text-400)]">{transaction.reference || "No reference"}</p>
                     </div>
                     <StatusBadge status={transaction.status} variant={statusVariant(transaction.status) as any} />
                   </div>
-                  <p className="mt-2 text-sm text-[var(--color-coop-muted)]">{currency.format(transaction.amount)}</p>
+                  <p className="mt-2 text-sm text-[var(--text-400)]">{currency.format(transaction.amount)}</p>
                 </div>
               ))}
             </div>
@@ -310,12 +310,12 @@ export default function MemberDetailPage() {
               <div className="space-y-3">
                 {(member.data?.loanApplications ?? []).map((loan) => (
                   <div key={loan.id} className="rounded-[1.25rem] bg-[rgba(245,240,232,0.76)] p-4">
-                    <p className="font-semibold text-[var(--color-dark)]">{currency.format(loan.amount)}</p>
+                    <p className="font-semibold text-[var(--text-900)]">{currency.format(loan.amount)}</p>
                     <p className="mt-1 text-sm">{loan.purpose}</p>
-                    <p className="mt-1 text-xs text-[var(--color-coop-muted)]">
+                    <p className="mt-1 text-xs text-[var(--text-400)]">
                       Remaining: {currency.format(loan.remainingBalance)}
                     </p>
-                    <p className="mt-1 text-xs text-[var(--color-coop-muted)]">
+                    <p className="mt-1 text-xs text-[var(--text-400)]">
                       Guarantors: {loan.guarantorOne?.fullName || "None"} / {loan.guarantorTwo?.fullName || "None"}
                     </p>
                     <div className="mt-2">
@@ -330,7 +330,7 @@ export default function MemberDetailPage() {
               <div className="space-y-3">
                 {(member.data?.investments ?? []).map((investment) => (
                   <div key={investment.id} className="rounded-[1.25rem] bg-[rgba(245,240,232,0.76)] p-4">
-                    <p className="font-semibold text-[var(--color-dark)]">{investment.product.name}</p>
+                    <p className="font-semibold text-[var(--text-900)]">{investment.product.name}</p>
                     <p className="mt-1 text-sm">{currency.format(investment.principal)}</p>
                     <div className="mt-2">
                       <StatusBadge status={investment.status} variant="info" />

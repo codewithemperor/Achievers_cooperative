@@ -5,7 +5,7 @@ import { AnimatedSection } from "@/components/ui/AnimatedSection";
 
 export default function CtaSection() {
   return (
-    <section className="relative overflow-hidden bg-coop-dark py-24">
+    <section className="relative overflow-hidden bg-primary-900 py-24">
       <div className="pointer-events-none absolute inset-0 grid grid-cols-4 gap-2 opacity-20">
         {[
           "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&q=60",
@@ -23,19 +23,19 @@ export default function CtaSection() {
         ))}
       </div>
 
-      <div className="absolute inset-0 bg-coop-dark/70" />
+      <div className="absolute inset-0 bg-primary-900/70" />
 
       <div className="section-padding relative mx-auto max-w-350 text-center">
         <AnimatedSection>
-          <h2 className="mb-6 whitespace-pre-line font-display text-5xl font-semibold leading-[1.1] text-coop-cream md:text-6xl lg:text-7xl">
+          <h2 className="mb-6 whitespace-pre-line font-display text-5xl font-semibold leading-[1.1] text-background-50 md:text-6xl lg:text-7xl">
             {ctaSection.headline}
           </h2>
-          <p className="mx-auto mb-10 max-w-md text-lg leading-relaxed text-coop-cream/70">
+          <p className="mx-auto mb-10 max-w-md text-lg leading-relaxed text-background-50/70">
             {ctaSection.subheadline}
           </p>
           <Link
             href={ctaSection.ctaHref}
-            className="inline-flex items-center gap-2 rounded-full bg-coop-cream px-8 py-4 text-sm font-semibold text-coop-dark transition-all duration-300 hover:bg-coop-light hover:text-white"
+            className="inline-flex items-center gap-2 rounded-full bg-background-50 px-8 py-4 text-sm font-semibold text-primary-900 transition-all duration-300 hover:bg-primary-400 hover:text-white"
           >
             {ctaSection.ctaLabel} &rarr;
           </Link>

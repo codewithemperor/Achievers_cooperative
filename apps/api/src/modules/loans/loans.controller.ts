@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request, Delete } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -68,15 +68,15 @@ export class LoansController {
   @ApiOperation({ summary: 'Reject a loan' })
   @ApiOkResponse({ description: 'Loan rejected' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
-  reject(@Param('id') id: string, @Request() req: any) {
-    return this.loansService.reject(id, req.user.id);
+  reject(@Param('id') id: string, @Request() req: any, @Body() body?: { reason?: string }) {
+    return this.loansService.reject(id, req.user.id, body?.reason);
   }
 
   @Patch(':id/reject')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Reject a loan' })
-  rejectPatch(@Param('id') id: string, @Request() req: any) {
-    return this.loansService.reject(id, req.user.id);
+  rejectPatch(@Param('id') id: string, @Request() req: any, @Body() body?: { reason?: string }) {
+    return this.loansService.reject(id, req.user.id, body?.reason);
   }
 
   @Post(':id/disburse')
@@ -95,10 +95,29 @@ export class LoansController {
     return this.loansService.disburse(id, req.user.id);
   }
 
+  @Patch(':id/mark-in-progress')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Mark a disbursed loan as in progress' })
+  markInProgress(@Param('id') id: string, @Request() req: any) {
+    return this.loansService.markInProgress(id, req.user.id);
+  }
+
   @Post(':id/repay')
   @ApiOperation({ summary: 'Repay a loan' })
   @ApiOkResponse({ description: 'Repayment processed' })
   repay(@Param('id') id: string, @Request() req: any, @Body() dto: RepayLoanDto) {
     return this.loansService.repay(req.user.id, id, dto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Edit a pending loan application' })
+  updatePending(@Param('id') id: string, @Request() req: any, @Body() dto: ApplyLoanDto) {
+    return this.loansService.updatePending(req.user.id, id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a pending loan application' })
+  removePending(@Param('id') id: string, @Request() req: any) {
+    return this.loansService.removePending(req.user.id, id);
   }
 }

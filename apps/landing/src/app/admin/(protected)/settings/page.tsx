@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Button } from "@heroui/react";
 import { AdminModal } from "@/components/ui/admin-modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
@@ -76,19 +75,19 @@ export default function SettingsPage() {
         subtitle="Manage all system configuration keys from the table below. Weekly deductions now auto-run once on the scheduled day when the API receives live traffic."
       />
 
-      <section className="overflow-hidden rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white">
+      <section className="overflow-hidden rounded-[2rem] border border-[var(--primary-900)/8] bg-white">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-[rgba(26,46,26,0.08)]">
+          <table className="min-w-full divide-y divide-[var(--primary-900)/8]">
             <thead className="bg-[rgba(245,240,232,0.7)]">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-coop-muted)]">Key</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-coop-muted)]">Value</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-coop-muted)]">Description</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-coop-muted)]">Updated</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-coop-muted)]">Action</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-400)]">Key</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-400)]">Value</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-400)]">Description</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-400)]">Updated</th>
+                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-400)]">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[rgba(26,46,26,0.08)]">
+            <tbody className="divide-y divide-[var(--primary-900)/8]">
               {rows.map((item) => {
                 const isTerms = item.key === "MEMBER_TERMS_HTML";
                 const isReadonly = item.key === "COOPERATIVE_DEDUCTION_LAST_RUN";
@@ -98,30 +97,30 @@ export default function SettingsPage() {
                 return (
                   <tr key={item.id}>
                     <td className="px-6 py-5 align-top">
-                      <p className="font-semibold text-[var(--color-dark)]">{labels[item.key] || item.key}</p>
-                      <p className="mt-1 text-xs text-[var(--color-coop-muted)]">{item.key}</p>
+                      <p className="font-semibold text-[var(--text-900)]">{labels[item.key] || item.key}</p>
+                      <p className="mt-1 text-xs text-[var(--text-400)]">{item.key}</p>
                     </td>
                     <td className="px-6 py-5 align-top">
-                      <div className="max-w-xl break-words text-sm text-[var(--color-dark)]">
+                      <div className="max-w-xl break-words text-sm text-[var(--text-900)]">
                         {isTerms ? <span dangerouslySetInnerHTML={{ __html: item.value }} /> : item.value || "—"}
                       </div>
                     </td>
-                    <td className="px-6 py-5 align-top text-sm text-[var(--color-coop-muted)]">
+                    <td className="px-6 py-5 align-top text-sm text-[var(--text-400)]">
                       {descriptions[item.key] || "General system configuration value."}
                     </td>
-                    <td className="px-6 py-5 align-top text-sm text-[var(--color-coop-muted)]">
+                    <td className="px-6 py-5 align-top text-sm text-[var(--text-400)]">
                       {item.value ? new Date(item.updatedAt).toLocaleString() : "—"}
                     </td>
                     <td className="px-6 py-5 align-top text-right">
                       {isReadonly ? (
-                        <span className="text-sm text-[var(--color-coop-muted)]">Auto-managed</span>
+                        <span className="text-sm text-[var(--text-400)]">Auto-managed</span>
                       ) : (
                         <AdminModal
                           description={descriptions[item.key] || "Update this system configuration value."}
                           title={`Edit ${labels[item.key] || item.key}`}
                           trigger={
                             <button
-                              className="rounded-full border border-[rgba(26,46,26,0.12)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-dark)]"
+                              className="rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-900)]"
                               onClick={() => {
                                 setDraftKey(item.key);
                                 setDraftValue(item.value);
@@ -137,7 +136,7 @@ export default function SettingsPage() {
                               <RichTextEditor value={draftKey === item.key ? draftValue : item.value} onChange={setDraftValue} />
                             ) : isDay ? (
                               <select
-                                className="min-h-12 w-full rounded-2xl border border-[rgba(26,46,26,0.12)] px-4 text-sm text-[var(--color-dark)] outline-none"
+                                className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm text-[var(--text-900)] outline-none"
                                 onChange={(event) => setDraftValue(event.target.value)}
                                 value={draftKey === item.key ? draftValue : item.value}
                               >
@@ -149,20 +148,24 @@ export default function SettingsPage() {
                               </select>
                             ) : (
                               <input
-                                className="min-h-12 w-full rounded-2xl border border-[rgba(26,46,26,0.12)] px-4 text-sm text-[var(--color-dark)] outline-none"
+                                className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm text-[var(--text-900)] outline-none"
                                 onChange={(event) => setDraftValue(event.target.value)}
                                 type={isNumber ? "number" : "text"}
                                 value={draftKey === item.key ? draftValue : item.value}
                               />
                             )}
                             <div className="flex justify-end">
-                              <Button
-                                className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white"
-                                isDisabled={saving}
-                                onPress={() => void updateConfigValue(item.key, draftKey === item.key ? draftValue : item.value)}
+                              <button
+                                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                                disabled={saving}
+                                onClick={async () => {
+                                  await updateConfigValue(item.key, draftKey === item.key ? draftValue : item.value);
+                                  close();
+                                }}
+                                type="button"
                               >
                                 {saving ? "Saving..." : "Save changes"}
-                              </Button>
+                              </button>
                             </div>
                           </div>
                         </AdminModal>

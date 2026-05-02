@@ -19,13 +19,13 @@ const serviceImages = [
 
 export default function ServicesPage() {
   return (
-    <div className="min-h-screen bg-coop-cream pt-20">
+    <div className="min-h-screen bg-background-50 pt-20">
       <div className="section-padding mx-auto max-w-[1400px] py-24">
         <AnimatedSection className="mb-16">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-coop-muted">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-text-400">
             Services
           </p>
-          <h1 className="max-w-xl font-display text-5xl font-semibold leading-[1.1] text-coop-dark md:text-6xl">
+          <h1 className="max-w-xl font-display text-5xl font-semibold leading-[1.1] text-text-900 md:text-6xl">
             Everything you need to grow financially
           </h1>
         </AnimatedSection>
@@ -35,7 +35,7 @@ export default function ServicesPage() {
             <AnimatedSection key={service.slug} delay={i * 100}>
               <Link
                 href={`/services/${service.slug}`}
-                className="group grid grid-cols-1 gap-0 overflow-hidden rounded-4xl bg-coop-sand card-lift md:grid-cols-2"
+                className="group grid grid-cols-1 gap-0 overflow-hidden rounded-4xl bg-background-100 card-lift md:grid-cols-2"
               >
                 <div
                   className={`relative h-72 md:h-80 ${i % 2 === 1 ? "md:order-2" : ""}`}
@@ -50,16 +50,16 @@ export default function ServicesPage() {
                 <div
                   className={`flex flex-col justify-center p-10 ${i % 2 === 1 ? "md:order-1" : ""}`}
                 >
-                  <span className="mb-4 text-xs font-semibold uppercase tracking-widest text-coop-green">
+                  <span className="mb-4 text-xs font-semibold uppercase tracking-widest text-text-500">
                     Service {String(i + 1).padStart(2, "0")}
                   </span>
-                  <h2 className="mb-4 font-display text-3xl font-semibold leading-snug text-coop-dark">
+                  <h2 className="mb-4 font-display text-3xl font-semibold leading-snug text-text-900">
                     {service.title}
                   </h2>
-                  <p className="mb-6 leading-relaxed text-coop-muted">
+                  <p className="mb-6 leading-relaxed text-text-400">
                     {service.description}
                   </p>
-                  <span className="text-sm font-medium text-coop-green">
+                  <span className="text-sm font-medium text-primary-700">
                     Explore service &rarr;
                   </span>
                 </div>

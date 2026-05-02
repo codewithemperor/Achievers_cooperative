@@ -8,12 +8,12 @@ interface AvatarUploadProps {
 
 export function AvatarUpload({ currentUrl, onUpload, onRemove }: AvatarUploadProps) {
   return (
-    <div className="flex items-center gap-4 rounded-[1.5rem] border border-[rgba(26,46,26,0.12)] bg-white p-4">
-      <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[rgba(45,90,39,0.14)] text-sm font-semibold text-[var(--color-green)]">
+    <div className="flex items-center gap-4 rounded-[1.5rem] border border-primary-900/12 bg-white p-4">
+      <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-primary-700/14 text-sm font-semibold text-[var(--primary-700)]">
         {currentUrl ? <img alt="Avatar preview" className="h-full w-full object-cover" src={currentUrl} /> : "Photo"}
       </div>
       <div className="space-y-2">
-        <label className="inline-flex cursor-pointer rounded-full bg-[var(--color-green)] px-4 py-2 text-sm font-medium text-white">
+        <label className="inline-flex cursor-pointer rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-medium text-white">
           Upload avatar
           <input
             className="hidden"
@@ -28,7 +28,7 @@ export function AvatarUpload({ currentUrl, onUpload, onRemove }: AvatarUploadPro
         </label>
         {onRemove ? (
           <button
-            className="block text-sm font-medium text-[var(--color-mid)]"
+            className="block text-sm font-medium text-[var(--primary-600)]"
             onClick={onRemove}
             type="button"
           >

@@ -218,11 +218,19 @@ export class MembersService {
       throw new NotFoundException('Member dashboard not found');
     }
 
-    const [recentTransactions, transactionCount, savingsTotal, termsConfig, bankName, bankAccountName, bankAccountNumber] = await Promise.all([
+    const [recentTransactions, pendingPayments, transactionCount, savingsTotal, termsConfig, bankName, bankAccountName, bankAccountNumber] = await Promise.all([
       this.prisma.transaction.findMany({
         where: { walletId: member.wallet.id },
         orderBy: { createdAt: 'desc' },
         take: 10,
+      }),
+      this.prisma.payment.findMany({
+        where: {
+          memberId: member.id,
+          status: 'PENDING',
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
       }),
       this.prisma.transaction.count({ where: { walletId: member.wallet.id } }),
       this.prisma.savingsAccount.aggregate({
@@ -235,7 +243,33 @@ export class MembersService {
       this.prisma.systemConfig.findUnique({ where: { key: 'BANK_ACCOUNT_NUMBER' } }),
     ]);
 
-    const activeLoan = member.loanApplications.find((loan) => loan.status === 'APPROVED' && Number(loan.remainingBalance) > 0);
+    const activeLoan = member.loanApplications.find(
+      (loan) =>
+        ['DISBURSED', 'IN_PROGRESS', 'OVERDUE'].includes(loan.status) &&
+        Number(loan.remainingBalance) > 0,
+    );
+    const mergedActivity = [
+      ...recentTransactions.map((transaction) => ({
+        id: transaction.id,
+        type: transaction.type,
+        amount: Number(transaction.amount),
+        status: transaction.status,
+        createdAt: transaction.createdAt,
+        description: transaction.description,
+        reference: transaction.reference,
+      })),
+      ...pendingPayments.map((payment) => ({
+        id: `payment-${payment.id}`,
+        type: 'WALLET_FUNDING_REQUEST',
+        amount: Number(payment.amount),
+        status: payment.status,
+        createdAt: payment.createdAt,
+        description: 'Wallet funding request submitted for approval',
+        reference: null,
+      })),
+    ]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 10);
 
     return {
       profile: {
@@ -258,6 +292,8 @@ export class MembersService {
         totalSavings: Number(savingsTotal._sum.balance ?? 0),
         totalInvestments: member.investments.reduce((sum, item) => sum + Number(item.principal), 0),
         transactionCount,
+        pendingPaymentsTotal: pendingPayments.reduce((sum, item) => sum + Number(item.amount), 0),
+        pendingPaymentsCount: pendingPayments.length,
         activeLoan: activeLoan
           ? {
               id: activeLoan.id,
@@ -267,10 +303,7 @@ export class MembersService {
             }
           : null,
       },
-      recentTransactions: recentTransactions.map((transaction) => ({
-        ...transaction,
-        amount: Number(transaction.amount),
-      })),
+      recentTransactions: mergedActivity,
       cooperativeAccount: {
         bankName: bankName?.value ?? '',
         accountName: bankAccountName?.value ?? '',

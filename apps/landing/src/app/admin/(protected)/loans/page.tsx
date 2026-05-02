@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
-import { Autocomplete, Button, ListBox } from "@heroui/react";
+import { Autocomplete, ListBox } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -13,6 +13,15 @@ import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
+interface BankAccountInfo {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  isDefault: boolean;
+  verifiedAt: string | null;
+}
+
 interface LoansResponse {
   items: Array<{
     id: string;
@@ -21,8 +30,9 @@ interface LoansResponse {
     tenorMonths: number;
     purpose: string;
     status: string;
-    lifecycleStatus?: string;
+    dueDate?: string | null;
     disbursedAt?: string | null;
+    bankAccount?: BankAccountInfo | null;
     member: { fullName: string };
     guarantorOne?: { id: string; fullName: string; membershipNumber: string } | null;
     guarantorTwo?: { id: string; fullName: string; membershipNumber: string } | null;
@@ -45,12 +55,19 @@ const currency = new Intl.NumberFormat("en-NG", {
   maximumFractionDigits: 0,
 });
 
-const tabs = ["ALL", "PENDING", "APPROVED", "REJECTED"];
+const tabs = ["ALL", "PENDING", "APPROVED", "DISBURSED", "IN_PROGRESS", "COMPLETED", "OVERDUE", "REJECTED"];
 
 function variantForLoan(status: string) {
-  if (status === "APPROVED" || status === "DISBURSED") return "success";
-  if (status === "REJECTED") return "danger";
-  return "warning";
+  switch (status) {
+    case "PENDING": return "warning";
+    case "APPROVED": return "info";
+    case "DISBURSED": return "info";
+    case "IN_PROGRESS": return "success";
+    case "COMPLETED": return "success";
+    case "OVERDUE": return "danger";
+    case "REJECTED": return "danger";
+    default: return "neutral";
+  }
 }
 
 export default function LoansPage() {
@@ -117,7 +134,7 @@ export default function LoansPage() {
             title="New Loan Request"
             trigger={
               <button
-                className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white"
+                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
                 type="button"
               >
                 New loan
@@ -133,11 +150,11 @@ export default function LoansPage() {
                 { label: "Guarantor 2", field: "guarantorTwoId", selectedKey: selectedGuarantorTwoId },
               ].map((entry, index) => (
                 <div className={index === 0 ? "md:col-span-2" : ""} key={entry.field}>
-                  <p className="mb-2 text-sm font-medium text-[var(--color-dark)]">{entry.label}</p>
+                  <p className="mb-2 text-sm font-medium text-[var(--text-900)]">{entry.label}</p>
                   <Autocomplete onSelectionChange={(key) => setValue(entry.field as any, key ? String(key) : "")} selectedKey={entry.selectedKey || null}>
-                    <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[rgba(26,46,26,0.12)] bg-white px-3">
+                    <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
                       <Autocomplete.Value />
-                      <Autocomplete.ClearButton className="text-sm text-[var(--color-coop-muted)]" />
+                      <Autocomplete.ClearButton className="text-sm text-[var(--text-400)]" />
                       <Autocomplete.Indicator />
                     </Autocomplete.Trigger>
                     <Autocomplete.Popover>
@@ -145,8 +162,8 @@ export default function LoansPage() {
                         {(members.data?.items ?? []).map((member) => (
                           <ListBox.Item id={member.id} key={member.id} textValue={member.fullName}>
                             <div className="py-1">
-                              <p className="font-medium text-[var(--color-dark)]">{member.fullName}</p>
-                              <p className="text-xs text-[var(--color-coop-muted)]">
+                              <p className="font-medium text-[var(--text-900)]">{member.fullName}</p>
+                              <p className="text-xs text-[var(--text-400)]">
                                 {member.membershipNumber} · {member.phoneNumber}
                               </p>
                             </div>
@@ -163,9 +180,14 @@ export default function LoansPage() {
               <TextareaInput className="rounded-2xl md:col-span-2" control={control} label="Purpose" name="purpose" placeholder="Purpose" rows={5} />
             </div>
             <div className="mt-6 flex justify-end">
-              <Button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" isDisabled={submitting} onPress={() => void createLoan(close)()}>
+              <button
+                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                disabled={submitting}
+                onClick={() => void createLoan(close)()}
+                type="button"
+              >
                 {submitting ? "Creating..." : "Create loan"}
-              </Button>
+              </button>
             </div>
               </>
             )}
@@ -179,13 +201,13 @@ export default function LoansPage() {
             key={tab}
             className={
               activeTab === tab
-                ? "rounded-full bg-[var(--color-dark)] px-4 py-2 text-sm font-semibold text-white"
-                : "rounded-full border border-[rgba(26,46,26,0.12)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-dark)]"
+                ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
+                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-900)]"
             }
             onClick={() => setActiveTab(tab)}
             type="button"
           >
-            {tab === "ALL" ? "All" : tab.toLowerCase()}
+            {tab === "ALL" ? "All" : tab.toLowerCase().replace("_", " ")}
           </button>
         ))}
       </div>
@@ -195,7 +217,16 @@ export default function LoansPage() {
           {
             key: "member",
             header: "Member",
-            render: (item) => <span className="font-semibold text-[var(--color-dark)]">{item.member.fullName}</span>,
+            render: (item) => (
+              <div>
+                <span className="font-semibold text-[var(--text-900)]">{item.member.fullName}</span>
+                {item.bankAccount ? (
+                  <p className="mt-1 text-xs text-[var(--text-400)]">
+                    Bank: {item.bankAccount.bankName} &mdash; {item.bankAccount.accountNumber}
+                  </p>
+                ) : null}
+              </div>
+            ),
           },
           {
             key: "amount",
@@ -213,7 +244,7 @@ export default function LoansPage() {
             render: (item) => (
               <div className="text-sm">
                 <p>{item.guarantorOne?.fullName || "None"}</p>
-                <p className="text-[var(--color-coop-muted)]">{item.guarantorTwo?.fullName || "None"}</p>
+                <p className="text-[var(--text-400)]">{item.guarantorTwo?.fullName || "None"}</p>
               </div>
             ),
           },
@@ -222,8 +253,8 @@ export default function LoansPage() {
             header: "Status",
               render: (item) => (
               <StatusBadge
-                status={item.lifecycleStatus || (item.disbursedAt ? "DISBURSED" : item.status)}
-                variant={variantForLoan(item.lifecycleStatus || (item.disbursedAt ? "DISBURSED" : item.status)) as any}
+                status={item.status}
+                variant={variantForLoan(item.status) as any}
               />
             ),
           },
@@ -231,7 +262,7 @@ export default function LoansPage() {
             key: "view",
             header: "View",
             render: (item) => (
-              <Link className="font-semibold text-[var(--color-green)]" href={`/admin/loans/${item.id}`}>
+              <Link className="font-semibold text-[var(--primary-700)]" href={`/admin/loans/${item.id}`}>
                 Loan detail
               </Link>
             ),

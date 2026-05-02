@@ -10,18 +10,22 @@ import {
   LayoutDashboard,
   Menu,
   Package,
+  PiggyBank,
   Receipt,
   Settings,
   TrendingUp,
   Users,
+  X,
 } from "lucide-react";
 import clsx from "clsx";
 import { clearSession } from "@/lib/session";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/members", label: "Members", icon: Users },
   { href: "/admin/loans", label: "Loans", icon: Banknote },
+  { href: "/admin/savings", label: "Savings", icon: PiggyBank },
   { href: "/admin/payments", label: "Payments", icon: Receipt },
   { href: "/admin/investments", label: "Investments", icon: TrendingUp },
   { href: "/admin/packages", label: "Packages", icon: Package },
@@ -33,18 +37,13 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full flex-col py-8">
-      <div className="mb-8 flex items-center gap-3 px-6">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10">
-          <Image src="/logo.jpeg" alt="Achievers Cooperative" width={32} height={32} />
-        </div>
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-widest text-white/50">Cooperative</p>
-          <p className="text-sm font-bold leading-tight text-white">Achievers Cooperative</p>
-        </div>
+    <div className="flex h-full flex-col py-6">
+      <div className="mb-8 flex items-center gap-3 px-5">
+        <Image src="/logo.jpeg" alt="Achievers Cooperative" width={32} height={32} className="h-8 w-auto object-contain brightness-0 invert rounded-lg" />
+        <span className="text-sm font-bold text-white tracking-tight">Achievers Cooperative</span>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-6">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active =
@@ -58,39 +57,37 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
               href={item.href}
               onClick={onNavClick}
               className={clsx(
-                "flex items-center gap-3 rounded-[1.2rem] px-4 py-3 text-sm font-medium transition",
+                "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-150",
                 active
-                  ? "bg-white text-[var(--color-dark)]"
-                  : "text-[rgba(245,240,232,0.82)] hover:bg-[rgba(255,255,255,0.16)] hover:text-white",
+                  ? "bg-white/15 text-white shadow-sm"
+                  : "text-white/70 hover:bg-white/8 hover:text-white",
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              <Icon className="h-[18px] w-[18px] shrink-0" />
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="mt-6 shrink-0 border-t border-white/10 pt-6">
-        <div className="px-6">
-          <button
-            className="w-full rounded-full border border-[rgba(255,255,255,0.24)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-            onClick={() => {
-              clearSession();
-              window.location.href = "/admin/auth/login";
-            }}
-            type="button"
-          >
-            Log Out
-          </button>
-        </div>
+      <div className="mt-4 shrink-0 border-t border-white/10 px-3 pt-4">
+        <button
+          className="flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white/70 transition hover:bg-white/8 hover:text-white"
+          onClick={() => {
+            clearSession();
+            window.location.href = "/admin/auth/login";
+          }}
+          type="button"
+        >
+          <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+          </svg>
+          Log Out
+        </button>
       </div>
     </div>
   );
 }
-
-const sidebarGradient =
-  "bg-[linear-gradient(180deg,rgba(26,46,26,1),rgba(45,90,39,0.98),rgba(61,122,53,0.95))]";
 
 export function AdminShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
@@ -100,23 +97,25 @@ export function AdminShell({ children }: PropsWithChildren) {
     pathname === "/admin" ? "Dashboard overview" : pathname.replace("/admin/", "").replaceAll("/", " / ");
 
   return (
-    <div className="min-h-screen bg-white text-[var(--color-dark)]">
+    <div className="min-h-screen bg-[var(--background-50)] text-[var(--text-800)] dark:bg-[var(--background-950)] dark:text-[var(--text-200)]">
       <div className="mx-auto flex min-h-screen max-w-400">
+        {/* Desktop sidebar — dark green */}
         <aside
           className={clsx(
-            "sticky top-0 hidden h-screen max-h-screen shrink-0 flex-col border-r border-[rgba(26,46,26,0.18)] xl:flex xl:w-80",
-            sidebarGradient,
+            "sticky top-0 hidden h-screen max-h-screen shrink-0 flex-col xl:flex xl:w-[260px]",
+            "bg-[linear-gradient(180deg,var(--primary-950),var(--primary-900),var(--primary-800))] border-r border-white/10",
           )}
         >
           <SidebarContent />
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 border-b border-[rgba(26,46,26,0.08)] bg-white px-5 py-4 md:px-8">
+          {/* Header bar */}
+          <header className="sticky top-0 z-30 border-b border-[var(--background-200)] bg-white/90 px-5 py-3 backdrop-blur-lg dark:border-[var(--background-800)] dark:bg-[var(--background-900)]/90">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <button
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--color-dark)] text-white xl:hidden"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary-600)] text-white xl:hidden"
                   aria-label="Open menu"
                   onClick={() => setIsDrawerOpen(true)}
                   type="button"
@@ -125,12 +124,15 @@ export function AdminShell({ children }: PropsWithChildren) {
                 </button>
 
                 <div>
-                  <p className="text-sm capitalize text-[var(--color-coop-muted)]">{breadcrumb}</p>
+                  <p className="text-sm font-medium capitalize text-[var(--text-400)]">{breadcrumb}</p>
                 </div>
               </div>
 
-              <div className="rounded-full border border-[rgba(26,46,26,0.1)] bg-white px-4 py-2 text-sm text-[var(--color-coop-muted)]">
-                Secure internal workspace
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <span className="hidden rounded-full border border-[var(--background-200)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--text-400)] sm:inline-block dark:border-[var(--background-700)] dark:bg-[var(--background-800)]">
+                  Admin Panel
+                </span>
               </div>
             </div>
           </header>
@@ -139,27 +141,28 @@ export function AdminShell({ children }: PropsWithChildren) {
         </div>
       </div>
 
+      {/* Mobile drawer overlay */}
       {isDrawerOpen ? (
         <div className="fixed inset-0 z-50 xl:hidden">
           <button
             aria-label="Close menu"
-            className="absolute inset-0 bg-[rgba(15,23,15,0.38)] backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setIsDrawerOpen(false)}
             type="button"
           />
           <aside
             className={clsx(
-              "relative z-10 h-full w-72 max-w-[85vw] border-r border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.28)]",
-              sidebarGradient,
+              "relative z-10 h-full w-[260px] max-w-[85vw] shadow-[0_20px_60px_rgba(0,0,0,0.3)]",
+              "bg-[linear-gradient(180deg,var(--primary-950),var(--primary-900),var(--primary-800))] border-r border-white/10",
             )}
           >
             <div className="flex justify-end px-4 pt-4">
               <button
-                className="rounded-full border border-white/15 px-3 py-1 text-sm text-white/80 transition hover:text-white"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-white/70 transition hover:text-white hover:bg-white/10"
                 onClick={() => setIsDrawerOpen(false)}
                 type="button"
               >
-                Close
+                <X className="h-4 w-4" />
               </button>
             </div>
             <SidebarContent onNavClick={() => setIsDrawerOpen(false)} />

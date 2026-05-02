@@ -1,24 +1,31 @@
 import Link from "next/link";
-import { footer, siteConfig } from "@/data/content";
+import Image from "next/image";
+import { footer } from "@/data/content";
 
 export default function Footer() {
   return (
-    <footer className="bg-coop-dark text-coop-cream">
+    <footer className="bg-primary-900 text-background-50">
       <div className="section-padding mx-auto max-w-[1400px] pt-16 pb-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-14">
           {/* Brand */}
           <div className="md:col-span-2">
-            <p className="font-display text-2xl font-semibold mb-3">
-              {siteConfig.name}
-            </p>
-            <p className="text-coop-cream/60 text-sm leading-relaxed max-w-xs">
+            <div className="mb-3">
+              <Image
+                src="/logo.jpeg"
+                alt="Achievers Cooperative"
+                width={120}
+                height={40}
+                className="h-8 w-auto object-contain brightness-0 invert"
+              />
+            </div>
+            <p className="text-background-50/60 text-sm leading-relaxed max-w-xs">
               {footer.tagline}
             </p>
           </div>
 
           {/* Pages */}
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-coop-cream/40 mb-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-background-50/40 mb-4">
               Pages
             </p>
             <ul className="space-y-3">
@@ -26,7 +33,7 @@ export default function Footer() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-sm text-coop-cream/70 hover:text-coop-cream transition-colors"
+                    className="text-sm text-background-50/70 hover:text-background-50 transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -37,7 +44,7 @@ export default function Footer() {
 
           {/* Info */}
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-coop-cream/40 mb-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-background-50/40 mb-4">
               Information
             </p>
             <ul className="space-y-3">
@@ -45,7 +52,7 @@ export default function Footer() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-sm text-coop-cream/70 hover:text-coop-cream transition-colors"
+                    className="text-sm text-background-50/70 hover:text-background-50 transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -56,14 +63,14 @@ export default function Footer() {
         </div>
 
         {/* Bottom bar */}
-        <div className="border-t border-coop-cream/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
-          <p className="text-xs text-coop-cream/40">{siteConfig.copyright}</p>
+        <div className="border-t border-background-50/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
+          <p className="text-xs text-background-50/40">&copy; {new Date().getFullYear()} Achievers Cooperative Association. All rights reserved.</p>
           <div className="flex items-center gap-5">
             {footer.socials.map((s) => (
               <Link
                 key={s.label}
                 href={s.href}
-                className="text-xs text-coop-cream/40 hover:text-coop-cream/80 transition-colors"
+                className="text-xs text-background-50/40 hover:text-background-50/80 transition-colors"
               >
                 {s.label}
               </Link>

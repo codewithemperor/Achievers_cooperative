@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
-import { Button } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -39,6 +38,7 @@ const currency = new Intl.NumberFormat("en-NG", {
 export default function PackagesPage() {
   const packages = useApi<PackagesResponse>("/packages");
   const [submitting, setSubmitting] = useState(false);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const { control, handleSubmit, reset } = useForm<{
     name: string;
     totalAmount: number | undefined;
@@ -78,6 +78,19 @@ export default function PackagesPage() {
     }
   });
 
+  async function updateStatus(id: string, isActive: boolean) {
+    try {
+      setStatusUpdatingId(id);
+      await api.patch(`/packages/${id}`, { isActive });
+      showSuccessToast("Package status updated successfully.");
+      await packages.refetch();
+    } catch (error: any) {
+      showErrorToast(error?.response?.data?.message || "Unable to update package status.");
+    } finally {
+      setStatusUpdatingId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -89,25 +102,55 @@ export default function PackagesPage() {
             title="Add Package"
             trigger={
               <button
-                className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white"
+                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
                 type="button"
               >
                 Add package
               </button>
             }
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <TextInput className="rounded-2xl md:col-span-2" control={control} label="Package Name" name="name" placeholder="Package name" />
-              <NumberInput className="rounded-2xl" control={control} label="Total Amount" name="totalAmount" placeholder="Total amount" min={0} />
-              <NumberInput className="rounded-2xl" control={control} label="Duration Months" name="durationMonths" placeholder="Duration months" min={1} />
-              <SelectInput className="rounded-2xl" control={control} label="Penalty Type" name="penaltyType" options={penaltyOptions} />
-              <NumberInput className="rounded-2xl" control={control} label="Penalty Value" name="penaltyValue" placeholder="Penalty value" min={0} />
-            </div>
-            <div className="mt-6 flex justify-end">
-              <Button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" isDisabled={submitting} onPress={() => void createPackage()}>
-                {submitting ? "Saving..." : "Save package"}
-              </Button>
-            </div>
+            {({ close }) => (
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextInput className="rounded-2xl md:col-span-2" control={control} label="Package Name" name="name" placeholder="Package name" />
+                  <NumberInput className="rounded-2xl" control={control} label="Total Amount" name="totalAmount" placeholder="Total amount" min={0} />
+                  <NumberInput className="rounded-2xl" control={control} label="Duration Months" name="durationMonths" placeholder="Duration months" min={1} />
+                  <SelectInput className="rounded-2xl" control={control} label="Penalty Type" name="penaltyType" options={penaltyOptions} />
+                  <NumberInput className="rounded-2xl" control={control} label="Penalty Value" name="penaltyValue" placeholder="Penalty value" min={0} />
+                </div>
+                <div className="mt-6 flex justify-end">
+                  <button
+                    className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                    disabled={submitting}
+                    onClick={() =>
+                      void handleSubmit(async (values) => {
+                        try {
+                          setSubmitting(true);
+                          await api.post("/packages", {
+                            name: values.name,
+                            totalAmount: Number(values.totalAmount),
+                            durationMonths: Number(values.durationMonths),
+                            penaltyType: values.penaltyType,
+                            penaltyValue: Number(values.penaltyValue),
+                            penaltyFrequency: values.penaltyFrequency,
+                          });
+                          showSuccessToast("Package created successfully.");
+                          reset();
+                          await packages.refetch();
+                          close();
+                        } catch (error: any) {
+                          showErrorToast(error?.response?.data?.message || "Unable to create package.");
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      })()}
+                    type="button"
+                  >
+                    {submitting ? "Saving..." : "Save package"}
+                  </button>
+                </div>
+              </>
+            )}
           </AdminModal>
         }
       />
@@ -116,7 +159,7 @@ export default function PackagesPage() {
           {
             key: "name",
             header: "Package",
-            render: (item) => <span className="font-semibold text-[var(--color-dark)]">{item.name}</span>,
+            render: (item) => <span className="font-semibold text-[var(--text-900)]">{item.name}</span>,
           },
           {
             key: "amount",
@@ -142,9 +185,19 @@ export default function PackagesPage() {
             key: "detail",
             header: "Detail",
             render: (item) => (
-              <Link className="font-semibold text-[var(--color-green)]" href={`/admin/packages/${item.id}`}>
-                Open detail
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link className="font-semibold text-[var(--primary-700)]" href={`/admin/packages/${item.id}`}>
+                  Open detail
+                </Link>
+                <button
+                  className="text-xs font-semibold text-[var(--text-700)]"
+                  disabled={statusUpdatingId === item.id}
+                  onClick={() => void updateStatus(item.id, !item.isActive)}
+                  type="button"
+                >
+                  {statusUpdatingId === item.id ? "Updating..." : item.isActive ? "Deactivate" : "Activate"}
+                </button>
+              </div>
             ),
           },
         ]}

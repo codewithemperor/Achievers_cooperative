@@ -25,3 +25,12 @@ export type TransactionType =
   | 'FEE_WAIVER';
 
 export type CooperativeEntryType = 'INCOME' | 'EXPENSE';
+
+export type LoanStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'DISBURSED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'OVERDUE'
+  | 'REJECTED';

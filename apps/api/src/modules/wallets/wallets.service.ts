@@ -94,22 +94,56 @@ export class WalletsService {
 
     const { limit = 50, offset = 0 } = options ?? {};
 
-    const [items, total] = await Promise.all([
+    const [items, payments, total, totalPayments] = await Promise.all([
       this.prisma.transaction.findMany({
         where: { walletId: member.wallet.id },
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
       }),
+      this.prisma.payment.findMany({
+        where: { memberId: member.id },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
       this.prisma.transaction.count({ where: { walletId: member.wallet.id } }),
+      this.prisma.payment.count({ where: { memberId: member.id } }),
     ]);
 
-    return {
-      items: items.map((t) => ({
-        ...t,
-        amount: Number(t.amount),
+    const mergedItems = [
+      ...items.map((transaction) => ({
+        id: transaction.id,
+        source: 'TRANSACTION',
+        type: transaction.type,
+        amount: Number(transaction.amount),
+        status: transaction.status,
+        reference: transaction.reference,
+        description: transaction.description,
+        createdAt: transaction.createdAt,
       })),
-      total,
+      ...payments.map((payment) => ({
+        id: `payment-${payment.id}`,
+        source: 'PAYMENT_REQUEST',
+        type: 'WALLET_FUNDING_REQUEST',
+        amount: Number(payment.amount),
+        status: payment.status,
+        reference: null,
+        description:
+          payment.status === 'PENDING'
+            ? 'Wallet funding request is processing'
+            : payment.status === 'APPROVED'
+              ? 'Wallet funding request approved'
+              : payment.rejectionReason || 'Wallet funding request rejected',
+        createdAt: payment.createdAt,
+      })),
+    ]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+
+    return {
+      items: mergedItems,
+      total: total + totalPayments,
       limit,
       offset,
     };

@@ -213,4 +213,192 @@ export class WalletService {
 
     return { wallet: syncedWallet, transactions: settledTransactions };
   }
+
+  async settleOutstandingObligations(memberId: string) {
+    const wallet = await this.getMemberWallet(memberId);
+    let availableBalance = Number(wallet.availableBalance);
+    const settlements: Array<{ type: string; amount: number; targetId: string }> = [];
+
+    if (availableBalance <= 0) {
+      return settlements;
+    }
+
+    const activeLoans = await this.prisma.loanApplication.findMany({
+      where: {
+        memberId,
+        status: { in: ['DISBURSED', 'IN_PROGRESS', 'OVERDUE'] },
+        remainingBalance: { gt: 0 },
+      },
+      orderBy: { submittedAt: 'asc' },
+    });
+
+    for (const loan of activeLoans) {
+      if (availableBalance <= 0) break;
+
+      const remainingBalance = Number(loan.remainingBalance);
+      const amountDueNow = Math.min(this.getLoanDueAmount(loan), remainingBalance);
+      const amountToDebit = Math.min(availableBalance, amountDueNow);
+      if (amountToDebit <= 0) continue;
+
+      await this.debitWallet(memberId, amountToDebit, 'LOAN_REPAYMENT', `AUTO-LOAN-${loan.id}-${Date.now()}`, {
+        category: 'automatic loan repayment',
+        description: `Automatic settlement for loan ${loan.id}`,
+        editable: false,
+        lockReason: 'Auto-settled from wallet funding.',
+        metadata: { loanId: loan.id, autoSettled: true },
+      });
+
+      const nextRemaining = remainingBalance - amountToDebit;
+      await this.prisma.loanApplication.update({
+        where: { id: loan.id },
+        data: {
+          remainingBalance: nextRemaining,
+          status: nextRemaining <= 0 ? 'COMPLETED' : 'IN_PROGRESS',
+        },
+      });
+
+      settlements.push({ type: 'LOAN_REPAYMENT', amount: amountToDebit, targetId: loan.id });
+      availableBalance -= amountToDebit;
+    }
+
+    if (availableBalance <= 0) {
+      return settlements;
+    }
+
+    const subscriptions = await this.prisma.packageSubscription.findMany({
+      where: {
+        memberId,
+        OR: [{ amountRemaining: { gt: 0 } }, { penaltyAccrued: { gt: 0 } }],
+      },
+      include: {
+        package: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    for (const subscription of subscriptions) {
+      if (availableBalance <= 0) break;
+
+      let penaltyAccrued = Number(subscription.penaltyAccrued);
+      let amountRemaining = Number(subscription.amountRemaining);
+      const amountDueNow = Math.min(this.getPackageDueAmount(subscription), amountRemaining);
+
+      if (penaltyAccrued > 0 && availableBalance > 0) {
+        const penaltyPayment = Math.min(availableBalance, penaltyAccrued);
+        await this.debitWallet(memberId, penaltyPayment, 'PACKAGE_PENALTY', `AUTO-PENALTY-${subscription.id}-${Date.now()}`, {
+          category: 'automatic package penalty settlement',
+          description: `Automatic penalty settlement for package subscription ${subscription.id}`,
+          editable: false,
+          lockReason: 'Auto-settled from wallet funding.',
+          metadata: { subscriptionId: subscription.id, autoSettled: true },
+        });
+
+        penaltyAccrued -= penaltyPayment;
+        availableBalance -= penaltyPayment;
+        settlements.push({ type: 'PACKAGE_PENALTY', amount: penaltyPayment, targetId: subscription.id });
+      }
+
+      if (amountDueNow > 0 && availableBalance > 0) {
+        const packagePayment = Math.min(availableBalance, amountDueNow);
+        await this.debitWallet(memberId, packagePayment, 'PACKAGE_SUBSCRIPTION', `AUTO-PACKAGE-${subscription.id}-${Date.now()}`, {
+          category: 'automatic package repayment',
+          description: `Automatic package settlement for subscription ${subscription.id}`,
+          editable: false,
+          lockReason: 'Auto-settled from wallet funding.',
+          metadata: { subscriptionId: subscription.id, autoSettled: true },
+        });
+
+        amountRemaining -= packagePayment;
+        availableBalance -= packagePayment;
+        settlements.push({ type: 'PACKAGE_SUBSCRIPTION', amount: packagePayment, targetId: subscription.id });
+      }
+
+      await this.prisma.packageSubscription.update({
+        where: { id: subscription.id },
+        data: {
+          penaltyAccrued,
+          amountRemaining,
+          status: amountRemaining <= 0 && penaltyAccrued <= 0 ? 'COMPLETED' : 'ACTIVE',
+          nextDueAt:
+            amountRemaining <= 0 && penaltyAccrued <= 0
+              ? null
+              : this.getNextPackageDueDate(subscription),
+        },
+      });
+    }
+
+    return settlements;
+  }
+
+  private getLoanDueAmount(loan: {
+    amount: any;
+    remainingBalance: any;
+    tenorMonths: number;
+    disbursedAt?: Date | null;
+    submittedAt: Date;
+  }) {
+    if (!loan.disbursedAt || loan.tenorMonths <= 0) {
+      return 0;
+    }
+
+    const totalAmount = Number(loan.amount);
+    const amountPaidSoFar = Math.max(totalAmount - Number(loan.remainingBalance), 0);
+    const installmentAmount = totalAmount / loan.tenorMonths;
+    const dueInstallments = Math.min(loan.tenorMonths, this.fullMonthsBetween(loan.disbursedAt, new Date()));
+    const dueAmount = installmentAmount * dueInstallments;
+
+    return Math.max(dueAmount - amountPaidSoFar, 0);
+  }
+
+  private getPackageDueAmount(subscription: {
+    amountPaid: any;
+    amountRemaining: any;
+    nextDueAt?: Date | null;
+    createdAt: Date;
+    package: { totalAmount: any; durationMonths: number };
+  }) {
+    if (!subscription.nextDueAt || subscription.nextDueAt.getTime() > Date.now() || subscription.package.durationMonths <= 0) {
+      return 0;
+    }
+
+    const totalAmount = Number(subscription.package.totalAmount);
+    const installmentAmount = totalAmount / subscription.package.durationMonths;
+    const dueInstallments = Math.min(
+      subscription.package.durationMonths,
+      this.fullMonthsBetween(subscription.createdAt, new Date()),
+    );
+    const dueAmount = installmentAmount * dueInstallments;
+
+    return Math.max(dueAmount - Number(subscription.amountPaid), 0);
+  }
+
+  private getNextPackageDueDate(subscription: {
+    amountPaid: any;
+    package: { totalAmount: any; durationMonths: number };
+    createdAt: Date;
+  }) {
+    const totalAmount = Number(subscription.package.totalAmount);
+    const durationMonths = subscription.package.durationMonths;
+    if (durationMonths <= 0 || Number(subscription.amountPaid) >= totalAmount) {
+      return null;
+    }
+
+    const installmentAmount = totalAmount / durationMonths;
+    const paidInstallments = Math.floor(Number(subscription.amountPaid) / installmentAmount);
+    const nextDueAt = new Date(subscription.createdAt);
+    nextDueAt.setMonth(nextDueAt.getMonth() + paidInstallments + 1);
+    return nextDueAt;
+  }
+
+  private fullMonthsBetween(start: Date, end: Date) {
+    if (end <= start) {
+      return 0;
+    }
+
+    let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+    if (end.getDate() < start.getDate()) {
+      months -= 1;
+    }
+    return Math.max(months, 0);
+  }
 }

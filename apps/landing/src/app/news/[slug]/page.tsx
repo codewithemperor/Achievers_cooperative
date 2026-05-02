@@ -48,36 +48,36 @@ export default async function NewsArticlePage({
     .slice(0, 3);
 
   return (
-    <div className="pt-20 bg-coop-cream min-h-screen">
+    <div className="pt-20 bg-background-50 min-h-screen">
       <article className="section-padding mx-auto max-w-[900px] py-20">
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs text-coop-muted mb-10">
-          <Link href="/" className="hover:text-coop-dark transition-colors">
+        <div className="flex items-center gap-2 text-xs text-text-400 mb-10">
+          <Link href="/" className="hover:text-text-900 transition-colors">
             Home
           </Link>
           <span>/</span>
-          <Link href="/news" className="hover:text-coop-dark transition-colors">
+          <Link href="/news" className="hover:text-text-900 transition-colors">
             News
           </Link>
           <span>/</span>
-          <span className="text-coop-dark">{article.title}</span>
+          <span className="text-text-900">{article.title}</span>
         </div>
 
         {/* Category + date */}
         <div className="flex items-center gap-3 mb-5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-coop-green">
+          <span className="text-xs font-semibold uppercase tracking-wider text-text-500">
             {article.category}
           </span>
-          <span className="text-xs text-coop-muted">{article.date}</span>
+          <span className="text-xs text-text-400">{article.date}</span>
         </div>
 
         {/* Title */}
-        <h1 className="font-display text-4xl md:text-5xl font-semibold text-coop-dark leading-[1.15] mb-8">
+        <h1 className="font-display text-4xl md:text-5xl font-semibold text-text-900 leading-[1.15] mb-8">
           {article.title}
         </h1>
 
         {/* Cover image */}
-        <div className="relative h-64 md:h-96 rounded-4xl overflow-hidden mb-12 bg-coop-sand">
+        <div className="relative h-64 md:h-96 rounded-4xl overflow-hidden mb-12 bg-background-100">
           <Image
             src={
               article.image ||
@@ -91,8 +91,8 @@ export default async function NewsArticlePage({
         </div>
 
         {/* Body */}
-        <div className="prose prose-lg max-w-none text-coop-muted leading-relaxed space-y-6">
-          <p className="text-xl text-coop-dark font-medium leading-relaxed">
+        <div className="prose prose-lg max-w-none text-text-400 leading-relaxed space-y-6">
+          <p className="text-xl text-text-900 font-medium leading-relaxed">
             {article.excerpt}
           </p>
           <p>
@@ -117,9 +117,9 @@ export default async function NewsArticlePage({
       </article>
 
       {/* Related articles */}
-      <section className="bg-coop-sand py-16">
+      <section className="bg-background-100 py-16">
         <div className="section-padding mx-auto max-w-[1400px]">
-          <h2 className="font-display text-2xl font-semibold text-coop-dark mb-8">
+          <h2 className="font-display text-2xl font-semibold text-text-900 mb-8">
             More from the newsroom
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -127,7 +127,7 @@ export default async function NewsArticlePage({
               <Link
                 key={related.slug}
                 href={`/news/${related.slug}`}
-                className="group block bg-coop-cream rounded-3xl overflow-hidden card-lift"
+                className="group block bg-background-50 rounded-3xl overflow-hidden card-lift"
               >
                 <div className="relative h-40 overflow-hidden">
                   <Image
@@ -138,10 +138,10 @@ export default async function NewsArticlePage({
                   />
                 </div>
                 <div className="p-5">
-                  <span className="text-xs font-semibold text-coop-green uppercase tracking-wide">
+                  <span className="text-xs font-semibold text-text-500 uppercase tracking-wide">
                     {related.category}
                   </span>
-                  <h3 className="font-display text-base font-semibold text-coop-dark mt-1 leading-snug">
+                  <h3 className="font-display text-base font-semibold text-text-900 mt-1 leading-snug">
                     {related.title}
                   </h3>
                 </div>

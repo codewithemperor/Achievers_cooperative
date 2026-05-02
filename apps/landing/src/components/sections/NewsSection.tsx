@@ -15,20 +15,20 @@ export default function NewsSection() {
   const [featured, ...rest] = newsArticles;
 
   return (
-    <section className="bg-coop-sand py-24">
+    <section className="bg-background-100 py-24">
       <div className="section-padding mx-auto max-w-[1400px]">
         <AnimatedSection className="mb-14 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-coop-muted">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-text-400">
               {newsSection.label}
             </p>
-            <h2 className="font-display text-4xl font-semibold leading-[1.15] text-coop-dark md:text-5xl">
+            <h2 className="font-display text-4xl font-semibold leading-[1.15] text-text-900 md:text-5xl">
               {newsSection.headline}
             </h2>
           </div>
           <Link
             href={newsSection.ctaHref}
-            className="inline-flex self-start whitespace-nowrap border-b border-coop-dark/30 pb-0.5 text-sm font-medium text-coop-dark transition-colors hover:border-coop-green hover:text-coop-green md:self-auto"
+            className="inline-flex self-start whitespace-nowrap border-b border-primary-900/30 pb-0.5 text-sm font-medium text-text-900 transition-colors hover:border-primary-700 hover:text-primary-700 md:self-auto"
           >
             {newsSection.ctaLabel} &rarr;
           </Link>
@@ -38,7 +38,7 @@ export default function NewsSection() {
           <AnimatedSection className="lg:col-span-3">
             <Link
               href={`/news/${featured.slug}`}
-              className="group block h-full overflow-hidden rounded-4xl bg-coop-cream card-lift"
+              className="group block h-full overflow-hidden rounded-4xl bg-background-50 card-lift"
             >
               <div className="relative h-64 w-full overflow-hidden">
                 <Image
@@ -50,15 +50,15 @@ export default function NewsSection() {
               </div>
               <div className="p-7">
                 <div className="mb-3 flex items-center gap-3">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-coop-green">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-text-500">
                     {featured.category}
                   </span>
-                  <span className="text-xs text-coop-muted">{featured.date}</span>
+                  <span className="text-xs text-text-400">{featured.date}</span>
                 </div>
-                <h3 className="mb-3 font-display text-2xl font-semibold leading-snug text-coop-dark">
+                <h3 className="mb-3 font-display text-2xl font-semibold leading-snug text-text-900">
                   {featured.title}
                 </h3>
-                <p className="text-sm leading-relaxed text-coop-muted">
+                <p className="text-sm leading-relaxed text-text-400">
                   {featured.excerpt}
                 </p>
               </div>
@@ -70,9 +70,9 @@ export default function NewsSection() {
               <AnimatedSection key={article.slug} delay={i * 80}>
                 <Link
                   href={`/news/${article.slug}`}
-                  className="group flex items-center gap-4 rounded-3xl bg-coop-cream p-4 card-lift"
+                  className="group flex items-center gap-4 rounded-3xl bg-background-50 p-4 card-lift"
                 >
-                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-coop-green/10">
+                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-primary-700/10">
                     <Image
                       src={articleImages[i + 1]}
                       alt={article.title}
@@ -82,12 +82,12 @@ export default function NewsSection() {
                   </div>
                   <div className="min-w-0">
                     <div className="mb-1 flex items-center gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-coop-green">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-text-500">
                         {article.category}
                       </span>
-                      <span className="text-xs text-coop-muted">{article.date}</span>
+                      <span className="text-xs text-text-400">{article.date}</span>
                     </div>
-                    <h4 className="line-clamp-2 font-display text-sm font-semibold leading-snug text-coop-dark">
+                    <h4 className="line-clamp-2 font-display text-sm font-semibold leading-snug text-text-900">
                       {article.title}
                     </h4>
                   </div>

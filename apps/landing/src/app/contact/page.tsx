@@ -13,13 +13,13 @@ export const dynamic = "force-static";
 
 export default function ContactPage() {
   return (
-    <div className="min-h-screen bg-coop-cream pt-20">
+    <div className="min-h-screen bg-background-50 pt-20">
       <div className="section-padding mx-auto max-w-[1400px] py-24">
         <AnimatedSection className="mb-16">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-coop-muted">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-text-400">
             Contact
           </p>
-          <h1 className="max-w-xl font-display text-5xl font-semibold leading-[1.1] text-coop-dark md:text-6xl">
+          <h1 className="max-w-xl font-display text-5xl font-semibold leading-[1.1] text-text-900 md:text-6xl">
             Let&apos;s start a conversation
           </h1>
         </AnimatedSection>
@@ -27,7 +27,7 @@ export default function ContactPage() {
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
           <AnimatedSection>
             <div className="space-y-8">
-              <p className="max-w-md text-lg leading-relaxed text-coop-muted">
+              <p className="max-w-md text-lg leading-relaxed text-text-400">
                 Whether you&apos;re interested in membership, have questions about our services, or want to learn more, we&apos;re here.
               </p>
 
@@ -55,14 +55,14 @@ export default function ContactPage() {
                   },
                 ].map((item) => (
                   <div key={item.label} className="flex items-start gap-4">
-                    <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-coop-green/10">
-                      <item.icon size={16} className="text-coop-green" />
+                    <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary-700/10">
+                      <item.icon size={16} className="text-primary-700" />
                     </div>
                     <div>
-                      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-coop-muted">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-text-400">
                         {item.label}
                       </p>
-                      <p className="text-sm text-coop-dark">{item.value}</p>
+                      <p className="text-sm text-text-900">{item.value}</p>
                     </div>
                   </div>
                 ))}

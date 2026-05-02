@@ -17,6 +17,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { PackagesModule } from './modules/packages/packages.module';
 import { CooperativeWalletModule } from './modules/cooperative-wallet/cooperative-wallet.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { BankAccountsModule } from './modules/bank-accounts/bank-accounts.module';
 import { HealthController } from './common/health.controller';
 
 @Module({
@@ -40,6 +41,7 @@ import { HealthController } from './common/health.controller';
     PackagesModule,
     CooperativeWalletModule,
     UploadsModule,
+    BankAccountsModule,
   ],
 })
 export class AppModule implements NestModule {

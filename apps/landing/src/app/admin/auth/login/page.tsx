@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import Image from "next/image";
 import api from "@/lib/api";
 import { setSession } from "@/lib/session";
 import { PasswordInput, TextInput } from "@/components/ui/form-input";
@@ -53,26 +54,35 @@ export default function AdminLoginPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(61,122,53,0.18),transparent_40%),linear-gradient(160deg,#f5f0e8_0%,#ffffff_55%,#e8e0d0_100%)] px-4 py-10">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,var(--primary-700)/18,transparent_40%),linear-gradient(160deg,var(--background-50)_0%,#ffffff_55%,var(--background-100)_100%)] px-4 py-10">
       <div className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-[2.5rem] bg-[linear-gradient(165deg,rgba(26,46,26,1),rgba(45,90,39,0.94))] p-8 text-white shadow-[0_30px_80px_rgba(26,46,26,0.22)] md:p-12">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[rgba(245,240,232,0.72)]">
+        <section className="rounded-[2.5rem] bg-[linear-gradient(165deg,var(--primary-950),var(--primary-900)/94)] p-8 text-white shadow-[0_30px_80px_var(--primary-900)/22] md:p-12">
+          <div className="mb-6">
+            <Image
+              src="/logo.jpeg"
+              alt="Achievers Cooperative"
+              width={40}
+              height={40}
+              className="h-8 w-auto object-contain brightness-0 invert"
+            />
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/72">
             Cooperative Management System
           </p>
           <h1 className="mt-5 max-w-xl text-4xl font-semibold leading-tight md:text-5xl">
             Admin operations with traceable finance, members, and approvals.
           </h1>
-          <p className="mt-5 max-w-2xl text-base text-[rgba(245,240,232,0.8)]">
+          <p className="mt-5 max-w-2xl text-base text-white/80">
             Review members, verify wallet funding, oversee loans, and manage cooperative finances from one secure dashboard.
           </p>
         </section>
 
-        <section className="rounded-[2rem] border border-white/70 bg-white/88 p-8 shadow-[0_24px_60px_rgba(26,46,26,0.1)] backdrop-blur">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--color-mid)]">
+        <section className="rounded-[2rem] border border-white/70 bg-white/88 p-8 shadow-[0_24px_60px_var(--primary-900)/10] backdrop-blur">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-400)]">
             Admin sign in
           </p>
-          <h2 className="mt-3 text-3xl font-semibold text-[var(--color-dark)]">Welcome back</h2>
-          <p className="mt-2 text-sm text-[var(--color-coop-muted)]">
+          <h2 className="mt-3 text-3xl font-semibold text-[var(--text-900)]">Welcome back</h2>
+          <p className="mt-2 text-sm text-[var(--text-400)]">
             Use an administrator account to access the cooperative workspace.
           </p>
 
@@ -87,7 +97,7 @@ export default function AdminLoginPage() {
             ) : null}
 
             <button
-              className="w-full rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--color-mid)]"
+              className="w-full rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--primary-600)]"
               disabled={submitting}
               type="submit"
             >

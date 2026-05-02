@@ -22,13 +22,13 @@ const articleImages = [
 
 export default function NewsPage() {
   return (
-    <div className="min-h-screen bg-coop-cream pt-20">
+    <div className="min-h-screen bg-background-50 pt-20">
       <div className="section-padding mx-auto max-w-[1400px] py-24">
         <AnimatedSection className="mb-16">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-coop-muted">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-text-400">
             News & Insights
           </p>
-          <h1 className="font-display text-5xl font-semibold leading-[1.1] text-coop-dark md:text-6xl">
+          <h1 className="font-display text-5xl font-semibold leading-[1.1] text-text-900 md:text-6xl">
             Stories from the
             <br />
             cooperative world
@@ -40,7 +40,7 @@ export default function NewsPage() {
             <AnimatedSection key={article.slug} delay={i * 80}>
               <Link
                 href={`/news/${article.slug}`}
-                className="group block h-full overflow-hidden rounded-4xl bg-coop-sand card-lift"
+                className="group block h-full overflow-hidden rounded-4xl bg-background-100 card-lift"
               >
                 <div className="relative h-52 overflow-hidden">
                   <Image
@@ -52,18 +52,18 @@ export default function NewsPage() {
                 </div>
                 <div className="p-6">
                   <div className="mb-3 flex items-center gap-3">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-coop-green">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-text-500">
                       {article.category}
                     </span>
-                    <span className="text-xs text-coop-muted">{article.date}</span>
+                    <span className="text-xs text-text-400">{article.date}</span>
                   </div>
-                  <h2 className="mb-3 font-display text-xl font-semibold leading-snug text-coop-dark">
+                  <h2 className="mb-3 font-display text-xl font-semibold leading-snug text-text-900">
                     {article.title}
                   </h2>
-                  <p className="line-clamp-2 text-sm leading-relaxed text-coop-muted">
+                  <p className="line-clamp-2 text-sm leading-relaxed text-text-400">
                     {article.excerpt}
                   </p>
-                  <span className="mt-4 inline-block text-sm font-medium text-coop-green">
+                  <span className="mt-4 inline-block text-sm font-medium text-primary-700">
                     Read more &rarr;
                   </span>
                 </div>

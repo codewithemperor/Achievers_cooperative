@@ -13,10 +13,9 @@ export class PackagesController {
   constructor(private readonly packagesService: PackagesService) {}
 
   @Get()
-  @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'List packages' })
-  findAll() {
-    return this.packagesService.findAll();
+  findAll(@Request() req: any) {
+    return this.packagesService.findAll(req.user.id);
   }
 
   @Post()
@@ -44,6 +43,12 @@ export class PackagesController {
   @ApiOperation({ summary: 'Subscribe to a package' })
   subscribe(@Request() req: any, @Body() body: { packageId: string; memberId?: string }) {
     return this.packagesService.subscribe(req.user.id, body);
+  }
+
+  @Get('my-subscriptions')
+  @ApiOperation({ summary: 'List authenticated member package subscriptions' })
+  mySubscriptions(@Request() req: any) {
+    return this.packagesService.getMySubscriptions(req.user.id);
   }
 
   @Get('defaulters')

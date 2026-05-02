@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Lock, Pencil } from "lucide-react";
-import { Button, Skeleton } from "@heroui/react";
+import { Skeleton } from "@heroui/react";
 import { useForm } from "react-hook-form";
 import { AdminModal } from "@/components/ui/admin-modal";
 import { DataTable } from "@/components/ui/data-table";
@@ -116,9 +116,14 @@ function TransactionEditForm({
         <TextareaInput className="rounded-2xl" control={control} label="Description" name="description" placeholder="Why this transaction is being edited" rows={4} />
       </div>
       <div className="mt-6 flex justify-end">
-        <Button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" isDisabled={submitting} onPress={() => void submit()}>
+        <button
+          className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+          disabled={submitting}
+          onClick={() => void submit()}
+          type="button"
+        >
           {submitting ? "Saving..." : "Save changes"}
-        </Button>
+        </button>
       </div>
     </>
   );
@@ -181,21 +186,21 @@ export default function TransactionsPage() {
         Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32 rounded-[2rem]" />)
       ) : (
         <>
-          <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
-            <p className="text-sm text-[var(--color-coop-muted)]">Treasury Cash</p>
-            <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">{currency.format(wallet.data?.balance ?? 0)}</p>
+          <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
+            <p className="text-sm text-[var(--text-400)]">Treasury Cash</p>
+            <p className="mt-2 text-3xl font-semibold text-[var(--text-900)]">{currency.format(wallet.data?.balance ?? 0)}</p>
           </div>
-          <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
-            <p className="text-sm text-[var(--color-coop-muted)]">Member Wallet Holdings</p>
-            <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">{currency.format(wallet.data?.memberWalletHoldings ?? 0)}</p>
+          <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
+            <p className="text-sm text-[var(--text-400)]">Member Wallet Holdings</p>
+            <p className="mt-2 text-3xl font-semibold text-[var(--text-900)]">{currency.format(wallet.data?.memberWalletHoldings ?? 0)}</p>
           </div>
-          <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
-            <p className="text-sm text-[var(--color-coop-muted)]">Money At Hand</p>
-            <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">{currency.format(wallet.data?.combinedHoldings ?? 0)}</p>
+          <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
+            <p className="text-sm text-[var(--text-400)]">Money At Hand</p>
+            <p className="mt-2 text-3xl font-semibold text-[var(--text-900)]">{currency.format(wallet.data?.combinedHoldings ?? 0)}</p>
           </div>
-          <div className="rounded-[2rem] border border-[rgba(26,46,26,0.08)] bg-white p-6">
-            <p className="text-sm text-[var(--color-coop-muted)]">Net Treasury Flow</p>
-            <p className="mt-2 text-3xl font-semibold text-[var(--color-dark)]">
+          <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
+            <p className="text-sm text-[var(--text-400)]">Net Treasury Flow</p>
+            <p className="mt-2 text-3xl font-semibold text-[var(--text-900)]">
               {currency.format((wallet.data?.totalIncome ?? 0) - (wallet.data?.totalExpense ?? 0))}
             </p>
           </div>
@@ -214,7 +219,7 @@ export default function TransactionsPage() {
             description="Create a treasury income or expense entry and watch the summary cards update immediately."
             title="Add Treasury Entry"
             trigger={
-              <button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" type="button">
+              <button className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white" type="button">
                 Add transaction
               </button>
             }
@@ -223,7 +228,7 @@ export default function TransactionsPage() {
               <>
                 <div className="grid gap-4">
                   <select
-                    className="min-h-12 rounded-2xl border border-[rgba(26,46,26,0.12)] bg-white px-4 text-sm text-[var(--color-dark)] outline-none"
+                    className="min-h-12 rounded-2xl border border-[var(--primary-900)/12] bg-white px-4 text-sm text-[var(--text-900)] outline-none"
                     onChange={(event) => setValue("type", event.target.value as "INCOME" | "EXPENSE")}
                     value={watch("type")}
                   >
@@ -236,9 +241,14 @@ export default function TransactionsPage() {
                   <TextInput className="rounded-2xl" control={control} label="Reference" name={"reference" as never} placeholder="Optional reference" />
                 </div>
                 <div className="mt-6 flex justify-end">
-                  <Button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" isDisabled={creatingEntry} onPress={() => void createTreasuryEntry(close)()}>
+                  <button
+                    className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                    disabled={creatingEntry}
+                    onClick={() => void createTreasuryEntry(close)()}
+                    type="button"
+                  >
                     {creatingEntry ? "Saving..." : "Create entry"}
-                  </Button>
+                  </button>
                 </div>
               </>
             )}
@@ -248,14 +258,14 @@ export default function TransactionsPage() {
 
       <div className="flex flex-wrap gap-2">
         <button
-          className={tab === "member" ? "rounded-full bg-[var(--color-dark)] px-4 py-2 text-sm font-semibold text-white" : "rounded-full border border-[rgba(26,46,26,0.12)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-dark)]"}
+          className={tab === "member" ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white" : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-900)]"}
           onClick={() => setTab("member")}
           type="button"
         >
           Member Transactions
         </button>
         <button
-          className={tab === "treasury" ? "rounded-full bg-[var(--color-dark)] px-4 py-2 text-sm font-semibold text-white" : "rounded-full border border-[rgba(26,46,26,0.12)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-dark)]"}
+          className={tab === "treasury" ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white" : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-900)]"}
           onClick={() => setTab("treasury")}
           type="button"
         >
@@ -273,8 +283,8 @@ export default function TransactionsPage() {
               header: "Member",
               render: (item) => (
                 <div>
-                  <p className="font-semibold text-[var(--color-dark)]">{item.wallet.member.fullName}</p>
-                  <p className="text-xs text-[var(--color-coop-muted)]">{item.wallet.member.membershipNumber}</p>
+                  <p className="font-semibold text-[var(--text-900)]">{item.wallet.member.fullName}</p>
+                  <p className="text-xs text-[var(--text-400)]">{item.wallet.member.membershipNumber}</p>
                 </div>
               ),
             },
@@ -283,8 +293,8 @@ export default function TransactionsPage() {
               header: "Type",
               render: (item) => (
                 <div>
-                  <p className="font-semibold text-[var(--color-dark)]">{item.type.replaceAll("_", " ")}</p>
-                  <p className="text-xs text-[var(--color-coop-muted)]">{item.category || "No category"}</p>
+                  <p className="font-semibold text-[var(--text-900)]">{item.type.replaceAll("_", " ")}</p>
+                  <p className="text-xs text-[var(--text-400)]">{item.category || "No category"}</p>
                 </div>
               ),
             },
@@ -307,7 +317,7 @@ export default function TransactionsPage() {
                     description="Only manual/admin-created transactions can be edited. Changes are written to the audit trail."
                     title="Edit Transaction"
                     trigger={
-                      <button className="inline-flex items-center gap-2 font-semibold text-[var(--color-green)]" type="button">
+                      <button className="inline-flex items-center gap-2 font-semibold text-[var(--primary-700)]" type="button">
                         <Pencil className="h-4 w-4" />
                         Edit
                       </button>
@@ -316,7 +326,7 @@ export default function TransactionsPage() {
                     {({ close }) => <TransactionEditForm item={item} onSubmit={(values) => updateTransaction(item.id, values)} onSuccess={close} />}
                   </AdminModal>
                 ) : (
-                  <div className="inline-flex items-center gap-2 text-sm text-[var(--color-coop-muted)]" title={item.lockReason || "This transaction cannot be edited."}>
+                  <div className="inline-flex items-center gap-2 text-sm text-[var(--text-400)]" title={item.lockReason || "This transaction cannot be edited."}>
                     <Lock className="h-4 w-4" />
                     Locked
                   </div>
@@ -334,12 +344,12 @@ export default function TransactionsPage() {
               {
                 key: "type",
                 header: "Type",
-                render: (item) => <span className={item.type === "INCOME" ? "font-semibold text-[var(--color-green)]" : "font-semibold text-[#b42318]"}>{item.type}</span>,
+                render: (item) => <span className={item.type === "INCOME" ? "font-semibold text-[var(--primary-700)]" : "font-semibold text-[#b42318]"}>{item.type}</span>,
               },
               {
                 key: "category",
                 header: "Name",
-                render: (item) => <span className="font-semibold text-[var(--color-dark)]">{item.category}</span>,
+                render: (item) => <span className="font-semibold text-[var(--text-900)]">{item.category}</span>,
               },
               {
                 key: "description",

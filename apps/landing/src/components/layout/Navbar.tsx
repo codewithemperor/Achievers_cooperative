@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { navLinks, siteConfig } from "@/data/content";
+import { navLinks } from "@/data/content";
 import { Menu, X } from "lucide-react";
 import { clsx } from "clsx";
 import Image from "next/image";
@@ -30,17 +30,15 @@ export default function Navbar() {
         {/* Logo */}
         <Link
           href="/"
-          className="font-display text-xl flex items-center font-semibold text-coop-dark tracking-tight"
+          className="flex items-center gap-2"
         >
-          <div className="flex h-10 w-10 shrink-0 items-center mr-2 justify-center overflow-hidden rounded-xl bg-white/10">
-            <Image
-              src="/logo.jpeg"
-              alt="Achievers Cooperative"
-              width={32}
-              height={32}
-            />
-          </div>
-          {siteConfig.name}
+          <Image
+            src="/logo.jpeg"
+            alt="Achievers Cooperative"
+            width={40}
+            height={40}
+            className="h-10 w-auto object-contain"
+          />
         </Link>
 
         {/* Desktop links */}
@@ -49,7 +47,7 @@ export default function Navbar() {
             <li key={link.href}>
               <Link
                 href={link.href}
-                className="text-sm font-medium text-coop-muted hover:text-coop-dark transition-colors duration-200"
+                className="text-sm font-medium text-text-400 hover:text-text-900 transition-colors duration-200"
               >
                 {link.label}
               </Link>
@@ -61,7 +59,7 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-3">
           <Link
             href="/contact"
-            className="inline-flex items-center px-5 py-2.5 rounded-full bg-coop-dark text-white text-sm font-medium hover:bg-coop-green transition-colors duration-200"
+            className="inline-flex items-center px-5 py-2.5 rounded-full bg-primary-900 text-white text-sm font-medium hover:bg-primary-700 transition-colors duration-200"
           >
             Contact Us
           </Link>
@@ -69,7 +67,7 @@ export default function Navbar() {
 
         {/* Mobile hamburger */}
         <button
-          className="md:hidden text-coop-dark"
+          className="md:hidden text-text-900"
           onClick={() => setMenuOpen((v) => !v)}
           aria-label="Toggle menu"
         >
@@ -79,13 +77,13 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div className="md:hidden bg-coop-cream border-t border-coop-sand px-6 py-6 flex flex-col gap-5">
+        <div className="md:hidden bg-background-50 border-t border-background-100 px-6 py-6 flex flex-col gap-5">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               onClick={() => setMenuOpen(false)}
-              className="text-base font-medium text-coop-dark"
+              className="text-base font-medium text-text-900"
             >
               {link.label}
             </Link>
@@ -93,7 +91,7 @@ export default function Navbar() {
           <Link
             href="/contact"
             onClick={() => setMenuOpen(false)}
-            className="inline-flex items-center justify-center px-5 py-3 rounded-full bg-coop-dark text-white text-sm font-medium mt-2"
+            className="inline-flex items-center justify-center px-5 py-3 rounded-full bg-primary-900 text-white text-sm font-medium mt-2"
           >
             Contact Us
           </Link>

@@ -75,6 +75,9 @@ export class InvestmentsService {
     const subscriptions = product.subscriptions.map((subscription) => ({
       ...subscription,
       principal: Number(subscription.principal),
+      maturityAmount:
+        Number(subscription.principal) +
+        Number(subscription.principal) * (Number(product.annualRate) / 100) * (product.durationMonths / 12),
       isDefaulter: subscription.maturityDate < new Date() && subscription.status !== 'APPROVED',
     }));
 
@@ -250,6 +253,9 @@ export class InvestmentsService {
       items: items.map((i) => ({
         ...i,
         principal: Number(i.principal),
+        maturityAmount:
+          Number(i.principal) +
+          Number(i.principal) * (Number(i.product?.annualRate ?? 0) / 100) * ((i.product?.durationMonths ?? 0) / 12),
         product: i.product
           ? { ...i.product, annualRate: Number(i.product.annualRate), minimumAmount: Number(i.product.minimumAmount) }
           : null,

@@ -15,16 +15,16 @@ export function DetailDrawer({ isOpen, onClose, title, children }: DetailDrawerP
       aria-hidden={!isOpen}
     >
       <div
-        className={`absolute inset-0 bg-[rgba(26,46,26,0.38)] transition-opacity ${isOpen ? "opacity-100" : "opacity-0"}`}
+        className={`absolute inset-0 bg-[rgba(0,0,0,0.38)] transition-opacity ${isOpen ? "opacity-100" : "opacity-0"}`}
         onClick={onClose}
       />
       <aside
-        className={`absolute right-0 top-0 h-full w-full max-w-xl transform bg-[var(--color-cream)] p-6 shadow-2xl transition-transform ${isOpen ? "translate-x-0" : "translate-x-full"}`}
+        className={`absolute right-0 top-0 h-full w-full max-w-xl transform bg-[var(--background-50)] p-6 shadow-2xl transition-transform ${isOpen ? "translate-x-0" : "translate-x-full"}`}
       >
-        <div className="flex items-center justify-between border-b border-[rgba(26,46,26,0.12)] pb-4">
-          <h3 className="text-xl font-semibold text-[var(--color-dark)]">{title}</h3>
+        <div className="flex items-center justify-between border-b border-primary-900/12 pb-4">
+          <h3 className="text-xl font-semibold text-[var(--text-900)]">{title}</h3>
           <button
-            className="rounded-full border border-[rgba(26,46,26,0.14)] px-3 py-1 text-sm text-[var(--color-dark)]"
+            className="rounded-full border border-primary-900/14 px-3 py-1 text-sm text-[var(--text-900)]"
             onClick={onClose}
             type="button"
           >

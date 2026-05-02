@@ -9,8 +9,10 @@ export class PackagesService {
     private readonly audit: AuditService,
   ) {}
 
-  async findAll() {
+  async findAll(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const items = await this.prisma.package.findMany({
+      where: user?.role === 'SUPER_ADMIN' ? undefined : { isActive: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -145,6 +147,9 @@ export class PackagesService {
     if (!selectedPackage) {
       throw new NotFoundException('Package not found');
     }
+    if (!selectedPackage.isActive) {
+      throw new BadRequestException('This package is currently inactive');
+    }
 
     const created = await this.prisma.packageSubscription.create({
       data: {
@@ -169,6 +174,36 @@ export class PackagesService {
       amountPaid: Number(created.amountPaid),
       amountRemaining: Number(created.amountRemaining),
       penaltyAccrued: Number(created.penaltyAccrued),
+    };
+  }
+
+  async getMySubscriptions(userId: string) {
+    const member = await this.prisma.member.findUnique({ where: { userId } });
+    if (!member) {
+      throw new NotFoundException('Member profile not found');
+    }
+
+    const items = await this.prisma.packageSubscription.findMany({
+      where: { memberId: member.id },
+      include: {
+        package: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return {
+      items: items.map((item) => ({
+        ...item,
+        amountPaid: Number(item.amountPaid),
+        amountRemaining: Number(item.amountRemaining),
+        penaltyAccrued: Number(item.penaltyAccrued),
+        totalAmount: Number(item.package.totalAmount),
+        package: {
+          ...item.package,
+          totalAmount: Number(item.package.totalAmount),
+          penaltyValue: Number(item.package.penaltyValue),
+        },
+      })),
     };
   }
 

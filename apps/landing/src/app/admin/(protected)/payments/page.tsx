@@ -16,6 +16,7 @@ interface PaymentsResponse {
     amount: number;
     status: string;
     receiptUrl: string;
+    createdAt: string;
     member: { fullName: string };
   }>;
 }
@@ -62,7 +63,7 @@ export default function PaymentsPage() {
           {
             key: "member",
             header: "Member",
-            render: (item) => <span className="font-semibold text-[var(--color-dark)]">{item.member.fullName}</span>,
+            render: (item) => <span className="font-semibold text-[var(--text-900)]">{item.member.fullName}</span>,
           },
           {
             key: "amount",
@@ -80,13 +81,18 @@ export default function PaymentsPage() {
             ),
           },
           {
+            key: "createdAt",
+            header: "Requested At",
+            render: (item) => new Date(item.createdAt).toLocaleString("en-NG"),
+          },
+          {
             key: "receipt",
             header: "Receipt",
             render: (item) =>
               item.receiptUrl ? (
                 <AdminModal
                   title="Payment Proof"
-                  trigger={<button className="font-semibold text-[var(--color-green)]" type="button">View proof</button>}
+                  trigger={<button className="font-semibold text-[var(--primary-700)]" type="button">View proof</button>}
                 >
                   <div className="overflow-hidden rounded-[1.5rem] bg-[rgba(245,240,232,0.7)] p-3">
                     <Image alt="Payment proof" className="h-auto w-full rounded-[1rem] object-contain" height={900} src={item.receiptUrl} unoptimized width={900} />
@@ -120,7 +126,7 @@ export default function PaymentsPage() {
                   />
                 </div>
               ) : (
-                <span className="text-xs text-[var(--color-coop-muted)]">No actions available</span>
+                <span className="text-xs text-[var(--text-400)]">No actions available</span>
               ),
           },
         ]}

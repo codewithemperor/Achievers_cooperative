@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
-import { Button } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -78,24 +77,52 @@ export default function InvestmentsPage() {
             title="Add Investment Product"
             trigger={
               <button
-                className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white"
+                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
                 type="button"
               >
                 Add product
               </button>
             }
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <TextInput className="rounded-2xl md:col-span-2" control={control} label="Product Name" name="name" placeholder="Product name" />
-              <NumberInput className="rounded-2xl" control={control} label="Rate %" name="annualRate" placeholder="Rate %" min={0} />
-              <NumberInput className="rounded-2xl" control={control} label="Minimum Amount" name="minimumAmount" placeholder="Minimum amount" min={0} />
-              <NumberInput className="rounded-2xl md:col-span-2" control={control} label="Duration Months" name="durationMonths" placeholder="Duration months" min={1} />
-            </div>
-            <div className="mt-6 flex justify-end">
-              <Button className="rounded-full bg-[var(--color-green)] px-5 py-3 text-sm font-semibold text-white" isDisabled={submitting} onPress={() => void createProduct()}>
-                {submitting ? "Saving..." : "Save product"}
-              </Button>
-            </div>
+            {({ close }) => (
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextInput className="rounded-2xl md:col-span-2" control={control} label="Product Name" name="name" placeholder="Product name" />
+                  <NumberInput className="rounded-2xl" control={control} label="Rate %" name="annualRate" placeholder="Rate %" min={0} />
+                  <NumberInput className="rounded-2xl" control={control} label="Minimum Amount" name="minimumAmount" placeholder="Minimum amount" min={0} />
+                  <NumberInput className="rounded-2xl md:col-span-2" control={control} label="Duration Months" name="durationMonths" placeholder="Duration months" min={1} />
+                </div>
+                <div className="mt-6 flex justify-end">
+                  <button
+                    className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                    disabled={submitting}
+                    onClick={() =>
+                      void handleSubmit(async (values) => {
+                        try {
+                          setSubmitting(true);
+                          await api.post("/investments/products", {
+                            name: values.name,
+                            annualRate: Number(values.annualRate),
+                            minimumAmount: Number(values.minimumAmount),
+                            durationMonths: Number(values.durationMonths),
+                          });
+                          showSuccessToast("Investment product created successfully.");
+                          reset();
+                          await products.refetch();
+                          close();
+                        } catch (error: any) {
+                          showErrorToast(error?.response?.data?.message || "Unable to create investment product.");
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      })()}
+                    type="button"
+                  >
+                    {submitting ? "Saving..." : "Save product"}
+                  </button>
+                </div>
+              </>
+            )}
           </AdminModal>
         }
       />
@@ -104,7 +131,7 @@ export default function InvestmentsPage() {
           {
             key: "name",
             header: "Product",
-            render: (item) => <span className="font-semibold text-[var(--color-dark)]">{item.name}</span>,
+            render: (item) => <span className="font-semibold text-[var(--text-900)]">{item.name}</span>,
           },
           {
             key: "rate",
@@ -130,7 +157,7 @@ export default function InvestmentsPage() {
             key: "detail",
             header: "Detail",
             render: (item) => (
-              <Link className="font-semibold text-[var(--color-green)]" href={`/admin/investments/${item.id}`}>
+              <Link className="font-semibold text-[var(--primary-700)]" href={`/admin/investments/${item.id}`}>
                 Open detail
               </Link>
             ),

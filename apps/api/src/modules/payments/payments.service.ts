@@ -113,6 +113,7 @@ export class PaymentsService {
       editable: false,
       lockReason: 'Wallet funding transactions come from verified payment records and cannot be edited.',
     });
+    const autoSettlements = await this.walletService.settleOutstandingObligations(payment.memberId);
 
     await this.prisma.wallet.update({
       where: { memberId: payment.memberId },
@@ -162,12 +163,13 @@ export class PaymentsService {
       grossAmount,
       charge,
       netAmount,
+      autoSettlements,
     });
 
     await this.notificationService.notifyMember(
       payment.member.userId,
       'Wallet funding approved',
-      `Your payment of ${grossAmount.toLocaleString()} has been approved. Net credit: ${netAmount.toLocaleString()}.`,
+      `Your payment of ${grossAmount.toLocaleString()} has been approved. Net credit: ${netAmount.toLocaleString()}.${autoSettlements.length ? ` Automatic deductions applied: ${autoSettlements.map((item) => `${item.type} ${item.amount.toLocaleString()}`).join(', ')}.` : ''}`,
     );
 
     return {

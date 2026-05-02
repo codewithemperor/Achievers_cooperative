@@ -9,16 +9,16 @@ export const dynamic = "force-static";
 
 export default function PrivacyPolicyPage() {
   return (
-    <div className="pt-20 bg-coop-cream min-h-screen">
+    <div className="pt-20 bg-background-50 min-h-screen">
       <div className="section-padding mx-auto max-w-[900px] py-24">
-        <h1 className="font-display text-4xl font-semibold text-coop-dark mb-3">
+        <h1 className="font-display text-4xl font-semibold text-text-900 mb-3">
           Privacy Policy
         </h1>
-        <p className="text-sm text-coop-muted mb-12">Last updated: January 1, 2025</p>
+        <p className="text-sm text-text-400 mb-12">Last updated: January 1, 2025</p>
 
-        <div className="prose prose-lg max-w-none text-coop-muted space-y-8 leading-relaxed">
+        <div className="prose prose-lg max-w-none text-text-400 space-y-8 leading-relaxed">
           <section>
-            <h2 className="font-display text-2xl font-semibold text-coop-dark mb-3">
+            <h2 className="font-display text-2xl font-semibold text-text-900 mb-3">
               1. Information We Collect
             </h2>
             <p>
@@ -27,7 +27,7 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-2xl font-semibold text-coop-dark mb-3">
+            <h2 className="font-display text-2xl font-semibold text-text-900 mb-3">
               2. How We Use Your Information
             </h2>
             <p>
@@ -36,7 +36,7 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-2xl font-semibold text-coop-dark mb-3">
+            <h2 className="font-display text-2xl font-semibold text-text-900 mb-3">
               3. Data Security
             </h2>
             <p>
@@ -45,19 +45,19 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-2xl font-semibold text-coop-dark mb-3">
+            <h2 className="font-display text-2xl font-semibold text-text-900 mb-3">
               4. Your Rights
             </h2>
             <p>
               As a member, you have the right to access, correct, or request deletion of your personal data at any time. To exercise these rights, contact us at{" "}
-              <a href={`mailto:${siteConfig.contactEmail}`} className="text-coop-green hover:underline">
+              <a href={`mailto:${siteConfig.contactEmail}`} className="text-primary-700 hover:underline">
                 {siteConfig.contactEmail}
               </a>.
             </p>
           </section>
 
           <section>
-            <h2 className="font-display text-2xl font-semibold text-coop-dark mb-3">
+            <h2 className="font-display text-2xl font-semibold text-text-900 mb-3">
               5. Contact
             </h2>
             <p>

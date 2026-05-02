@@ -24,6 +24,10 @@ export class ApplyLoanDto {
   @IsString()
   @IsNotEmpty()
   purpose!: string;
+
+  @IsOptional()
+  @IsString()
+  bankAccountId?: string;
 }
 
 export class QueryLoansDto {
