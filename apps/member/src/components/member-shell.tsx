@@ -120,7 +120,7 @@ export function MemberShell({ children }: PropsWithChildren) {
                   href={item.href}
                   className={`flex flex-col items-center justify-center gap-0.5 rounded-[22px] px-2 py-1.5 transition-all duration-200 ${
                     active
-                      ? "bg-white dark:bg-white/15 text-primary-600 dark:text-primary-400 shadow-[0_2px_8px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.1)]"
+                      ? ""
                       : "text-text-400 dark:text-text-500"
                   }`}
                 >
@@ -135,7 +135,7 @@ export function MemberShell({ children }: PropsWithChildren) {
                   </span>
                   <span
                     className={`text-[10px] leading-tight tracking-wide ${
-                      active ? "font-semibold" : "font-medium"
+                      active ? "font-semibold text-primary-600 dark:text-primary-400" : "font-medium "
                     }`}
                   >
                     {item.label}
