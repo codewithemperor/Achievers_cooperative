@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Tab, TabList, TabPanel, Tabs } from "@heroui/react";
+import { Tabs } from "@heroui/react";
 import { BriefcaseBusiness } from "lucide-react";
 import { apiCallWithAlert } from "@/lib/alert";
 import api from "@/lib/member-api";
@@ -44,7 +44,10 @@ interface PackageSubscriptionsResponse {
 export default function PackagesPage() {
   const [activeTab, setActiveTab] = useState("packages");
   const packages = useMemberData<PackagesResponse>("/packages", { items: [] });
-  const subscriptions = useMemberData<PackageSubscriptionsResponse>("/packages/my-subscriptions", { items: [] });
+  const subscriptions = useMemberData<PackageSubscriptionsResponse>(
+    "/packages/my-subscriptions",
+    { items: [] },
+  );
 
   async function handleSubscribe(pkg: PackageItem) {
     const result = await apiCallWithAlert({
@@ -60,8 +63,14 @@ export default function PackagesPage() {
     }
   }
 
-  const totalSubscribed = subscriptions.data.items.reduce((sum, item) => sum + item.amountPaid, 0);
-  const totalOutstanding = subscriptions.data.items.reduce((sum, item) => sum + item.amountRemaining + item.penaltyAccrued, 0);
+  const totalSubscribed = subscriptions.data.items.reduce(
+    (sum, item) => sum + item.amountPaid,
+    0,
+  );
+  const totalOutstanding = subscriptions.data.items.reduce(
+    (sum, item) => sum + item.amountRemaining + item.penaltyAccrued,
+    0,
+  );
 
   return (
     <div className="space-y-5">
@@ -71,81 +80,74 @@ export default function PackagesPage() {
         value={formatMoney(totalSubscribed)}
         caption={`Outstanding: ${formatMoney(totalOutstanding)}`}
         icon={<BriefcaseBusiness className="h-5 w-5" />}
-        gradient="from-[#1f8f5c] via-[#169368] to-[#0f6f61]"
+        gradient="from-[#16112e] via-[#110d26] to-[#0c081e]"
       />
 
-      <section className="rounded-[28px] bg-white/92 p-4 shadow-[0_22px_48px_rgba(15,23,42,0.08)] dark:bg-[color:rgba(15,23,42,0.72)]">
-        <Tabs aria-label="Packages and subscriptions" className="w-full" selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(String(key))}>
-          <TabList className="grid w-full grid-cols-2 rounded-2xl bg-[var(--background-100)] p-1 dark:bg-white/8">
-            <Tab
-              id="packages"
-              className={`rounded-2xl border px-4 py-2 text-sm font-medium outline-none transition ${
-                activeTab === "packages"
-                  ? "border-[var(--primary-600)] bg-[var(--primary-600)] text-white shadow-sm"
-                  : "border-transparent text-[var(--text-600)] dark:text-[var(--text-300)]"
-              }`}
-            >
+      <Tabs
+        className="w-full"
+        variant="secondary"
+        selectedKey={activeTab}
+        onSelectionChange={(key) => setActiveTab(String(key))}
+      >
+        <Tabs.ListContainer>
+          <Tabs.List aria-label="Packages and subscriptions">
+            <Tabs.Tab id="packages">
               Packages
-            </Tab>
-            <Tab
-              id="transactions"
-              className={`rounded-2xl border px-4 py-2 text-sm font-medium outline-none transition ${
-                activeTab === "transactions"
-                  ? "border-[var(--primary-600)] bg-[var(--primary-600)] text-white shadow-sm"
-                  : "border-transparent text-[var(--text-600)] dark:text-[var(--text-300)]"
-              }`}
-            >
-              Transactions
-            </Tab>
-          </TabList>
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="transactions">
+              Subscriptions
+              <Tabs.Indicator />
+            </Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
 
-          <TabPanel id="packages" className="px-0 pt-4 outline-none">
-            <div className="space-y-3">
-              {packages.data.items.length ? (
-                packages.data.items.map((pkg) => (
-                  <TransactionCard
-                    key={pkg.id}
-                    type="PACKAGE"
-                    title={pkg.name}
-                    subtitle={`${pkg.durationMonths} months${pkg.penaltyValue > 0 ? ` • ${pkg.penaltyType} penalty` : ""}`}
-                    amount={pkg.totalAmount}
-                    status={pkg.isActive ? "ACTIVE" : "INACTIVE"}
-                    timestamp={new Date().toISOString()}
-                    onClick={() => void handleSubscribe(pkg)}
-                    ctaLabel="Subscribe"
-                  />
-                ))
-              ) : (
-                <div className="rounded-[24px] border border-dashed border-[var(--background-300)] px-5 py-10 text-center text-sm text-[var(--text-400)]">
-                  No packages are available right now.
-                </div>
-              )}
-            </div>
-          </TabPanel>
+        <Tabs.Panel id="packages" className="pt-4 outline-none">
+          <div className="space-y-2">
+            {packages.data.items.length ? (
+              packages.data.items.map((pkg) => (
+                <TransactionCard
+                  key={pkg.id}
+                  type="PACKAGE"
+                  title={pkg.name}
+                  subtitle={`${pkg.durationMonths} months${pkg.penaltyValue > 0 ? ` · ${pkg.penaltyType} penalty` : ""}`}
+                  amount={pkg.totalAmount}
+                  status={pkg.isActive ? "ACTIVE" : "INACTIVE"}
+                  timestamp={new Date().toISOString()}
+                  onClick={() => void handleSubscribe(pkg)}
+                  ctaLabel="Subscribe"
+                />
+              ))
+            ) : (
+              <div className="rounded-[20px] border border-dashed border-background-300 dark:border-white/10 px-5 py-10 text-center text-sm text-text-400">
+                No packages are available right now.
+              </div>
+            )}
+          </div>
+        </Tabs.Panel>
 
-          <TabPanel id="transactions" className="px-0 pt-4 outline-none">
-            <div className="space-y-3">
-              {subscriptions.data.items.length ? (
-                subscriptions.data.items.map((item) => (
-                  <TransactionCard
-                    key={item.id}
-                    type="PACKAGE"
-                    title={item.package.name}
-                    subtitle={`Paid ${formatMoney(item.amountPaid)} • Remaining ${formatMoney(item.amountRemaining)}`}
-                    amount={item.totalAmount}
-                    status={item.status}
-                    timestamp={item.nextDueAt || item.createdAt}
-                  />
-                ))
-              ) : (
-                <div className="rounded-[24px] border border-dashed border-[var(--background-300)] px-5 py-10 text-center text-sm text-[var(--text-400)]">
-                  No package subscriptions yet.
-                </div>
-              )}
-            </div>
-          </TabPanel>
-        </Tabs>
-      </section>
+        <Tabs.Panel id="transactions" className="pt-4 outline-none">
+          <div className="space-y-2">
+            {subscriptions.data.items.length ? (
+              subscriptions.data.items.map((item) => (
+                <TransactionCard
+                  key={item.id}
+                  type="PACKAGE"
+                  title={item.package.name}
+                  subtitle={`Paid ${formatMoney(item.amountPaid)} · Remaining ${formatMoney(item.amountRemaining)}`}
+                  amount={item.totalAmount}
+                  status={item.status}
+                  timestamp={item.nextDueAt || item.createdAt}
+                />
+              ))
+            ) : (
+              <div className="rounded-[20px] border border-dashed border-background-300 dark:border-white/10 px-5 py-10 text-center text-sm text-text-400">
+                No package subscriptions yet.
+              </div>
+            )}
+          </div>
+        </Tabs.Panel>
+      </Tabs>
     </div>
   );
 }

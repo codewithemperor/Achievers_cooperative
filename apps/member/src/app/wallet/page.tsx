@@ -39,12 +39,19 @@ const fundingSchema = z.object({
 
 type FundingFormValues = z.infer<typeof fundingSchema>;
 
-const emptyWallet: WalletPayload = { availableBalance: 0, pendingBalance: 0, currency: "NGN" };
+const emptyWallet: WalletPayload = {
+  availableBalance: 0,
+  pendingBalance: 0,
+  currency: "NGN",
+};
 const emptyTransactions: TransactionsPayload = { items: [] };
 
 export default function WalletPage() {
   const wallet = useMemberData<WalletPayload>("/wallet/me", emptyWallet);
-  const transactions = useMemberData<TransactionsPayload>("/wallet/transactions?limit=12", emptyTransactions);
+  const transactions = useMemberData<TransactionsPayload>(
+    "/wallet/transactions?limit=12",
+    emptyTransactions,
+  );
   const [receiptUrl, setReceiptUrl] = useState("");
   const [isFundingModalOpen, setIsFundingModalOpen] = useState(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
@@ -108,13 +115,18 @@ export default function WalletPage() {
           setIsFundingModalOpen(true);
         }}
         icon={<Wallet className="h-5 w-5" />}
-        gradient="from-[#1f8f5c] via-[#169368] to-[#0f6f61]"
+        gradient="from-[#2a2420] via-[#1f1a17] to-[#151210]"
       />
 
-      <section className="space-y-3">
+      <section className="space-y-5 mt-5">
         <div>
-          <h2 className="text-xl font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">Wallet transactions</h2>
-          <p className="mt-1 text-sm text-[var(--text-400)]">Recent wallet activity is shown with the new shared transaction card.</p>
+          <h2 className="text-xl font-semibold font-display tracking-tight text-text-900">
+            Wallet transactions
+          </h2>
+          <p className="text-xs text-text-500">
+            Recent wallet activity is shown with the new shared transaction
+            card.
+          </p>
         </div>
 
         {transactions.data.items.length ? (
@@ -130,8 +142,9 @@ export default function WalletPage() {
             />
           ))
         ) : (
-          <div className="rounded-[24px] border border-dashed border-[var(--background-300)] px-5 py-10 text-center text-sm text-[var(--text-400)]">
-            Wallet activity will appear here once your requests start processing.
+          <div className="rounded-[24px] border border-dashed border-background-300 px-5 py-10 text-center text-sm text-text-400">
+            Wallet activity will appear here once your requests start
+            processing.
           </div>
         )}
       </section>
@@ -150,17 +163,26 @@ export default function WalletPage() {
             placeholder="Enter amount"
             isRequired
             min={1}
-            formatOptions={{ style: "currency", currency: "NGN", maximumFractionDigits: 0 }}
+            formatOptions={{
+              style: "currency",
+              currency: "NGN",
+              maximumFractionDigits: 0,
+            }}
           />
           <div className="grid gap-2">
-            <label className="text-sm font-medium text-text-700" htmlFor="receipt-upload">
+            <label
+              className="text-sm font-medium text-text-700"
+              htmlFor="receipt-upload"
+            >
               Payment receipt
             </label>
             <input
               id="receipt-upload"
               accept="image/*"
               className="min-h-12 rounded-2xl border border-background-200 bg-white px-4 py-3 text-sm text-text-700 outline-none transition-colors focus:border-primary-400 dark:border-background-700 dark:bg-background-900 dark:text-text-300"
-              onChange={(event) => void onUploadReceipt(event.target.files?.[0] ?? null)}
+              onChange={(event) =>
+                void onUploadReceipt(event.target.files?.[0] ?? null)
+              }
               type="file"
             />
           </div>
@@ -170,11 +192,15 @@ export default function WalletPage() {
             </div>
           ) : null}
           <button
-            className="min-h-[44px] rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+            className="min-h-11 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
             disabled={uploadingReceipt || submitting}
             type="submit"
           >
-            {uploadingReceipt ? "Uploading receipt..." : submitting ? "Submitting..." : "Submit funding request"}
+            {uploadingReceipt
+              ? "Uploading receipt..."
+              : submitting
+                ? "Submitting..."
+                : "Submit funding request"}
           </button>
         </form>
       </MemberModal>

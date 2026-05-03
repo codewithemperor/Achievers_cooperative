@@ -24,7 +24,11 @@ interface MembersResponse {
     occupation: string;
     identificationType: string;
     status: string;
-    referrer?: { id: string; fullName: string; membershipNumber: string } | null;
+    referrer?: {
+      id: string;
+      fullName: string;
+      membershipNumber: string;
+    } | null;
     user: { email: string; role: string };
     wallet: { availableBalance: number; currency: string } | null;
   }>;
@@ -93,27 +97,29 @@ export default function MembersPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [submitting, setSubmitting] = useState(false);
   const membersUrl = useMemo(
-    () => (statusFilter === "ALL" ? "/members" : `/members?status=${statusFilter}`),
+    () =>
+      statusFilter === "ALL" ? "/members" : `/members?status=${statusFilter}`,
     [statusFilter],
   );
   const members = useApi<MembersResponse>(membersUrl);
   const memberSearch = useApi<MemberSearchResponse>("/members/search");
-  const { control, handleSubmit, reset, setValue, watch } = useForm<MemberFormValues>({
-    defaultValues: {
-      email: "",
-      fullName: "",
-      phoneNumber: "",
-      homeAddress: "",
-      stateOfOrigin: "",
-      dateOfBirth: "",
-      occupation: "",
-      maritalStatus: "SINGLE",
-      identificationNumber: "",
-      identificationPicture: "",
-      identificationType: "NIN",
-      referrerId: "",
-    },
-  });
+  const { control, handleSubmit, reset, setValue, watch } =
+    useForm<MemberFormValues>({
+      defaultValues: {
+        email: "",
+        fullName: "",
+        phoneNumber: "",
+        homeAddress: "",
+        stateOfOrigin: "",
+        dateOfBirth: "",
+        occupation: "",
+        maritalStatus: "SINGLE",
+        identificationNumber: "",
+        identificationPicture: "",
+        identificationType: "NIN",
+        referrerId: "",
+      },
+    });
 
   const selectedReferrerId = watch("referrerId");
   const identificationPicture = watch("identificationPicture");
@@ -132,23 +138,28 @@ export default function MembersPage() {
     setValue("identificationPicture", response.data.url);
   }
 
-  const createMember = (close?: () => void) => handleSubmit(async (values) => {
-    try {
-      setSubmitting(true);
-      await api.post("/members", {
-        ...values,
-        referrerId: values.referrerId || undefined,
-      });
-      showSuccessToast("Member created successfully. Default password is now the phone number.");
-      reset();
-      await members.refetch();
-      close?.();
-    } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to create member.");
-    } finally {
-      setSubmitting(false);
-    }
-  });
+  const createMember = (close?: () => void) =>
+    handleSubmit(async (values) => {
+      try {
+        setSubmitting(true);
+        await api.post("/members", {
+          ...values,
+          referrerId: values.referrerId || undefined,
+        });
+        showSuccessToast(
+          "Member created successfully. Default password is now the phone number.",
+        );
+        reset();
+        await members.refetch();
+        close?.();
+      } catch (error: any) {
+        showErrorToast(
+          error?.response?.data?.message || "Unable to create member.",
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    });
 
   return (
     <div className="space-y-6">
@@ -170,92 +181,171 @@ export default function MembersPage() {
           >
             {({ close }) => (
               <>
-            <div className="grid gap-4 md:grid-cols-2">
-              <TextInput className="rounded-2xl" control={control} label="Full name" name="fullName" placeholder="Member full name" />
-              <TextInput
-                className="rounded-2xl"
-                control={control}
-                description="Must be exactly 11 digits and start with 0. This becomes the default password."
-                label="Phone number"
-                name="phoneNumber"
-                placeholder="08012345678"
-                type="tel"
-              />
-              <TextInput className="rounded-2xl md:col-span-2" control={control} label="Email" name="email" placeholder="Email address" type="email" />
-              <TextInput className="rounded-2xl md:col-span-2" control={control} label="Home address" name="homeAddress" placeholder="Full residential address" />
-              <TextInput className="rounded-2xl" control={control} label="State of origin" name="stateOfOrigin" placeholder="e.g. Oyo" />
-              <TextInput className="rounded-2xl" control={control} label="Occupation" name="occupation" placeholder="Occupation" />
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-[var(--text-900)]" htmlFor="member-dob">Date of birth</label>
-                <input
-                  id="member-dob"
-                  className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm outline-none"
-                  onChange={(event) => setValue("dateOfBirth", event.target.value)}
-                  type="date"
-                  value={watch("dateOfBirth")}
-                />
-              </div>
-              <SelectInput className="rounded-2xl" control={control} label="Marital status" name="maritalStatus" options={maritalStatusOptions} />
-              <SelectInput className="rounded-2xl" control={control} label="Identification type" name="identificationType" options={identificationTypeOptions} />
-              <TextInput className="rounded-2xl" control={control} label="Identification number" name="identificationNumber" placeholder="NIN, passport, or voter card number" />
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-medium text-[var(--text-900)]" htmlFor="member-id-picture">Identification picture</label>
-                <input
-                  id="member-id-picture"
-                  accept="image/*"
-                  className="block w-full rounded-2xl border border-[var(--primary-900)/12] px-4 py-3 text-sm"
-                  onChange={(event) => void onUploadIdPicture(event.target.files?.[0])}
-                  type="file"
-                />
-                {identificationPicture ? (
-                  <img
-                    alt="Identification preview"
-                    className="h-28 rounded-2xl border border-[var(--primary-900)/8] object-cover"
-                    src={identificationPicture}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Full name"
+                    name="fullName"
+                    placeholder="Member full name"
                   />
-                ) : (
-                  <p className="text-xs text-[var(--text-400)]">Upload a clear image of the identification document.</p>
-                )}
-              </div>
+                  <TextInput
+                    className="rounded-2xl"
+                    control={control}
+                    description="Must be exactly 11 digits and start with 0. This becomes the default password."
+                    label="Phone number"
+                    name="phoneNumber"
+                    placeholder="08012345678"
+                    type="tel"
+                  />
+                  <TextInput
+                    className="rounded-2xl md:col-span-2"
+                    control={control}
+                    label="Email"
+                    name="email"
+                    placeholder="Email address"
+                    type="email"
+                  />
+                  <TextInput
+                    className="rounded-2xl md:col-span-2"
+                    control={control}
+                    label="Home address"
+                    name="homeAddress"
+                    placeholder="Full residential address"
+                  />
+                  <TextInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="State of origin"
+                    name="stateOfOrigin"
+                    placeholder="e.g. Oyo"
+                  />
+                  <TextInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Occupation"
+                    name="occupation"
+                    placeholder="Occupation"
+                  />
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium text-text-900"
+                      htmlFor="member-dob"
+                    >
+                      Date of birth
+                    </label>
+                    <input
+                      id="member-dob"
+                      className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm outline-none"
+                      onChange={(event) =>
+                        setValue("dateOfBirth", event.target.value)
+                      }
+                      type="date"
+                      value={watch("dateOfBirth")}
+                    />
+                  </div>
+                  <SelectInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Marital status"
+                    name="maritalStatus"
+                    options={maritalStatusOptions}
+                  />
+                  <SelectInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Identification type"
+                    name="identificationType"
+                    options={identificationTypeOptions}
+                  />
+                  <TextInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Identification number"
+                    name="identificationNumber"
+                    placeholder="NIN, passport, or voter card number"
+                  />
 
-              <div className="md:col-span-2">
-                <p className="mb-2 text-sm font-medium text-[var(--text-900)]">Referrer</p>
-                <Autocomplete onSelectionChange={(key) => setValue("referrerId", key ? String(key) : "")} selectedKey={selectedReferrerId || null}>
-                  <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
-                    <Autocomplete.Value />
-                    <Autocomplete.ClearButton className="text-sm text-[var(--text-400)]" />
-                    <Autocomplete.Indicator />
-                  </Autocomplete.Trigger>
-                  <Autocomplete.Popover>
-                    <ListBox className="max-h-64 overflow-auto p-2">
-                      {(memberSearch.data?.items ?? []).map((member) => (
-                        <ListBox.Item id={member.id} key={member.id} textValue={member.fullName}>
-                          <div className="py-1">
-                            <p className="font-medium text-[var(--text-900)]">{member.fullName}</p>
-                            <p className="text-xs text-[var(--text-400)]">
-                              {member.membershipNumber} · {member.phoneNumber}
-                            </p>
-                          </div>
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      ))}
-                    </ListBox>
-                  </Autocomplete.Popover>
-                </Autocomplete>
-              </div>
-            </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label
+                      className="text-sm font-medium text-text-900"
+                      htmlFor="member-id-picture"
+                    >
+                      Identification picture
+                    </label>
+                    <input
+                      id="member-id-picture"
+                      accept="image/*"
+                      className="block w-full rounded-2xl border border-[var(--primary-900)/12] px-4 py-3 text-sm"
+                      onChange={(event) =>
+                        void onUploadIdPicture(event.target.files?.[0])
+                      }
+                      type="file"
+                    />
+                    {identificationPicture ? (
+                      <img
+                        alt="Identification preview"
+                        className="h-28 rounded-2xl border border-[var(--primary-900)/8] object-cover"
+                        src={identificationPicture}
+                      />
+                    ) : (
+                      <p className="text-xs text-text-400">
+                        Upload a clear image of the identification document.
+                      </p>
+                    )}
+                  </div>
 
-            <div className="mt-6 flex justify-end">
-              <button
-                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
-                disabled={submitting}
-                onClick={() => void createMember(close)()}
-                type="button"
-              >
-                {submitting ? "Creating..." : "Create member"}
-              </button>
-            </div>
+                  <div className="md:col-span-2">
+                    <p className="mb-2 text-sm font-medium text-text-900">
+                      Referrer
+                    </p>
+                    <Autocomplete
+                      onSelectionChange={(key) =>
+                        setValue("referrerId", key ? String(key) : "")
+                      }
+                      selectedKey={selectedReferrerId || null}
+                    >
+                      <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
+                        <Autocomplete.Value />
+                        <Autocomplete.ClearButton className="text-sm text-text-400" />
+                        <Autocomplete.Indicator />
+                      </Autocomplete.Trigger>
+                      <Autocomplete.Popover>
+                        <ListBox className="max-h-64 overflow-auto p-2">
+                          {(memberSearch.data?.items ?? []).map((member) => (
+                            <ListBox.Item
+                              id={member.id}
+                              key={member.id}
+                              textValue={member.fullName}
+                            >
+                              <div className="py-1">
+                                <p className="font-medium text-text-900">
+                                  {member.fullName}
+                                </p>
+                                <p className="text-xs text-text-400">
+                                  {member.membershipNumber} ·{" "}
+                                  {member.phoneNumber}
+                                </p>
+                              </div>
+                              <ListBox.ItemIndicator />
+                            </ListBox.Item>
+                          ))}
+                        </ListBox>
+                      </Autocomplete.Popover>
+                    </Autocomplete>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                  <button
+                    className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                    disabled={submitting}
+                    onClick={() => void createMember(close)()}
+                    type="button"
+                  >
+                    {submitting ? "Creating..." : "Create member"}
+                  </button>
+                </div>
               </>
             )}
           </AdminModal>
@@ -269,7 +359,7 @@ export default function MembersPage() {
             className={
               statusFilter === option.id
                 ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
-                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-900)]"
+                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
             }
             onClick={() => setStatusFilter(String(option.id))}
             type="button"
@@ -286,7 +376,7 @@ export default function MembersPage() {
             header: "Member",
             render: (item) => (
               <div>
-                <p className="font-semibold text-[var(--text-900)]">{item.fullName}</p>
+                <p className="font-semibold text-text-900">{item.fullName}</p>
                 <p className="text-xs">{item.membershipNumber}</p>
               </div>
             ),
@@ -306,26 +396,37 @@ export default function MembersPage() {
             header: "Identity",
             render: (item) => (
               <div>
-                <p className="font-medium text-[var(--text-900)]">{item.identificationType.replaceAll("_", " ")}</p>
-                <p className="text-xs text-[var(--text-400)]">{item.stateOfOrigin}</p>
+                <p className="font-medium text-text-900">
+                  {item.identificationType.replaceAll("_", " ")}
+                </p>
+                <p className="text-xs text-text-400">{item.stateOfOrigin}</p>
               </div>
             ),
           },
           {
             key: "status",
             header: "Status",
-            render: (item) => <StatusBadge status={item.status} variant={statusVariant(item.status) as any} />,
+            render: (item) => (
+              <StatusBadge
+                status={item.status}
+                variant={statusVariant(item.status) as any}
+              />
+            ),
           },
           {
             key: "wallet",
             header: "Wallet",
-            render: (item) => currency.format(item.wallet?.availableBalance ?? 0),
+            render: (item) =>
+              currency.format(item.wallet?.availableBalance ?? 0),
           },
           {
             key: "view",
             header: "View",
             render: (item) => (
-              <Link className="font-semibold text-[var(--primary-700)]" href={`/admin/members/${item.id}`}>
+              <Link
+                className="font-semibold text-[var(--primary-700)]"
+                href={`/admin/members/${item.id}`}
+              >
                 Open profile
               </Link>
             ),

@@ -1,6 +1,13 @@
 "use client";
 
-import { cloneElement, isValidElement, useEffect, useState, type ReactElement, type ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 interface AdminModalProps {
   trigger: ReactNode;
@@ -10,18 +17,28 @@ interface AdminModalProps {
   footer?: ReactNode;
 }
 
-export function AdminModal({ trigger, title, description, children, footer }: AdminModalProps) {
+export function AdminModal({
+  trigger,
+  title,
+  description,
+  children,
+  footer,
+}: AdminModalProps) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
-  const triggerElement = isValidElement(trigger) ? (trigger as ReactElement<any>) : null;
-  const triggerNode = isValidElement(trigger)
-    ? cloneElement(triggerElement!, {
-        onClick: (event: any) => {
-          triggerElement?.props?.onClick?.(event);
-          setOpen(true);
-        },
-      })
-    : <span onClick={() => setOpen(true)}>{trigger}</span>;
+  const triggerElement = isValidElement(trigger)
+    ? (trigger as ReactElement<any>)
+    : null;
+  const triggerNode = isValidElement(trigger) ? (
+    cloneElement(triggerElement!, {
+      onClick: (event: any) => {
+        triggerElement?.props?.onClick?.(event);
+        setOpen(true);
+      },
+    })
+  ) : (
+    <span onClick={() => setOpen(true)}>{trigger}</span>
+  );
 
   useEffect(() => {
     if (!open) {
@@ -56,19 +73,29 @@ export function AdminModal({ trigger, title, description, children, footer }: Ad
           >
             <div className="flex items-start justify-between gap-4 border-b border-primary-900/8 px-5 py-4 sm:px-6 dark:border-[var(--background-700)]">
               <div>
-                <h2 className="text-2xl font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">{title}</h2>
-                {description ? <p className="mt-2 text-sm text-[var(--text-400)]">{description}</p> : null}
+                <h2 className="text-2xl font-semibold text-text-900 dark:text-text-50">
+                  {title}
+                </h2>
+                {description ? (
+                  <p className="mt-2 text-sm text-text-400">{description}</p>
+                ) : null}
               </div>
               <button
-                className="rounded-full border border-primary-900/12 px-3 py-1 text-sm text-[var(--text-900)] dark:border-[var(--background-700)] dark:text-[var(--text-100)]"
+                className="rounded-full border border-primary-900/12 px-3 py-1 text-sm text-text-900 dark:border-[var(--background-700)] dark:text-text-100"
                 onClick={close}
                 type="button"
               >
                 Close
               </button>
             </div>
-            <div className="px-5 py-4 sm:px-6 sm:py-5">{typeof children === "function" ? children({ close }) : children}</div>
-            {footer ? <div className="border-t border-primary-900/8 px-5 py-4 sm:px-6 dark:border-[var(--background-700)]">{footer}</div> : null}
+            <div className="px-5 py-4 sm:px-6 sm:py-5">
+              {typeof children === "function" ? children({ close }) : children}
+            </div>
+            {footer ? (
+              <div className="border-t border-primary-900/8 px-5 py-4 sm:px-6 dark:border-[var(--background-700)]">
+                {footer}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

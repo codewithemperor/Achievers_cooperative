@@ -88,7 +88,7 @@
    ======================== */
 :root {
   /* NEUTRAL TEXT — true gray (no warm/brown tint) */
-  --text-50: oklch(98% 0.003 260);
+  --text-90: oklch(98% 0.003 260);
   --text-100: oklch(95% 0.005 260);
   --text-200: oklch(90% 0.007 260);
   --text-300: oklch(82% 0.008 260);
@@ -248,7 +248,6 @@ h4,
 h5,
 h6 {
   font-family: var(--font-display-family), system-ui, sans-serif;
-  color: var(--text-900);
 }
 
 .dark h1,

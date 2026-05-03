@@ -28,7 +28,7 @@ const accentMap = {
   dark: {
     border: "border-t-[var(--text-700)] dark:border-t-[var(--text-300)]",
     iconBg: "bg-[var(--background-100)] dark:bg-[var(--background-800)]",
-    iconColor: "text-[var(--text-700)] dark:text-[var(--text-300)]",
+    iconColor: "text-text-700 dark:text-[var(--text-300)]",
   },
   red: {
     border: "border-t-red-500",
@@ -37,36 +37,42 @@ const accentMap = {
   },
 };
 
-export function StatCard({ title, value, sub, icon, accent = "green" }: StatCardProps) {
+export function StatCard({
+  title,
+  value,
+  sub,
+  icon,
+  accent = "green",
+}: StatCardProps) {
   const style = accentMap[accent];
 
   return (
-    <div className={clsx(
-      "relative overflow-hidden rounded-2xl border border-t-2 bg-white p-5 shadow-sm",
-      "dark:bg-[var(--background-900)] dark:border-[var(--background-800)]",
-      style.border,
-      "dark:border-t-[var(--primary-700)]",
-    )}>
+    <div
+      className={clsx(
+        "relative overflow-hidden rounded-2xl border border-t-2 bg-white p-5 shadow-sm",
+        "dark:bg-[var(--background-900)] dark:border-[var(--background-800)]",
+        style.border,
+        "dark:border-t-[var(--primary-700)]",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-400)]">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-text-400">
             {title}
           </p>
-          <p className="text-2xl font-bold tracking-tight text-[var(--text-900)] dark:text-[var(--text-50)]">
+          <p className="text-2xl font-bold tracking-tight text-text-900 dark:text-text-50">
             {value}
           </p>
-          {sub ? (
-            <p className="mt-1 text-xs text-[var(--text-400)]">{sub}</p>
-          ) : null}
+          {sub ? <p className="mt-1 text-xs text-text-400">{sub}</p> : null}
         </div>
         {icon ? (
-          <div className={clsx(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-            style.iconBg,
-          )}>
-            <div className={style.iconColor}>
-              {icon}
-            </div>
+          <div
+            className={clsx(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+              style.iconBg,
+            )}
+          >
+            <div className={style.iconColor}>{icon}</div>
           </div>
         ) : null}
       </div>

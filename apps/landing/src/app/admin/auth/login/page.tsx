@@ -73,22 +73,35 @@ export default function AdminLoginPage() {
             Admin operations with traceable finance, members, and approvals.
           </h1>
           <p className="mt-5 max-w-2xl text-base text-white/80">
-            Review members, verify wallet funding, oversee loans, and manage cooperative finances from one secure dashboard.
+            Review members, verify wallet funding, oversee loans, and manage
+            cooperative finances from one secure dashboard.
           </p>
         </section>
 
         <section className="rounded-[2rem] border border-white/70 bg-white/88 p-8 shadow-[0_24px_60px_var(--primary-900)/10] backdrop-blur">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-400)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-400">
             Admin sign in
           </p>
-          <h2 className="mt-3 text-3xl font-semibold text-[var(--text-900)]">Welcome back</h2>
-          <p className="mt-2 text-sm text-[var(--text-400)]">
+          <h2 className="mt-3 text-3xl font-semibold text-text-900">
+            Welcome back
+          </h2>
+          <p className="mt-2 text-sm text-text-400">
             Use an administrator account to access the cooperative workspace.
           </p>
 
           <form className="mt-8 space-y-5" onSubmit={onSubmit}>
-            <TextInput control={control} label="Email address" name="email" placeholder="admin@example.com" />
-            <PasswordInput control={control} label="Password" name="password" placeholder="Enter your password" />
+            <TextInput
+              control={control}
+              label="Email address"
+              name="email"
+              placeholder="admin@example.com"
+            />
+            <PasswordInput
+              control={control}
+              label="Password"
+              name="password"
+              placeholder="Enter your password"
+            />
 
             {error ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

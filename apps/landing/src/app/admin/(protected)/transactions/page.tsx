@@ -7,7 +7,11 @@ import { useForm } from "react-hook-form";
 import { AdminModal } from "@/components/ui/admin-modal";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
-import { NumberInput, TextInput, TextareaInput } from "@/components/ui/form-input";
+import {
+  NumberInput,
+  TextInput,
+  TextareaInput,
+} from "@/components/ui/form-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
@@ -111,9 +115,28 @@ function TransactionEditForm({
   return (
     <>
       <div className="grid gap-4">
-        <NumberInput className="rounded-2xl" control={control} label="Amount" name="amount" min={0} />
-        <TextInput className="rounded-2xl" control={control} label="Category" name="category" placeholder="Manual adjustment" />
-        <TextareaInput className="rounded-2xl" control={control} label="Description" name="description" placeholder="Why this transaction is being edited" rows={4} />
+        <NumberInput
+          className="rounded-2xl"
+          control={control}
+          label="Amount"
+          name="amount"
+          min={0}
+        />
+        <TextInput
+          className="rounded-2xl"
+          control={control}
+          label="Category"
+          name="category"
+          placeholder="Manual adjustment"
+        />
+        <TextareaInput
+          className="rounded-2xl"
+          control={control}
+          label="Description"
+          name="description"
+          placeholder="Why this transaction is being edited"
+          rows={4}
+        />
       </div>
       <div className="mt-6 flex justify-end">
         <button
@@ -131,21 +154,28 @@ function TransactionEditForm({
 
 export default function TransactionsPage() {
   const [tab, setTab] = useState<"member" | "treasury">("treasury");
-  const memberTransactions = useApi<MemberTransactionsResponse>("/transactions");
+  const memberTransactions =
+    useApi<MemberTransactionsResponse>("/transactions");
   const wallet = useApi<TreasurySummary>("/wallet/cooperative");
-  const treasuryEntries = useApi<TreasuryEntriesResponse>("/wallet/cooperative/entries");
+  const treasuryEntries = useApi<TreasuryEntriesResponse>(
+    "/wallet/cooperative/entries",
+  );
   const [creatingEntry, setCreatingEntry] = useState(false);
-  const { control, handleSubmit, reset, setValue, watch } = useForm<TreasuryEntryValues>({
-    defaultValues: {
-      type: "INCOME",
-      amount: undefined,
-      category: "",
-      description: "",
-      reference: "",
-    },
-  });
+  const { control, handleSubmit, reset, setValue, watch } =
+    useForm<TreasuryEntryValues>({
+      defaultValues: {
+        type: "INCOME",
+        amount: undefined,
+        category: "",
+        description: "",
+        reference: "",
+      },
+    });
 
-  const treasuryRows = useMemo(() => treasuryEntries.data?.items ?? [], [treasuryEntries.data]);
+  const treasuryRows = useMemo(
+    () => treasuryEntries.data?.items ?? [],
+    [treasuryEntries.data],
+  );
 
   async function updateTransaction(id: string, values: EditTransactionValues) {
     try {
@@ -153,7 +183,9 @@ export default function TransactionsPage() {
       showSuccessToast("Transaction updated successfully.");
       await memberTransactions.refetch();
     } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to update transaction.");
+      showErrorToast(
+        error?.response?.data?.message || "Unable to update transaction.",
+      );
       throw error;
     }
   }
@@ -174,7 +206,9 @@ export default function TransactionsPage() {
         await Promise.all([wallet.refetch(), treasuryEntries.refetch()]);
         close?.();
       } catch (error: any) {
-        showErrorToast(error?.response?.data?.message || "Unable to add treasury entry.");
+        showErrorToast(
+          error?.response?.data?.message || "Unable to add treasury entry.",
+        );
       } finally {
         setCreatingEntry(false);
       }
@@ -183,25 +217,36 @@ export default function TransactionsPage() {
   const summaryCards = (
     <div className="grid gap-4 md:grid-cols-4">
       {wallet.loading ? (
-        Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32 rounded-[2rem]" />)
+        Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-32 rounded-[2rem]" />
+        ))
       ) : (
         <>
           <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
-            <p className="text-sm text-[var(--text-400)]">Treasury Cash</p>
-            <p className="mt-2 text-3xl font-semibold text-[var(--text-900)]">{currency.format(wallet.data?.balance ?? 0)}</p>
+            <p className="text-sm text-text-400">Treasury Cash</p>
+            <p className="mt-2 text-3xl font-semibold text-text-900">
+              {currency.format(wallet.data?.balance ?? 0)}
+            </p>
           </div>
           <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
-            <p className="text-sm text-[var(--text-400)]">Member Wallet Holdings</p>
-            <p className="mt-2 text-3xl font-semibold text-[var(--text-900)]">{currency.format(wallet.data?.memberWalletHoldings ?? 0)}</p>
+            <p className="text-sm text-text-400">Member Wallet Holdings</p>
+            <p className="mt-2 text-3xl font-semibold text-text-900">
+              {currency.format(wallet.data?.memberWalletHoldings ?? 0)}
+            </p>
           </div>
           <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
-            <p className="text-sm text-[var(--text-400)]">Money At Hand</p>
-            <p className="mt-2 text-3xl font-semibold text-[var(--text-900)]">{currency.format(wallet.data?.combinedHoldings ?? 0)}</p>
+            <p className="text-sm text-text-400">Money At Hand</p>
+            <p className="mt-2 text-3xl font-semibold text-text-900">
+              {currency.format(wallet.data?.combinedHoldings ?? 0)}
+            </p>
           </div>
           <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
-            <p className="text-sm text-[var(--text-400)]">Net Treasury Flow</p>
-            <p className="mt-2 text-3xl font-semibold text-[var(--text-900)]">
-              {currency.format((wallet.data?.totalIncome ?? 0) - (wallet.data?.totalExpense ?? 0))}
+            <p className="text-sm text-text-400">Net Treasury Flow</p>
+            <p className="mt-2 text-3xl font-semibold text-text-900">
+              {currency.format(
+                (wallet.data?.totalIncome ?? 0) -
+                  (wallet.data?.totalExpense ?? 0),
+              )}
             </p>
           </div>
         </>
@@ -219,7 +264,10 @@ export default function TransactionsPage() {
             description="Create a treasury income or expense entry and watch the summary cards update immediately."
             title="Add Treasury Entry"
             trigger={
-              <button className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white" type="button">
+              <button
+                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
+                type="button"
+              >
                 Add transaction
               </button>
             }
@@ -228,17 +276,47 @@ export default function TransactionsPage() {
               <>
                 <div className="grid gap-4">
                   <select
-                    className="min-h-12 rounded-2xl border border-[var(--primary-900)/12] bg-white px-4 text-sm text-[var(--text-900)] outline-none"
-                    onChange={(event) => setValue("type", event.target.value as "INCOME" | "EXPENSE")}
+                    className="min-h-12 rounded-2xl border border-[var(--primary-900)/12] bg-white px-4 text-sm text-text-900 outline-none"
+                    onChange={(event) =>
+                      setValue(
+                        "type",
+                        event.target.value as "INCOME" | "EXPENSE",
+                      )
+                    }
                     value={watch("type")}
                   >
                     <option value="INCOME">Income</option>
                     <option value="EXPENSE">Expense</option>
                   </select>
-                  <NumberInput className="rounded-2xl" control={control} label="Amount" name={"amount" as never} min={0} />
-                  <TextInput className="rounded-2xl" control={control} label="Category" name={"category" as never} placeholder="Operations" />
-                  <TextareaInput className="rounded-2xl" control={control} label="Description" name={"description" as never} placeholder="Describe this entry" rows={4} />
-                  <TextInput className="rounded-2xl" control={control} label="Reference" name={"reference" as never} placeholder="Optional reference" />
+                  <NumberInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Amount"
+                    name={"amount" as never}
+                    min={0}
+                  />
+                  <TextInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Category"
+                    name={"category" as never}
+                    placeholder="Operations"
+                  />
+                  <TextareaInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Description"
+                    name={"description" as never}
+                    placeholder="Describe this entry"
+                    rows={4}
+                  />
+                  <TextInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Reference"
+                    name={"reference" as never}
+                    placeholder="Optional reference"
+                  />
                 </div>
                 <div className="mt-6 flex justify-end">
                   <button
@@ -258,14 +336,22 @@ export default function TransactionsPage() {
 
       <div className="flex flex-wrap gap-2">
         <button
-          className={tab === "member" ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white" : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-900)]"}
+          className={
+            tab === "member"
+              ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
+              : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
+          }
           onClick={() => setTab("member")}
           type="button"
         >
           Member Transactions
         </button>
         <button
-          className={tab === "treasury" ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white" : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-900)]"}
+          className={
+            tab === "treasury"
+              ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
+              : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
+          }
           onClick={() => setTab("treasury")}
           type="button"
         >
@@ -283,8 +369,12 @@ export default function TransactionsPage() {
               header: "Member",
               render: (item) => (
                 <div>
-                  <p className="font-semibold text-[var(--text-900)]">{item.wallet.member.fullName}</p>
-                  <p className="text-xs text-[var(--text-400)]">{item.wallet.member.membershipNumber}</p>
+                  <p className="font-semibold text-text-900">
+                    {item.wallet.member.fullName}
+                  </p>
+                  <p className="text-xs text-text-400">
+                    {item.wallet.member.membershipNumber}
+                  </p>
                 </div>
               ),
             },
@@ -293,8 +383,12 @@ export default function TransactionsPage() {
               header: "Type",
               render: (item) => (
                 <div>
-                  <p className="font-semibold text-[var(--text-900)]">{item.type.replaceAll("_", " ")}</p>
-                  <p className="text-xs text-[var(--text-400)]">{item.category || "No category"}</p>
+                  <p className="font-semibold text-text-900">
+                    {item.type.replaceAll("_", " ")}
+                  </p>
+                  <p className="text-xs text-text-400">
+                    {item.category || "No category"}
+                  </p>
                 </div>
               ),
             },
@@ -306,7 +400,12 @@ export default function TransactionsPage() {
             {
               key: "status",
               header: "Status",
-              render: (item) => <StatusBadge status={item.status} variant={variantForStatus(item.status) as any} />,
+              render: (item) => (
+                <StatusBadge
+                  status={item.status}
+                  variant={variantForStatus(item.status) as any}
+                />
+              ),
             },
             {
               key: "edit",
@@ -317,16 +416,32 @@ export default function TransactionsPage() {
                     description="Only manual/admin-created transactions can be edited. Changes are written to the audit trail."
                     title="Edit Transaction"
                     trigger={
-                      <button className="inline-flex items-center gap-2 font-semibold text-[var(--primary-700)]" type="button">
+                      <button
+                        className="inline-flex items-center gap-2 font-semibold text-[var(--primary-700)]"
+                        type="button"
+                      >
                         <Pencil className="h-4 w-4" />
                         Edit
                       </button>
                     }
                   >
-                    {({ close }) => <TransactionEditForm item={item} onSubmit={(values) => updateTransaction(item.id, values)} onSuccess={close} />}
+                    {({ close }) => (
+                      <TransactionEditForm
+                        item={item}
+                        onSubmit={(values) =>
+                          updateTransaction(item.id, values)
+                        }
+                        onSuccess={close}
+                      />
+                    )}
                   </AdminModal>
                 ) : (
-                  <div className="inline-flex items-center gap-2 text-sm text-[var(--text-400)]" title={item.lockReason || "This transaction cannot be edited."}>
+                  <div
+                    className="inline-flex items-center gap-2 text-sm text-text-400"
+                    title={
+                      item.lockReason || "This transaction cannot be edited."
+                    }
+                  >
                     <Lock className="h-4 w-4" />
                     Locked
                   </div>
@@ -334,7 +449,9 @@ export default function TransactionsPage() {
             },
           ]}
           data={memberTransactions.data?.items ?? []}
-          emptyDescription={memberTransactions.error || "No member transactions found."}
+          emptyDescription={
+            memberTransactions.error || "No member transactions found."
+          }
           loading={memberTransactions.loading}
         />
       ) : (
@@ -344,12 +461,26 @@ export default function TransactionsPage() {
               {
                 key: "type",
                 header: "Type",
-                render: (item) => <span className={item.type === "INCOME" ? "font-semibold text-[var(--primary-700)]" : "font-semibold text-[#b42318]"}>{item.type}</span>,
+                render: (item) => (
+                  <span
+                    className={
+                      item.type === "INCOME"
+                        ? "font-semibold text-[var(--primary-700)]"
+                        : "font-semibold text-[#b42318]"
+                    }
+                  >
+                    {item.type}
+                  </span>
+                ),
               },
               {
                 key: "category",
                 header: "Name",
-                render: (item) => <span className="font-semibold text-[var(--text-900)]">{item.category}</span>,
+                render: (item) => (
+                  <span className="font-semibold text-text-900">
+                    {item.category}
+                  </span>
+                ),
               },
               {
                 key: "description",
@@ -364,11 +495,14 @@ export default function TransactionsPage() {
               {
                 key: "createdAt",
                 header: "Created At",
-                render: (item) => new Date(item.createdAt).toLocaleDateString("en-NG"),
+                render: (item) =>
+                  new Date(item.createdAt).toLocaleDateString("en-NG"),
               },
             ]}
             data={treasuryRows}
-            emptyDescription={treasuryEntries.error || "No treasury transactions found."}
+            emptyDescription={
+              treasuryEntries.error || "No treasury transactions found."
+            }
             loading={treasuryEntries.loading}
           />
         </>

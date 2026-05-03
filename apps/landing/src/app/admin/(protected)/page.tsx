@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ArrowDownCircle, ArrowUpCircle, PiggyBank, Users } from "lucide-react";
+import {
+  Activity,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  PiggyBank,
+  Users,
+} from "lucide-react";
 import { Skeleton } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -79,10 +85,15 @@ function SectionHeader({
   return (
     <div className="mb-4 flex items-start justify-between gap-4">
       <div>
-        <h2 className="text-sm font-bold text-[var(--text-900)] dark:text-[var(--text-50)]">{title}</h2>
-        <p className="mt-0.5 text-xs text-[var(--text-400)]">{subtitle}</p>
+        <h2 className="text-sm font-bold text-text-900 dark:text-text-50">
+          {title}
+        </h2>
+        <p className="mt-0.5 text-xs text-text-400">{subtitle}</p>
       </div>
-      <Link className="shrink-0 text-xs font-semibold text-[var(--primary-600)] hover:text-[var(--primary-700)] dark:text-[var(--primary-400)]" href={href}>
+      <Link
+        className="shrink-0 text-xs font-semibold text-[var(--primary-600)] hover:text-[var(--primary-700)] dark:text-[var(--primary-400)]"
+        href={href}
+      >
         View more
       </Link>
     </div>
@@ -99,7 +110,8 @@ function ListSkeleton({ rows = 5 }: { rows?: number }) {
   );
 }
 
-const card = "rounded-2xl border border-[var(--background-200)] bg-white p-5 shadow-sm dark:border-[var(--background-800)] dark:bg-[var(--background-900)]";
+const card =
+  "rounded-2xl border border-[var(--background-200)] bg-white p-5 shadow-sm dark:border-[var(--background-800)] dark:bg-[var(--background-900)]";
 
 export default function AdminDashboardPage() {
   const dashboard = useApi<DashboardResponse>("/reports/dashboard");
@@ -114,40 +126,42 @@ export default function AdminDashboardPage() {
 
       {/* ── Stat Cards ── */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {dashboard.loading
-          ? Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-36 rounded-2xl" />)
-          : (
-            <>
-              <StatCard
-                accent="dark"
-                icon={<Users className="h-5 w-5" />}
-                sub={`${summary?.members.active ?? 0} active · ${summary?.members.pending ?? 0} pending`}
-                title="Total Members"
-                value={`${summary?.members.total ?? 0}`}
-              />
-              <StatCard
-                accent="green"
-                icon={<ArrowDownCircle className="h-5 w-5" />}
-                sub={`Income ${currency.format(summary?.cooperativeTreasury.totalIncome ?? 0)}`}
-                title="Cooperative Treasury"
-                value={currency.format(summary?.cooperativeTreasury.balance ?? 0)}
-              />
-              <StatCard
-                accent="amber"
-                icon={<Activity className="h-5 w-5" />}
-                sub={`${summary?.loans.pending ?? 0} awaiting action`}
-                title="Loans Disbursed"
-                value={currency.format(summary?.loans.totalDisbursed ?? 0)}
-              />
-              <StatCard
-                accent="blue"
-                icon={<PiggyBank className="h-5 w-5" />}
-                sub={`Expense ${currency.format(summary?.cooperativeTreasury.totalExpense ?? 0)}`}
-                title="Investments"
-                value={currency.format(summary?.investments.totalPrincipal ?? 0)}
-              />
-            </>
-          )}
+        {dashboard.loading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-36 rounded-2xl" />
+          ))
+        ) : (
+          <>
+            <StatCard
+              accent="dark"
+              icon={<Users className="h-5 w-5" />}
+              sub={`${summary?.members.active ?? 0} active · ${summary?.members.pending ?? 0} pending`}
+              title="Total Members"
+              value={`${summary?.members.total ?? 0}`}
+            />
+            <StatCard
+              accent="green"
+              icon={<ArrowDownCircle className="h-5 w-5" />}
+              sub={`Income ${currency.format(summary?.cooperativeTreasury.totalIncome ?? 0)}`}
+              title="Cooperative Treasury"
+              value={currency.format(summary?.cooperativeTreasury.balance ?? 0)}
+            />
+            <StatCard
+              accent="amber"
+              icon={<Activity className="h-5 w-5" />}
+              sub={`${summary?.loans.pending ?? 0} awaiting action`}
+              title="Loans Disbursed"
+              value={currency.format(summary?.loans.totalDisbursed ?? 0)}
+            />
+            <StatCard
+              accent="blue"
+              icon={<PiggyBank className="h-5 w-5" />}
+              sub={`Expense ${currency.format(summary?.cooperativeTreasury.totalExpense ?? 0)}`}
+              title="Investments"
+              value={currency.format(summary?.investments.totalPrincipal ?? 0)}
+            />
+          </>
+        )}
       </div>
 
       <section className={card}>
@@ -161,22 +175,36 @@ export default function AdminDashboardPage() {
             {
               key: "member",
               header: "Member",
-              render: (item) => <span className="font-medium text-[var(--text-900)] dark:text-[var(--text-50)]">{item.member.fullName}</span>,
+              render: (item) => (
+                <span className="font-medium text-text-900 dark:text-text-50">
+                  {item.member.fullName}
+                </span>
+              ),
             },
             {
               key: "amount",
               header: "Amount",
-              render: (item) => <span className="font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">{currency.format(item.amount)}</span>,
+              render: (item) => (
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  {currency.format(item.amount)}
+                </span>
+              ),
             },
             {
               key: "date",
               header: "Date",
-              render: (item) => <span className="text-[var(--text-400)]">{formatDate(item.createdAt)}</span>,
+              render: (item) => (
+                <span className="text-text-400">
+                  {formatDate(item.createdAt)}
+                </span>
+              ),
             },
             {
               key: "status",
               header: "Status",
-              render: (item) => <StatusBadge status={item.status} variant="warning" />,
+              render: (item) => (
+                <StatusBadge status={item.status} variant="warning" />
+              ),
             },
           ]}
           data={dashboard.data?.pendingPayments ?? []}
@@ -197,13 +225,20 @@ export default function AdminDashboardPage() {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {(dashboard.data?.pendingLoans ?? []).map((loan) => (
-                <div key={loan.id} className="rounded-xl bg-[var(--background-50)] px-4 py-3 dark:bg-[var(--background-800)]">
+                <div
+                  key={loan.id}
+                  className="rounded-xl bg-[var(--background-50)] px-4 py-3 dark:bg-[var(--background-800)]"
+                >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">{loan.member.fullName}</p>
+                    <p className="truncate text-sm font-semibold text-text-900 dark:text-text-50">
+                      {loan.member.fullName}
+                    </p>
                     <StatusBadge status={loan.status} variant="warning" />
                   </div>
-                  <p className="mt-2 text-sm font-medium text-[var(--text-900)] dark:text-[var(--text-50)]">{currency.format(loan.amount)}</p>
-                  <p className="mt-0.5 text-xs text-[var(--text-400)]">{loan.purpose}</p>
+                  <p className="mt-2 text-sm font-medium text-text-900 dark:text-text-50">
+                    {currency.format(loan.amount)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-text-400">{loan.purpose}</p>
                 </div>
               ))}
             </div>
@@ -221,13 +256,23 @@ export default function AdminDashboardPage() {
               {
                 key: "category",
                 header: "Name",
-                render: (item) => <span className="font-medium text-[var(--text-900)] dark:text-[var(--text-50)]">{item.category}</span>,
+                render: (item) => (
+                  <span className="font-medium text-text-900 dark:text-text-50">
+                    {item.category}
+                  </span>
+                ),
               },
               {
                 key: "type",
                 header: "Type",
                 render: (item) => (
-                  <span className={item.type === "INCOME" ? "text-[var(--primary-600)] dark:text-[var(--primary-400)]" : "text-red-500"}>
+                  <span
+                    className={
+                      item.type === "INCOME"
+                        ? "text-[var(--primary-600)] dark:text-[var(--primary-400)]"
+                        : "text-red-500"
+                    }
+                  >
                     {item.type}
                   </span>
                 ),
@@ -236,7 +281,7 @@ export default function AdminDashboardPage() {
                 key: "amount",
                 header: "Amount",
                 render: (item) => (
-                  <span className="flex items-center gap-2 text-[var(--text-500)]">
+                  <span className="flex items-center gap-2 text-text-500">
                     {item.type === "INCOME" ? (
                       <ArrowDownCircle className="h-4 w-4 text-[var(--primary-600)] dark:text-[var(--primary-400)]" />
                     ) : (
@@ -249,11 +294,17 @@ export default function AdminDashboardPage() {
               {
                 key: "createdAt",
                 header: "Date",
-                render: (item) => <span className="text-[var(--text-400)]">{formatDate(item.createdAt)}</span>,
+                render: (item) => (
+                  <span className="text-text-400">
+                    {formatDate(item.createdAt)}
+                  </span>
+                ),
               },
             ]}
             data={dashboard.data?.recentTransactions.items ?? []}
-            emptyDescription={dashboard.error ?? "No treasury transactions found."}
+            emptyDescription={
+              dashboard.error ?? "No treasury transactions found."
+            }
             loading={dashboard.loading}
           />
         </section>
@@ -261,33 +312,49 @@ export default function AdminDashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-3">
         <section className={card}>
-          <h2 className="mb-4 text-sm font-bold text-[var(--text-900)] dark:text-[var(--text-50)]">Membership Growth</h2>
+          <h2 className="mb-4 text-sm font-bold text-text-900 dark:text-text-50">
+            Membership Growth
+          </h2>
           {dashboard.loading ? (
             <ListSkeleton rows={6} />
           ) : (
             <div className="divide-y divide-[var(--background-200)] dark:divide-[var(--background-800)]">
-              {(dashboard.data?.membershipGrowth ?? []).slice(-6).map((item) => (
-                <div key={item.month} className="flex items-center justify-between py-2.5">
-                  <span className="text-sm text-[var(--text-400)]">{item.month}</span>
-                  <span className="text-sm font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">{item.count}</span>
-                </div>
-              ))}
+              {(dashboard.data?.membershipGrowth ?? [])
+                .slice(-6)
+                .map((item) => (
+                  <div
+                    key={item.month}
+                    className="flex items-center justify-between py-2.5"
+                  >
+                    <span className="text-sm text-text-400">{item.month}</span>
+                    <span className="text-sm font-semibold text-text-900 dark:text-text-50">
+                      {item.count}
+                    </span>
+                  </div>
+                ))}
             </div>
           )}
         </section>
 
         <section className={card}>
-          <h2 className="mb-4 text-sm font-bold text-[var(--text-900)] dark:text-[var(--text-50)]">Loan Portfolio</h2>
+          <h2 className="mb-4 text-sm font-bold text-text-900 dark:text-text-50">
+            Loan Portfolio
+          </h2>
           {dashboard.loading ? (
             <ListSkeleton rows={4} />
           ) : (
             <div className="divide-y divide-[var(--background-200)] dark:divide-[var(--background-800)]">
               {(dashboard.data?.loanPortfolio ?? []).map((item) => (
-                <div key={item.status} className="flex items-center justify-between py-2.5">
+                <div
+                  key={item.status}
+                  className="flex items-center justify-between py-2.5"
+                >
                   <StatusBadge status={item.status} variant="info" />
                   <div className="text-right">
-                    <p className="text-sm font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">{currency.format(item.totalAmount)}</p>
-                    <p className="text-xs text-[var(--text-400)]">{item.count} loans</p>
+                    <p className="text-sm font-semibold text-text-900 dark:text-text-50">
+                      {currency.format(item.totalAmount)}
+                    </p>
+                    <p className="text-xs text-text-400">{item.count} loans</p>
                   </div>
                 </div>
               ))}
@@ -296,15 +363,22 @@ export default function AdminDashboardPage() {
         </section>
 
         <section className={card}>
-          <h2 className="mb-4 text-sm font-bold text-[var(--text-900)] dark:text-[var(--text-50)]">Revenue</h2>
+          <h2 className="mb-4 text-sm font-bold text-text-900 dark:text-text-50">
+            Revenue
+          </h2>
           {dashboard.loading ? (
             <ListSkeleton rows={6} />
           ) : (
             <div className="divide-y divide-[var(--background-200)] dark:divide-[var(--background-800)]">
               {(dashboard.data?.revenue ?? []).slice(-6).map((item) => (
-                <div key={item.month} className="flex items-center justify-between py-2.5">
-                  <span className="text-sm text-[var(--text-400)]">{item.month}</span>
-                  <span className="text-sm font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">{currency.format(item.total)}</span>
+                <div
+                  key={item.month}
+                  className="flex items-center justify-between py-2.5"
+                >
+                  <span className="text-sm text-text-400">{item.month}</span>
+                  <span className="text-sm font-semibold text-text-900 dark:text-text-50">
+                    {currency.format(item.total)}
+                  </span>
                 </div>
               ))}
             </div>

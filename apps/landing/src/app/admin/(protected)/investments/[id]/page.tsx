@@ -34,10 +34,18 @@ const currency = new Intl.NumberFormat("en-NG", {
 
 export default function InvestmentDetailPage() {
   const params = useParams<{ id: string }>();
-  const investment = useApi<InvestmentDetail>(`/investments/products/${params.id}`);
+  const investment = useApi<InvestmentDetail>(
+    `/investments/products/${params.id}`,
+  );
   const subscriptions = investment.data?.subscriptions ?? [];
-  const totalInvested = subscriptions.reduce((sum, item) => sum + item.principal, 0);
-  const totalMaturity = subscriptions.reduce((sum, item) => sum + item.maturityAmount, 0);
+  const totalInvested = subscriptions.reduce(
+    (sum, item) => sum + item.principal,
+    0,
+  );
+  const totalMaturity = subscriptions.reduce(
+    (sum, item) => sum + item.maturityAmount,
+    0,
+  );
 
   return (
     <div className="space-y-6">
@@ -47,20 +55,45 @@ export default function InvestmentDetailPage() {
       />
 
       <section className="grid gap-4 md:grid-cols-4">
-        <StatCard title="Annual Rate" value={`${investment.data?.annualRate ?? 0}%`} icon={<TrendingUp className="h-5 w-5" />} accent="green" />
-        <StatCard title="Minimum Amount" value={currency.format(investment.data?.minimumAmount ?? 0)} icon={<Landmark className="h-5 w-5" />} accent="blue" />
-        <StatCard title="Amount Invested" value={currency.format(totalInvested)} icon={<Users className="h-5 w-5" />} accent="amber" />
-        <StatCard title="Maturity Payout" value={currency.format(totalMaturity)} icon={<TrendingUp className="h-5 w-5" />} accent="dark" />
+        <StatCard
+          title="Annual Rate"
+          value={`${investment.data?.annualRate ?? 0}%`}
+          icon={<TrendingUp className="h-5 w-5" />}
+          accent="green"
+        />
+        <StatCard
+          title="Minimum Amount"
+          value={currency.format(investment.data?.minimumAmount ?? 0)}
+          icon={<Landmark className="h-5 w-5" />}
+          accent="blue"
+        />
+        <StatCard
+          title="Amount Invested"
+          value={currency.format(totalInvested)}
+          icon={<Users className="h-5 w-5" />}
+          accent="amber"
+        />
+        <StatCard
+          title="Maturity Payout"
+          value={currency.format(totalMaturity)}
+          icon={<TrendingUp className="h-5 w-5" />}
+          accent="dark"
+        />
       </section>
 
       <section className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[var(--text-900)]">Subscribers</h2>
-          <StatusBadge status={investment.data?.status || "UNKNOWN"} variant={investment.data?.status === "ACTIVE" ? "success" : "warning"} />
+          <h2 className="text-xl font-semibold text-text-900">Subscribers</h2>
+          <StatusBadge
+            status={investment.data?.status || "UNKNOWN"}
+            variant={
+              investment.data?.status === "ACTIVE" ? "success" : "warning"
+            }
+          />
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-[var(--background-200)] text-[var(--text-400)]">
+            <thead className="border-b border-[var(--background-200)] text-text-400">
               <tr>
                 <th className="px-3 py-3 font-semibold">Subscriber</th>
                 <th className="px-3 py-3 font-semibold">Principal</th>
@@ -72,18 +105,40 @@ export default function InvestmentDetailPage() {
             </thead>
             <tbody>
               {subscriptions.map((subscriber) => (
-                <tr key={subscriber.id} className="border-b border-[var(--background-100)]">
+                <tr
+                  key={subscriber.id}
+                  className="border-b border-[var(--background-100)]"
+                >
                   <td className="px-3 py-3">
-                    <p className="font-semibold text-[var(--text-900)]">{subscriber.member.fullName}</p>
-                    <p className="text-xs text-[var(--text-400)]">{subscriber.member.membershipNumber}</p>
+                    <p className="font-semibold text-text-900">
+                      {subscriber.member.fullName}
+                    </p>
+                    <p className="text-xs text-text-400">
+                      {subscriber.member.membershipNumber}
+                    </p>
                   </td>
-                  <td className="px-3 py-3">{currency.format(subscriber.principal)}</td>
-                  <td className="px-3 py-3">{new Date(subscriber.maturityDate).toLocaleDateString("en-NG")}</td>
-                  <td className="px-3 py-3">{currency.format(subscriber.maturityAmount)}</td>
                   <td className="px-3 py-3">
-                    <StatusBadge status={subscriber.status} variant={subscriber.status === "APPROVED" ? "success" : "warning"} />
+                    {currency.format(subscriber.principal)}
                   </td>
-                  <td className="px-3 py-3">{subscriber.isDefaulter ? "Yes" : "No"}</td>
+                  <td className="px-3 py-3">
+                    {new Date(subscriber.maturityDate).toLocaleDateString(
+                      "en-NG",
+                    )}
+                  </td>
+                  <td className="px-3 py-3">
+                    {currency.format(subscriber.maturityAmount)}
+                  </td>
+                  <td className="px-3 py-3">
+                    <StatusBadge
+                      status={subscriber.status}
+                      variant={
+                        subscriber.status === "APPROVED" ? "success" : "warning"
+                      }
+                    />
+                  </td>
+                  <td className="px-3 py-3">
+                    {subscriber.isDefaulter ? "Yes" : "No"}
+                  </td>
                 </tr>
               ))}
             </tbody>

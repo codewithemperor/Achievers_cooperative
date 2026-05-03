@@ -34,8 +34,16 @@ interface LoansResponse {
     disbursedAt?: string | null;
     bankAccount?: BankAccountInfo | null;
     member: { fullName: string };
-    guarantorOne?: { id: string; fullName: string; membershipNumber: string } | null;
-    guarantorTwo?: { id: string; fullName: string; membershipNumber: string } | null;
+    guarantorOne?: {
+      id: string;
+      fullName: string;
+      membershipNumber: string;
+    } | null;
+    guarantorTwo?: {
+      id: string;
+      fullName: string;
+      membershipNumber: string;
+    } | null;
   }>;
 }
 
@@ -55,18 +63,35 @@ const currency = new Intl.NumberFormat("en-NG", {
   maximumFractionDigits: 0,
 });
 
-const tabs = ["ALL", "PENDING", "APPROVED", "DISBURSED", "IN_PROGRESS", "COMPLETED", "OVERDUE", "REJECTED"];
+const tabs = [
+  "ALL",
+  "PENDING",
+  "APPROVED",
+  "DISBURSED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "OVERDUE",
+  "REJECTED",
+];
 
 function variantForLoan(status: string) {
   switch (status) {
-    case "PENDING": return "warning";
-    case "APPROVED": return "info";
-    case "DISBURSED": return "info";
-    case "IN_PROGRESS": return "success";
-    case "COMPLETED": return "success";
-    case "OVERDUE": return "danger";
-    case "REJECTED": return "danger";
-    default: return "neutral";
+    case "PENDING":
+      return "warning";
+    case "APPROVED":
+      return "info";
+    case "DISBURSED":
+      return "info";
+    case "IN_PROGRESS":
+      return "success";
+    case "COMPLETED":
+      return "success";
+    case "OVERDUE":
+      return "danger";
+    case "REJECTED":
+      return "danger";
+    default:
+      return "neutral";
   }
 }
 
@@ -101,27 +126,30 @@ export default function LoansPage() {
   const selectedGuarantorOneId = watch("guarantorOneId");
   const selectedGuarantorTwoId = watch("guarantorTwoId");
 
-  const createLoan = (close?: () => void) => handleSubmit(async (values) => {
-    try {
-      setSubmitting(true);
-      await api.post("/loans", {
-        memberId: values.memberId,
-        guarantorOneId: values.guarantorOneId || undefined,
-        guarantorTwoId: values.guarantorTwoId || undefined,
-        amount: Number(values.amount),
-        tenorMonths: Number(values.tenorMonths),
-        purpose: values.purpose,
-      });
-      showSuccessToast("Loan request created successfully.");
-      reset();
-      await loans.refetch();
-      close?.();
-    } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to create loan request.");
-    } finally {
-      setSubmitting(false);
-    }
-  });
+  const createLoan = (close?: () => void) =>
+    handleSubmit(async (values) => {
+      try {
+        setSubmitting(true);
+        await api.post("/loans", {
+          memberId: values.memberId,
+          guarantorOneId: values.guarantorOneId || undefined,
+          guarantorTwoId: values.guarantorTwoId || undefined,
+          amount: Number(values.amount),
+          tenorMonths: Number(values.tenorMonths),
+          purpose: values.purpose,
+        });
+        showSuccessToast("Loan request created successfully.");
+        reset();
+        await loans.refetch();
+        close?.();
+      } catch (error: any) {
+        showErrorToast(
+          error?.response?.data?.message || "Unable to create loan request.",
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    });
 
   return (
     <div className="space-y-6">
@@ -143,52 +171,102 @@ export default function LoansPage() {
           >
             {({ close }) => (
               <>
-            <div className="grid gap-4 md:grid-cols-2">
-              {[
-                { label: "Member", field: "memberId", selectedKey: selectedMemberId },
-                { label: "Guarantor 1", field: "guarantorOneId", selectedKey: selectedGuarantorOneId },
-                { label: "Guarantor 2", field: "guarantorTwoId", selectedKey: selectedGuarantorTwoId },
-              ].map((entry, index) => (
-                <div className={index === 0 ? "md:col-span-2" : ""} key={entry.field}>
-                  <p className="mb-2 text-sm font-medium text-[var(--text-900)]">{entry.label}</p>
-                  <Autocomplete onSelectionChange={(key) => setValue(entry.field as any, key ? String(key) : "")} selectedKey={entry.selectedKey || null}>
-                    <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
-                      <Autocomplete.Value />
-                      <Autocomplete.ClearButton className="text-sm text-[var(--text-400)]" />
-                      <Autocomplete.Indicator />
-                    </Autocomplete.Trigger>
-                    <Autocomplete.Popover>
-                      <ListBox className="max-h-64 overflow-auto p-2">
-                        {(members.data?.items ?? []).map((member) => (
-                          <ListBox.Item id={member.id} key={member.id} textValue={member.fullName}>
-                            <div className="py-1">
-                              <p className="font-medium text-[var(--text-900)]">{member.fullName}</p>
-                              <p className="text-xs text-[var(--text-400)]">
-                                {member.membershipNumber} · {member.phoneNumber}
-                              </p>
-                            </div>
-                            <ListBox.ItemIndicator />
-                          </ListBox.Item>
-                        ))}
-                      </ListBox>
-                    </Autocomplete.Popover>
-                  </Autocomplete>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {[
+                    {
+                      label: "Member",
+                      field: "memberId",
+                      selectedKey: selectedMemberId,
+                    },
+                    {
+                      label: "Guarantor 1",
+                      field: "guarantorOneId",
+                      selectedKey: selectedGuarantorOneId,
+                    },
+                    {
+                      label: "Guarantor 2",
+                      field: "guarantorTwoId",
+                      selectedKey: selectedGuarantorTwoId,
+                    },
+                  ].map((entry, index) => (
+                    <div
+                      className={index === 0 ? "md:col-span-2" : ""}
+                      key={entry.field}
+                    >
+                      <p className="mb-2 text-sm font-medium text-text-900">
+                        {entry.label}
+                      </p>
+                      <Autocomplete
+                        onSelectionChange={(key) =>
+                          setValue(entry.field as any, key ? String(key) : "")
+                        }
+                        selectedKey={entry.selectedKey || null}
+                      >
+                        <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
+                          <Autocomplete.Value />
+                          <Autocomplete.ClearButton className="text-sm text-text-400" />
+                          <Autocomplete.Indicator />
+                        </Autocomplete.Trigger>
+                        <Autocomplete.Popover>
+                          <ListBox className="max-h-64 overflow-auto p-2">
+                            {(members.data?.items ?? []).map((member) => (
+                              <ListBox.Item
+                                id={member.id}
+                                key={member.id}
+                                textValue={member.fullName}
+                              >
+                                <div className="py-1">
+                                  <p className="font-medium text-text-900">
+                                    {member.fullName}
+                                  </p>
+                                  <p className="text-xs text-text-400">
+                                    {member.membershipNumber} ·{" "}
+                                    {member.phoneNumber}
+                                  </p>
+                                </div>
+                                <ListBox.ItemIndicator />
+                              </ListBox.Item>
+                            ))}
+                          </ListBox>
+                        </Autocomplete.Popover>
+                      </Autocomplete>
+                    </div>
+                  ))}
+                  <NumberInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Amount"
+                    name="amount"
+                    placeholder="Amount"
+                    min={1000}
+                  />
+                  <NumberInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Tenor Months"
+                    name="tenorMonths"
+                    placeholder="Tenor months"
+                    min={1}
+                  />
+                  <TextareaInput
+                    className="rounded-2xl md:col-span-2"
+                    control={control}
+                    label="Purpose"
+                    name="purpose"
+                    placeholder="Purpose"
+                    rows={5}
+                  />
                 </div>
-              ))}
-              <NumberInput className="rounded-2xl" control={control} label="Amount" name="amount" placeholder="Amount" min={1000} />
-              <NumberInput className="rounded-2xl" control={control} label="Tenor Months" name="tenorMonths" placeholder="Tenor months" min={1} />
-              <TextareaInput className="rounded-2xl md:col-span-2" control={control} label="Purpose" name="purpose" placeholder="Purpose" rows={5} />
-            </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
-                disabled={submitting}
-                onClick={() => void createLoan(close)()}
-                type="button"
-              >
-                {submitting ? "Creating..." : "Create loan"}
-              </button>
-            </div>
+                <div className="mt-6 flex justify-end">
+                  <button
+                    className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                    disabled={submitting}
+                    onClick={() => void createLoan(close)()}
+                    type="button"
+                  >
+                    {submitting ? "Creating..." : "Create loan"}
+                  </button>
+                </div>
               </>
             )}
           </AdminModal>
@@ -202,7 +280,7 @@ export default function LoansPage() {
             className={
               activeTab === tab
                 ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
-                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-900)]"
+                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
             }
             onClick={() => setActiveTab(tab)}
             type="button"
@@ -219,10 +297,13 @@ export default function LoansPage() {
             header: "Member",
             render: (item) => (
               <div>
-                <span className="font-semibold text-[var(--text-900)]">{item.member.fullName}</span>
+                <span className="font-semibold text-text-900">
+                  {item.member.fullName}
+                </span>
                 {item.bankAccount ? (
-                  <p className="mt-1 text-xs text-[var(--text-400)]">
-                    Bank: {item.bankAccount.bankName} &mdash; {item.bankAccount.accountNumber}
+                  <p className="mt-1 text-xs text-text-400">
+                    Bank: {item.bankAccount.bankName} &mdash;{" "}
+                    {item.bankAccount.accountNumber}
                   </p>
                 ) : null}
               </div>
@@ -236,7 +317,8 @@ export default function LoansPage() {
           {
             key: "remaining",
             header: "Remaining",
-            render: (item) => currency.format(item.remainingBalance ?? item.amount),
+            render: (item) =>
+              currency.format(item.remainingBalance ?? item.amount),
           },
           {
             key: "guarantors",
@@ -244,14 +326,16 @@ export default function LoansPage() {
             render: (item) => (
               <div className="text-sm">
                 <p>{item.guarantorOne?.fullName || "None"}</p>
-                <p className="text-[var(--text-400)]">{item.guarantorTwo?.fullName || "None"}</p>
+                <p className="text-text-400">
+                  {item.guarantorTwo?.fullName || "None"}
+                </p>
               </div>
             ),
           },
           {
             key: "status",
             header: "Status",
-              render: (item) => (
+            render: (item) => (
               <StatusBadge
                 status={item.status}
                 variant={variantForLoan(item.status) as any}
@@ -262,7 +346,10 @@ export default function LoansPage() {
             key: "view",
             header: "View",
             render: (item) => (
-              <Link className="font-semibold text-[var(--primary-700)]" href={`/admin/loans/${item.id}`}>
+              <Link
+                className="font-semibold text-[var(--primary-700)]"
+                href={`/admin/loans/${item.id}`}
+              >
                 Loan detail
               </Link>
             ),

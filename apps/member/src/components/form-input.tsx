@@ -90,7 +90,7 @@ export function TextInput<T extends FieldValues>({
             isInvalid={!!error}
           >
             <Label>{label}</Label>
-            <InputGroup>
+            <InputGroup className="rounded-xl border border-primary-500 focus-visible:border-0 ring-primary-500/20 ">
               {startContent && (
                 <InputGroup.Prefix>{startContent}</InputGroup.Prefix>
               )}
@@ -98,6 +98,7 @@ export function TextInput<T extends FieldValues>({
                 {...restField}
                 type={type}
                 placeholder={placeholder}
+                className="rounded-xl py-3 "
                 value={formattedValue}
                 onChange={(e) => onChange(e.target.value)}
               />
@@ -147,13 +148,14 @@ export function PasswordInput<T extends FieldValues>({
           isInvalid={!!error}
         >
           <Label>{label}</Label>
-          <InputGroup>
+          <InputGroup className="rounded-xl border border-primary-500 focus-visible:border-0 ring-primary-500/20">
             {startContent && (
               <InputGroup.Prefix>{startContent}</InputGroup.Prefix>
             )}
             <InputGroup.Input
               {...field}
               type={showPassword ? "text" : "password"}
+              className="rounded-xl py-3 "
               placeholder={placeholder}
               value={field.value ?? ""}
             />

@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRightLeft, BellRing, Landmark, MoonStar, PiggyBank, TrendingUp, Wallet } from "lucide-react";
+import {
+  ArrowRightLeft,
+  BellRing,
+  Landmark,
+  PiggyBank,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SummaryCard } from "@/components/summary-card";
 import { TransactionCard } from "@/components/transaction-card";
 import { useMemberData } from "@/hooks/use-member-data";
 import { useProfileData } from "@/hooks/use-profile-data";
 import { formatMoney, initialsFromName } from "@/lib/member-format";
+import { Avatar, ScrollShadow } from "@heroui/react";
 
 interface DashboardPayload {
   profile: {
@@ -78,7 +86,7 @@ const fallbackProfile = {
 };
 
 const quickActions = [
-  { label: "Transfer", href: "/wallet", icon: ArrowRightLeft },
+  { label: "Wallet", href: "/wallet", icon: ArrowRightLeft },
   { label: "Savings", href: "/savings", icon: PiggyBank },
   { label: "Loans", href: "/loans", icon: Wallet },
   { label: "Packages", href: "/packages", icon: Landmark },
@@ -95,7 +103,7 @@ const cardMeta = [
     href: "/wallet",
     ctaLabel: "Fund wallet",
     icon: <Wallet className="h-5 w-5" />,
-    gradient: "from-[#245f4f] via-[#194f49] to-[#123d42]",
+    gradient: "from-[#2a2420] via-[#1f1a17] to-[#151210]",
   },
   {
     title: "Savings balance",
@@ -105,7 +113,8 @@ const cardMeta = [
     href: "/savings",
     ctaLabel: "Open savings",
     icon: <PiggyBank className="h-5 w-5" />,
-    gradient: "from-[#1d7d58] via-[#176a53] to-[#105347]",
+
+    gradient: "from-[#2a0a0a] via-[#200808] to-[#160505]",
   },
   {
     title: "Investments",
@@ -115,7 +124,8 @@ const cardMeta = [
     href: "/investments",
     ctaLabel: "View products",
     icon: <TrendingUp className="h-5 w-5" />,
-    gradient: "from-[#3f8c53] via-[#2d7549] to-[#1b5c40]",
+    // Deep indigo / dark lavender
+    gradient: "from-[#16112e] via-[#110d26] to-[#0c081e]",
   },
   {
     title: "Loan balance",
@@ -125,12 +135,16 @@ const cardMeta = [
     href: "/loans",
     ctaLabel: "Manage loan",
     icon: <Landmark className="h-5 w-5" />,
-    gradient: "from-[#8c4a4a] via-[#784146] to-[#5f3340]",
+    // Deep burgundy / dark peach
+    gradient: "from-[#2a1210] via-[#200e0c] to-[#160908]",
   },
 ];
 
 export default function DashboardPage() {
-  const { data, loading } = useMemberData<DashboardPayload>("/members/me/dashboard", fallbackData);
+  const { data, loading } = useMemberData<DashboardPayload>(
+    "/members/me/dashboard",
+    fallbackData,
+  );
   const profile = useProfileData(fallbackProfile);
   const member = profile.data.member;
   const displayName = member?.fullName || data.profile.fullName || "Member";
@@ -143,98 +157,111 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <section className="pt-1 text-white">
+    <div className="space-y-6 -mt-6 -mx-5 overflow-hidden bg-[linear-gradient(180deg,var(--color-primary-600)_0%,var(--color-primary-700)_17rem,var(--color-background-50)_17rem,var(--color-background-50)_100%)] dark:bg-[linear-gradient(180deg,var(--color-primary-200)_0%,var(--color-primary-300)_17rem,var(--color-background-50)_17rem,var(--color-background-50)_100%)]">
+      {/* Header */}
+      <section className="text-white px-5 pt-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/18 bg-white/18 text-sm font-semibold backdrop-blur-md">
-              {member?.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={member.avatarUrl} alt={displayName} className="h-full w-full rounded-full object-cover" />
-              ) : (
-                initialsFromName(displayName)
-              )}
-            </div>
+            <Avatar>
+              <Avatar.Image alt={displayName} src={member?.avatarUrl || ""} />
+              <Avatar.Fallback>{initialsFromName(displayName)}</Avatar.Fallback>
+            </Avatar>
 
             <div className="min-w-0">
-              <p className="truncate text-lg font-semibold">{displayName}</p>
-              <p className="text-sm text-white/72">{member?.membershipNumber || data.profile.membershipNumber}</p>
+              <p className="truncate font-display font-semibold">
+                {displayName}
+              </p>
+              <p className="text-xs text-white/70">
+                {member?.membershipNumber || data.profile.membershipNumber}
+              </p>
             </div>
           </div>
 
           <div className="rounded-full border border-white/16 bg-white/10 p-1.5 backdrop-blur-md">
-            <ThemeToggle className="border-white/12 bg-transparent hover:bg-white/10 dark:border-white/10 dark:bg-transparent" />
+            <ThemeToggle />
           </div>
         </div>
       </section>
 
-      <section className="space-y-3 text-white">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-white/82">Quick actions</p>
-          <MoonStar className="h-4 w-4 text-white/60" />
+      {/* Quick Actions */}
+      <section className="space-y-2 text-white">
+        <div className="flex items-center justify-between px-5">
+          <p className="text-xs text-white/80">Quick actions</p>
         </div>
-        <div className="hide-scrollbar flex gap-3 overflow-x-auto pb-1">
-          {quickActions.map((action) => (
-            <Link
-              key={action.href}
-              href={action.href}
-              className="flex min-w-[145px] items-center gap-2 rounded-2xl border border-white/14 bg-[rgba(10,46,39,0.26)] px-4 py-3 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-xl"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/18">
-                <action.icon className="h-4 w-4" />
-              </span>
-              <span>{action.label}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between text-white">
-          <p className="text-sm text-white/82">Cards and accounts ({cardMeta.length})</p>
-          <span className="text-xs text-white/56">{loading ? "Syncing..." : "Live"}</span>
-        </div>
-
-        <div className="hide-scrollbar -mx-5 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-3">
-          {cardMeta.map((card) => (
-            <div key={card.title} className="w-[84%] shrink-0 snap-center">
-              <SummaryCard
-                eyebrow={card.eyebrow}
-                title={card.title}
-                value={cardValues[card.valueKey]}
-                caption={card.caption}
-                href={card.href}
-                ctaLabel={card.ctaLabel}
-                icon={card.icon}
-                gradient={card.gradient}
-              />
+        <div className="w-full">
+          <ScrollShadow orientation="horizontal">
+            <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1">
+              {quickActions.map((action, index) => (
+                <Link
+                  key={action.href}
+                  href={action.href}
+                  className={`flex min-w-28 items-center gap-2 rounded-2xl border border-white/14 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-xl
+                    ${index === 0 ? "ml-5" : ""}
+                    ${index === quickActions.length - 1 ? "mr-5" : ""}
+                  `}
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/18">
+                    <action.icon className="h-4 w-4" />
+                  </span>
+                  <span>{action.label}</span>
+                </Link>
+              ))}
             </div>
-          ))}
-        </div>
-
-        <div className="flex justify-center gap-2">
-          {cardMeta.slice(0, 3).map((card, index) => (
-            <span
-              key={card.title}
-              className={`h-2 w-2 rounded-full ${index === 1 ? "bg-[var(--primary-400)]" : "bg-white/35"}`}
-            />
-          ))}
+          </ScrollShadow>
         </div>
       </section>
 
-      <section className="rounded-[28px] bg-white/92 px-4 py-5 shadow-[0_22px_48px_rgba(15,23,42,0.08)] dark:bg-[color:rgba(15,23,42,0.72)]">
+      {/* Cards & Accounts */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between text-white px-5">
+          <p className="text-xs text-white/80">
+            Cards and accounts ({cardMeta.length})
+          </p>
+          <span className="text-xs text-white/56">
+            {loading ? "Syncing..." : "Live"}
+          </span>
+        </div>
+
+        <ScrollShadow orientation="horizontal">
+          <div className="hide-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3">
+            {cardMeta.map((card, index) => (
+              <div
+                key={card.title}
+                className={`w-[84%] shrink-0 snap-center
+                  ${index === 0 ? "ml-5" : ""}
+                  ${index === cardMeta.length - 1 ? "mr-5" : ""}
+                `}
+              >
+                <SummaryCard
+                  eyebrow={card.eyebrow}
+                  title={card.title}
+                  value={cardValues[card.valueKey]}
+                  caption={card.caption}
+                  href={card.href}
+                  ctaLabel={card.ctaLabel}
+                  icon={card.icon}
+                  gradient={card.gradient}
+                />
+              </div>
+            ))}
+          </div>
+        </ScrollShadow>
+      </section>
+
+      {/* Recent Transactions — sits on background-50 */}
+      <section className="rounded-t-[28px] bg-background-50 px-5 pb-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-[1.35rem] font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">
+            <h2 className="text-xl font-semibold font-display tracking-tight text-text-900">
               Recent transactions
             </h2>
-            <p className="mt-1 text-sm text-[var(--text-400)]">
+            <p className="text-xs text-text-500">
               {data.summary.transactionCount} total activity records available
             </p>
           </div>
           <Link
             href="/transactions"
-            className="rounded-2xl border border-[var(--background-200)] px-4 py-2 text-sm font-medium text-[var(--text-700)] dark:border-white/10 dark:text-[var(--text-200)]"
+            className="rounded-2xl border border-background-200 dark:border-white/10 px-4 py-2 text-xs font-medium text-text-700"
           >
             View all
           </Link>
@@ -247,15 +274,18 @@ export default function DashboardPage() {
                 key={item.id}
                 type={item.type}
                 title={item.description || undefined}
-                subtitle={item.reference || item.description || "Member transaction"}
+                subtitle={
+                  item.reference || item.description || "Member transaction"
+                }
                 amount={item.amount}
                 status={item.status}
                 timestamp={item.createdAt}
               />
             ))
           ) : (
-            <div className="rounded-[24px] border border-dashed border-[var(--background-300)] px-5 py-10 text-center text-sm text-[var(--text-400)]">
-              Your recent activity will appear here after your first transaction.
+            <div className="rounded-[24px] border border-dashed border-background-300 px-5 py-10 text-center text-sm text-text-400">
+              Your recent activity will appear here after your first
+              transaction.
             </div>
           )}
         </div>

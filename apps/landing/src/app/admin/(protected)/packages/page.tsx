@@ -9,7 +9,11 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { AdminModal } from "@/components/ui/admin-modal";
-import { NumberInput, SelectInput, TextInput } from "@/components/ui/form-input";
+import {
+  NumberInput,
+  SelectInput,
+  TextInput,
+} from "@/components/ui/form-input";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 interface PackagesResponse {
@@ -72,7 +76,9 @@ export default function PackagesPage() {
       reset();
       await packages.refetch();
     } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to create package.");
+      showErrorToast(
+        error?.response?.data?.message || "Unable to create package.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -85,7 +91,9 @@ export default function PackagesPage() {
       showSuccessToast("Package status updated successfully.");
       await packages.refetch();
     } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to update package status.");
+      showErrorToast(
+        error?.response?.data?.message || "Unable to update package status.",
+      );
     } finally {
       setStatusUpdatingId(null);
     }
@@ -112,11 +120,44 @@ export default function PackagesPage() {
             {({ close }) => (
               <>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <TextInput className="rounded-2xl md:col-span-2" control={control} label="Package Name" name="name" placeholder="Package name" />
-                  <NumberInput className="rounded-2xl" control={control} label="Total Amount" name="totalAmount" placeholder="Total amount" min={0} />
-                  <NumberInput className="rounded-2xl" control={control} label="Duration Months" name="durationMonths" placeholder="Duration months" min={1} />
-                  <SelectInput className="rounded-2xl" control={control} label="Penalty Type" name="penaltyType" options={penaltyOptions} />
-                  <NumberInput className="rounded-2xl" control={control} label="Penalty Value" name="penaltyValue" placeholder="Penalty value" min={0} />
+                  <TextInput
+                    className="rounded-2xl md:col-span-2"
+                    control={control}
+                    label="Package Name"
+                    name="name"
+                    placeholder="Package name"
+                  />
+                  <NumberInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Total Amount"
+                    name="totalAmount"
+                    placeholder="Total amount"
+                    min={0}
+                  />
+                  <NumberInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Duration Months"
+                    name="durationMonths"
+                    placeholder="Duration months"
+                    min={1}
+                  />
+                  <SelectInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Penalty Type"
+                    name="penaltyType"
+                    options={penaltyOptions}
+                  />
+                  <NumberInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Penalty Value"
+                    name="penaltyValue"
+                    placeholder="Penalty value"
+                    min={0}
+                  />
                 </div>
                 <div className="mt-6 flex justify-end">
                   <button
@@ -139,11 +180,15 @@ export default function PackagesPage() {
                           await packages.refetch();
                           close();
                         } catch (error: any) {
-                          showErrorToast(error?.response?.data?.message || "Unable to create package.");
+                          showErrorToast(
+                            error?.response?.data?.message ||
+                              "Unable to create package.",
+                          );
                         } finally {
                           setSubmitting(false);
                         }
-                      })()}
+                      })()
+                    }
                     type="button"
                   >
                     {submitting ? "Saving..." : "Save package"}
@@ -159,7 +204,9 @@ export default function PackagesPage() {
           {
             key: "name",
             header: "Package",
-            render: (item) => <span className="font-semibold text-[var(--text-900)]">{item.name}</span>,
+            render: (item) => (
+              <span className="font-semibold text-text-900">{item.name}</span>
+            ),
           },
           {
             key: "amount",
@@ -179,30 +226,44 @@ export default function PackagesPage() {
           {
             key: "status",
             header: "Status",
-            render: (item) => <StatusBadge status={item.isActive ? "ACTIVE" : "INACTIVE"} variant={item.isActive ? "success" : "warning"} />,
+            render: (item) => (
+              <StatusBadge
+                status={item.isActive ? "ACTIVE" : "INACTIVE"}
+                variant={item.isActive ? "success" : "warning"}
+              />
+            ),
           },
           {
             key: "detail",
             header: "Detail",
             render: (item) => (
               <div className="flex items-center gap-3">
-                <Link className="font-semibold text-[var(--primary-700)]" href={`/admin/packages/${item.id}`}>
+                <Link
+                  className="font-semibold text-[var(--primary-700)]"
+                  href={`/admin/packages/${item.id}`}
+                >
                   Open detail
                 </Link>
                 <button
-                  className="text-xs font-semibold text-[var(--text-700)]"
+                  className="text-xs font-semibold text-text-700"
                   disabled={statusUpdatingId === item.id}
                   onClick={() => void updateStatus(item.id, !item.isActive)}
                   type="button"
                 >
-                  {statusUpdatingId === item.id ? "Updating..." : item.isActive ? "Deactivate" : "Activate"}
+                  {statusUpdatingId === item.id
+                    ? "Updating..."
+                    : item.isActive
+                      ? "Deactivate"
+                      : "Activate"}
                 </button>
               </div>
             ),
           },
         ]}
         data={packages.data?.items ?? []}
-        emptyDescription={packages.error || "No packages have been configured yet."}
+        emptyDescription={
+          packages.error || "No packages have been configured yet."
+        }
         loading={packages.loading}
       />
     </div>

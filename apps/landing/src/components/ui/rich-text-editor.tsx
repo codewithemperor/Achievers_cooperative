@@ -18,7 +18,11 @@ const actions = [
   { label: "Numbered", command: "insertOrderedList" },
 ];
 
-export function RichTextEditor({ value, onChange, minHeight = 260 }: RichTextEditorProps) {
+export function RichTextEditor({
+  value,
+  onChange,
+  minHeight = 260,
+}: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -34,7 +38,7 @@ export function RichTextEditor({ value, onChange, minHeight = 260 }: RichTextEdi
         {actions.map((action) => (
           <button
             key={action.label}
-            className="rounded-full border border-primary-900/12 bg-white px-3 py-1.5 text-xs font-semibold text-[var(--text-900)]"
+            className="rounded-full border border-primary-900/12 bg-white px-3 py-1.5 text-xs font-semibold text-text-900"
             onClick={() => {
               document.execCommand(action.command, false, action.value);
               onChange(editorRef.current?.innerHTML || "");
@@ -47,7 +51,7 @@ export function RichTextEditor({ value, onChange, minHeight = 260 }: RichTextEdi
       </div>
       <div
         ref={editorRef}
-        className="prose prose-sm max-w-none px-4 py-4 text-[var(--text-900)] outline-none"
+        className="prose prose-sm max-w-none px-4 py-4 text-text-900 outline-none"
         contentEditable
         onInput={() => onChange(editorRef.current?.innerHTML || "")}
         style={{ minHeight }}

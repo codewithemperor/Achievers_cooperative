@@ -19,7 +19,7 @@ interface ConfirmActionButtonProps {
 const toneClassName: Record<ActionTone, string> = {
   success: "bg-[var(--primary-700)] text-white",
   danger: "bg-[#b42318] text-white",
-  neutral: "border border-primary-900/14 bg-white text-[var(--text-900)]",
+  neutral: "border border-primary-900/14 bg-white text-text-900",
 };
 
 export function ConfirmActionButton({

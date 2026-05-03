@@ -36,18 +36,24 @@ export default function PaymentsPage() {
       showSuccessToast("Payment approved successfully.");
       await payments.refetch();
     } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to approve payment.");
+      showErrorToast(
+        error?.response?.data?.message || "Unable to approve payment.",
+      );
       throw error;
     }
   }
 
   async function reject(id: string) {
     try {
-      await api.patch(`/payments/${id}/reject`, { reason: "Verification failed" });
+      await api.patch(`/payments/${id}/reject`, {
+        reason: "Verification failed",
+      });
       showSuccessToast("Payment rejected successfully.");
       await payments.refetch();
     } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to reject payment.");
+      showErrorToast(
+        error?.response?.data?.message || "Unable to reject payment.",
+      );
       throw error;
     }
   }
@@ -63,7 +69,11 @@ export default function PaymentsPage() {
           {
             key: "member",
             header: "Member",
-            render: (item) => <span className="font-semibold text-[var(--text-900)]">{item.member.fullName}</span>,
+            render: (item) => (
+              <span className="font-semibold text-text-900">
+                {item.member.fullName}
+              </span>
+            ),
           },
           {
             key: "amount",
@@ -76,7 +86,13 @@ export default function PaymentsPage() {
             render: (item) => (
               <StatusBadge
                 status={item.status}
-                variant={item.status === "APPROVED" ? "success" : item.status === "REJECTED" ? "danger" : "warning"}
+                variant={
+                  item.status === "APPROVED"
+                    ? "success"
+                    : item.status === "REJECTED"
+                      ? "danger"
+                      : "warning"
+                }
               />
             ),
           },
@@ -92,10 +108,24 @@ export default function PaymentsPage() {
               item.receiptUrl ? (
                 <AdminModal
                   title="Payment Proof"
-                  trigger={<button className="font-semibold text-[var(--primary-700)]" type="button">View proof</button>}
+                  trigger={
+                    <button
+                      className="font-semibold text-[var(--primary-700)]"
+                      type="button"
+                    >
+                      View proof
+                    </button>
+                  }
                 >
                   <div className="overflow-hidden rounded-[1.5rem] bg-[rgba(245,240,232,0.7)] p-3">
-                    <Image alt="Payment proof" className="h-auto w-full rounded-[1rem] object-contain" height={900} src={item.receiptUrl} unoptimized width={900} />
+                    <Image
+                      alt="Payment proof"
+                      className="h-auto w-full rounded-[1rem] object-contain"
+                      height={900}
+                      src={item.receiptUrl}
+                      unoptimized
+                      width={900}
+                    />
                   </div>
                 </AdminModal>
               ) : (
@@ -126,12 +156,16 @@ export default function PaymentsPage() {
                   />
                 </div>
               ) : (
-                <span className="text-xs text-[var(--text-400)]">No actions available</span>
+                <span className="text-xs text-text-400">
+                  No actions available
+                </span>
               ),
           },
         ]}
         data={payments.data?.items ?? []}
-        emptyDescription={payments.error || "No payment verifications are waiting."}
+        emptyDescription={
+          payments.error || "No payment verifications are waiting."
+        }
         loading={payments.loading}
       />
     </div>

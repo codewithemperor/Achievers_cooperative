@@ -7,7 +7,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { HandCoins } from "lucide-react";
 import { MemberModal } from "@/components/member-modal";
-import { NumberInput, SelectInput, TextareaInput } from "@/components/form-input";
+import {
+  NumberInput,
+  SelectInput,
+  TextareaInput,
+} from "@/components/form-input";
 import type { SelectOption } from "@/components/form-input";
 import { SummaryCard } from "@/components/summary-card";
 import { TransactionCard } from "@/components/transaction-card";
@@ -60,7 +64,11 @@ const ACTIVE_STATUSES = ["APPROVED", "DISBURSED", "IN_PROGRESS", "OVERDUE"];
 
 const loanSchema = z.object({
   amount: z.coerce.number().positive("Enter a valid loan amount"),
-  tenorMonths: z.coerce.number().int().positive("Enter tenor in months").max(60, "Maximum tenor is 60 months"),
+  tenorMonths: z.coerce
+    .number()
+    .int()
+    .positive("Enter tenor in months")
+    .max(60, "Maximum tenor is 60 months"),
   purpose: z.string().min(1, "Loan purpose is required").max(500),
   guarantorOneId: z.string(),
   guarantorTwoId: z.string(),
@@ -76,14 +84,24 @@ function maskAccountNumber(num: string) {
 
 export default function LoansPage() {
   const loans = useMemberData<LoansPayload>("/loans", { items: [] });
-  const guarantors = useMemberData<GuarantorPayload>("/members/guarantors", { items: [] });
+  const guarantors = useMemberData<GuarantorPayload>("/members/guarantors", {
+    items: [],
+  });
   const bankAccounts = useMemberData<BankAccount[]>("/bank-accounts", []);
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<LoanItem | null>(null);
 
-  const hasActiveLoan = loans.data.items.some((loan) => ACTIVE_STATUSES.includes(loan.status.toUpperCase()));
-  const totalOutstanding = loans.data.items.reduce((sum, item) => sum + (item.remainingBalance || 0), 0);
-  const totalRequested = loans.data.items.reduce((sum, item) => sum + item.amount, 0);
+  const hasActiveLoan = loans.data.items.some((loan) =>
+    ACTIVE_STATUSES.includes(loan.status.toUpperCase()),
+  );
+  const totalOutstanding = loans.data.items.reduce(
+    (sum, item) => sum + (item.remainingBalance || 0),
+    0,
+  );
+  const totalRequested = loans.data.items.reduce(
+    (sum, item) => sum + item.amount,
+    0,
+  );
 
   const { control, handleSubmit, reset, watch } = useForm<LoanFormValues>({
     resolver: zodResolver(loanSchema),
@@ -99,10 +117,12 @@ export default function LoansPage() {
 
   const selectedGuarantorOne = watch("guarantorOneId");
 
-  const guarantorOneOptions: SelectOption[] = guarantors.data.items.map((g) => ({
-    id: g.id,
-    label: `${g.fullName} / ${g.membershipNumber}`,
-  }));
+  const guarantorOneOptions: SelectOption[] = guarantors.data.items.map(
+    (g) => ({
+      id: g.id,
+      label: `${g.fullName} / ${g.membershipNumber}`,
+    }),
+  );
 
   const guarantorTwoOptions: SelectOption[] = guarantors.data.items
     .filter((g) => g.id !== selectedGuarantorOne)
@@ -117,7 +137,10 @@ export default function LoansPage() {
   }));
 
   const defaultBankAccountId = useMemo(
-    () => bankAccounts.data.find((account) => account.isDefault)?.id ?? bankAccounts.data[0]?.id ?? "",
+    () =>
+      bankAccounts.data.find((account) => account.isDefault)?.id ??
+      bankAccounts.data[0]?.id ??
+      "",
     [bankAccounts.data],
   );
 
@@ -127,7 +150,9 @@ export default function LoansPage() {
 
     const result = await apiCallWithAlert({
       title: editingLoan ? "Update Loan Application" : "Loan Application",
-      loadingText: editingLoan ? "Updating loan application..." : "Submitting loan application...",
+      loadingText: editingLoan
+        ? "Updating loan application..."
+        : "Submitting loan application...",
       apiCall: () =>
         method(endpoint, {
           amount: values.amount,
@@ -137,7 +162,9 @@ export default function LoansPage() {
           guarantorTwoId: values.guarantorTwoId || undefined,
           bankAccountId: values.bankAccountId || undefined,
         }),
-      successTitle: editingLoan ? "Application Updated" : "Application Submitted",
+      successTitle: editingLoan
+        ? "Application Updated"
+        : "Application Submitted",
       successText: editingLoan
         ? "Your pending loan application has been updated."
         : "Your loan application has been submitted and is pending review.",
@@ -210,88 +237,119 @@ export default function LoansPage() {
         title="Outstanding balance"
         value={formatMoney(totalOutstanding)}
         caption={`Total requested: ${formatMoney(totalRequested)}`}
-        ctaLabel={!hasActiveLoan && bankAccounts.data.length ? "New application" : undefined}
-        onCtaClick={!hasActiveLoan && bankAccounts.data.length ? openCreateModal : undefined}
+        ctaLabel={
+          !hasActiveLoan && bankAccounts.data.length
+            ? "New application"
+            : undefined
+        }
+        onCtaClick={
+          !hasActiveLoan && bankAccounts.data.length
+            ? openCreateModal
+            : undefined
+        }
         icon={<HandCoins className="h-5 w-5" />}
-        gradient="from-[#ff7b7b] via-[#f14d73] to-[#cb2d58]"
+        gradient="from-[#2a1210] via-[#200e0c] to-[#160908]"
       />
 
+      {/* Active loan notice — styled to match the loan card's dark burgundy tone */}
       {hasActiveLoan ? (
-        <section className="rounded-[28px] border border-amber-200 bg-amber-50/95 p-4 dark:border-amber-800 dark:bg-amber-950/30">
-          <h2 className="text-lg font-semibold text-amber-800 dark:text-amber-200">Active loan in progress</h2>
-          <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-            You already have an approved or active loan. Finish it before creating another application.
+        <section className="rounded-[20px] border border-[#3d1a17] bg-[#2a1210] px-4 py-3">
+          <h2 className="text-sm font-semibold text-red-300">
+            Active loan in progress
+          </h2>
+          <p className="mt-0.5 text-xs text-red-400/80">
+            You have an ongoing loan. Complete your current repayment before
+            submitting a new application.
           </p>
         </section>
       ) : bankAccounts.data.length === 0 ? (
-        <section className="rounded-[28px] bg-white/92 p-4 shadow-[0_22px_48px_rgba(15,23,42,0.08)] dark:bg-[color:rgba(15,23,42,0.72)]">
-          <h2 className="text-lg font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">Apply for a loan</h2>
-          <p className="mt-1 text-sm text-[var(--text-400)]">
-            Add a bank account in your{" "}
-            <Link href="/account/bank-account" className="font-semibold text-[var(--primary-600)] underline dark:text-[var(--primary-700)]">
+        <section className="rounded-[20px] border border-background-200 dark:border-white/8 bg-background-50 dark:bg-background-100 px-4 py-3">
+          <h2 className="text-sm font-semibold text-text-900 dark:text-text-50">
+            Bank account required
+          </h2>
+          <p className="mt-0.5 text-xs text-text-400">
+            You need a saved bank account before you can apply for a loan. Add
+            one in your{" "}
+            <Link
+              href="/account/bank-account"
+              className="font-semibold text-primary-600 dark:text-primary-400 underline"
+            >
               Bank Account
             </Link>{" "}
-            page before submitting a request.
+            settings.
           </p>
         </section>
       ) : null}
 
-      <section className="space-y-3">
+      {/* Loan list */}
+      <section className="space-y-5 mt-5">
         <div>
-          <h2 className="text-xl font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">My loans</h2>
-          <p className="mt-1 text-sm text-[var(--text-400)]">Applications and repayment states are now shown in the same shared card format.</p>
+          <h2 className="text-xl font-semibold font-display tracking-tight text-text-900">
+            My loans history
+          </h2>
+          <p className="text-xs text-text-500">
+            All your loan applications and their current repayment status.
+          </p>
         </div>
 
         {loans.data.items.length ? (
-          loans.data.items.map((loan) => (
-            <TransactionCard
-              key={loan.id}
-              type="LOAN"
-              title={loan.purpose}
-              subtitle={`${loan.tenorMonths} months${loan.bankAccount ? ` • ${loan.bankAccount.bankName}` : ""}`}
-              amount={loan.remainingBalance ?? loan.amount}
-              status={loan.status}
-              timestamp={loan.bankAccount ? new Date().toISOString() : new Date().toISOString()}
-              ctaLabel="View details"
-              href={loan.canEdit || loan.canDelete ? undefined : `/loans/${loan.id}`}
-              extra={
-                loan.canEdit || loan.canDelete ? (
-                  <div className="flex flex-wrap gap-2">
-                    {loan.canEdit ? (
-                      <button
-                        className="rounded-full border border-[var(--background-200)] px-3 py-1.5 text-xs font-semibold text-[var(--text-700)]"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          openEditModal(loan);
-                        }}
-                        type="button"
-                      >
-                        Edit
-                      </button>
-                    ) : null}
-                    {loan.canDelete ? (
-                      <button
-                        className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          void deleteLoan(loan);
-                        }}
-                        type="button"
-                      >
-                        Delete
-                      </button>
-                    ) : null}
-                  </div>
-                ) : (
-                  <Link href={`/loans/${loan.id}`} className="text-xs font-semibold text-[var(--primary-600)] dark:text-[var(--primary-700)]">
-                    Paid so far: {formatMoney(loan.amountPaidSoFar ?? 0)}
-                  </Link>
-                )
-              }
-            />
-          ))
+          <div className="space-y-2 flex flex-col">
+            {loans.data.items.map((loan) => (
+              <TransactionCard
+                key={loan.id}
+                type="LOAN"
+                title={loan.purpose}
+                subtitle={`${loan.tenorMonths} months${loan.bankAccount ? ` · ${loan.bankAccount.bankName}` : ""}`}
+                amount={loan.remainingBalance ?? loan.amount}
+                status={loan.status}
+                timestamp={new Date().toISOString()}
+                href={
+                  loan.canEdit || loan.canDelete
+                    ? undefined
+                    : `/loans/${loan.id}`
+                }
+                extra={
+                  loan.canEdit || loan.canDelete ? (
+                    <>
+                      {loan.canEdit ? (
+                        <button
+                          className="rounded-full border border-background-200 dark:border-white/10 px-3 py-1 text-xs font-semibold text-text-700 dark:text-text-200"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            openEditModal(loan);
+                          }}
+                          type="button"
+                        >
+                          Edit
+                        </button>
+                      ) : null}
+                      {loan.canDelete ? (
+                        <button
+                          className="rounded-full border border-red-200 dark:border-red-900 px-3 py-1 text-xs font-semibold text-red-600 dark:text-red-400"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            void deleteLoan(loan);
+                          }}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <Link
+                      href={`/loans/${loan.id}`}
+                      className="text-xs font-semibold text-primary-600 dark:text-primary-400"
+                    >
+                      Paid: {formatMoney(loan.amountPaidSoFar ?? 0)}
+                    </Link>
+                  )
+                }
+              />
+            ))}
+          </div>
         ) : (
-          <div className="rounded-[24px] border border-dashed border-[var(--background-300)] px-5 py-10 text-center text-sm text-[var(--text-400)]">
+          <div className="rounded-[20px] border border-dashed border-background-300 dark:border-white/10 px-5 py-10 text-center text-sm text-text-400">
             You have not created any loan applications yet.
           </div>
         )}
@@ -303,8 +361,8 @@ export default function LoansPage() {
           setIsLoanModalOpen(false);
           setEditingLoan(null);
         }}
-        title={editingLoan ? "Edit loan application" : "Loan application"}
-        description="Provide the amount, tenor, purpose, and the disbursement account for your request."
+        title={editingLoan ? "Edit loan application" : "New loan application"}
+        description="Fill in the amount, repayment period, purpose, and the account you want the funds sent to."
       >
         <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
           <SelectInput
@@ -322,7 +380,11 @@ export default function LoansPage() {
             placeholder="Enter amount"
             isRequired
             min={1}
-            formatOptions={{ style: "currency", currency: "NGN", maximumFractionDigits: 0 }}
+            formatOptions={{
+              style: "currency",
+              currency: "NGN",
+              maximumFractionDigits: 0,
+            }}
           />
           <NumberInput
             control={control}
@@ -358,7 +420,7 @@ export default function LoansPage() {
             options={guarantorTwoOptions}
           />
           <button
-            className="min-h-[44px] rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+            className="min-h-11 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
             type="submit"
           >
             {editingLoan ? "Save changes" : "Submit application"}

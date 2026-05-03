@@ -30,8 +30,12 @@ const currency = new Intl.NumberFormat("en-NG", {
 });
 
 export default function InvestmentsPage() {
-  const products = useApi<ProductsResponse | Array<any>>("/investments/products");
-  const rows = Array.isArray(products.data) ? products.data : products.data?.items ?? [];
+  const products = useApi<ProductsResponse | Array<any>>(
+    "/investments/products",
+  );
+  const rows = Array.isArray(products.data)
+    ? products.data
+    : (products.data?.items ?? []);
   const [submitting, setSubmitting] = useState(false);
   const { control, handleSubmit, reset } = useForm<{
     name: string;
@@ -60,7 +64,10 @@ export default function InvestmentsPage() {
       reset();
       await products.refetch();
     } catch (error: any) {
-      showErrorToast(error?.response?.data?.message || "Unable to create investment product.");
+      showErrorToast(
+        error?.response?.data?.message ||
+          "Unable to create investment product.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -87,10 +94,37 @@ export default function InvestmentsPage() {
             {({ close }) => (
               <>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <TextInput className="rounded-2xl md:col-span-2" control={control} label="Product Name" name="name" placeholder="Product name" />
-                  <NumberInput className="rounded-2xl" control={control} label="Rate %" name="annualRate" placeholder="Rate %" min={0} />
-                  <NumberInput className="rounded-2xl" control={control} label="Minimum Amount" name="minimumAmount" placeholder="Minimum amount" min={0} />
-                  <NumberInput className="rounded-2xl md:col-span-2" control={control} label="Duration Months" name="durationMonths" placeholder="Duration months" min={1} />
+                  <TextInput
+                    className="rounded-2xl md:col-span-2"
+                    control={control}
+                    label="Product Name"
+                    name="name"
+                    placeholder="Product name"
+                  />
+                  <NumberInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Rate %"
+                    name="annualRate"
+                    placeholder="Rate %"
+                    min={0}
+                  />
+                  <NumberInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Minimum Amount"
+                    name="minimumAmount"
+                    placeholder="Minimum amount"
+                    min={0}
+                  />
+                  <NumberInput
+                    className="rounded-2xl md:col-span-2"
+                    control={control}
+                    label="Duration Months"
+                    name="durationMonths"
+                    placeholder="Duration months"
+                    min={1}
+                  />
                 </div>
                 <div className="mt-6 flex justify-end">
                   <button
@@ -106,16 +140,22 @@ export default function InvestmentsPage() {
                             minimumAmount: Number(values.minimumAmount),
                             durationMonths: Number(values.durationMonths),
                           });
-                          showSuccessToast("Investment product created successfully.");
+                          showSuccessToast(
+                            "Investment product created successfully.",
+                          );
                           reset();
                           await products.refetch();
                           close();
                         } catch (error: any) {
-                          showErrorToast(error?.response?.data?.message || "Unable to create investment product.");
+                          showErrorToast(
+                            error?.response?.data?.message ||
+                              "Unable to create investment product.",
+                          );
                         } finally {
                           setSubmitting(false);
                         }
-                      })()}
+                      })()
+                    }
                     type="button"
                   >
                     {submitting ? "Saving..." : "Save product"}
@@ -131,7 +171,9 @@ export default function InvestmentsPage() {
           {
             key: "name",
             header: "Product",
-            render: (item) => <span className="font-semibold text-[var(--text-900)]">{item.name}</span>,
+            render: (item) => (
+              <span className="font-semibold text-text-900">{item.name}</span>
+            ),
           },
           {
             key: "rate",
@@ -151,13 +193,21 @@ export default function InvestmentsPage() {
           {
             key: "status",
             header: "Status",
-            render: (item) => <StatusBadge status={item.status} variant={item.status === "ACTIVE" ? "success" : "warning"} />,
+            render: (item) => (
+              <StatusBadge
+                status={item.status}
+                variant={item.status === "ACTIVE" ? "success" : "warning"}
+              />
+            ),
           },
           {
             key: "detail",
             header: "Detail",
             render: (item) => (
-              <Link className="font-semibold text-[var(--primary-700)]" href={`/admin/investments/${item.id}`}>
+              <Link
+                className="font-semibold text-[var(--primary-700)]"
+                href={`/admin/investments/${item.id}`}
+              >
                 Open detail
               </Link>
             ),

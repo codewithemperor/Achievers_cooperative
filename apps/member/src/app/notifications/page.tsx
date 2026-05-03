@@ -17,7 +17,10 @@ interface NotificationsPayload {
 }
 
 export default function NotificationsPage() {
-  const notifications = useMemberData<NotificationsPayload>("/notifications", { unreadCount: 0, items: [] });
+  const notifications = useMemberData<NotificationsPayload>("/notifications", {
+    unreadCount: 0,
+    items: [],
+  });
   const [markingAll, setMarkingAll] = useState(false);
 
   async function markAllRead() {
@@ -35,8 +38,12 @@ export default function NotificationsPage() {
       <section className="rounded-[28px] bg-white/92 p-4 shadow-[0_22px_48px_rgba(15,23,42,0.08)] dark:bg-[color:rgba(15,23,42,0.72)]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">Notifications</h1>
-            <p className="mt-1 text-sm text-[var(--text-400)]">Unread notifications: {notifications.data.unreadCount}</p>
+            <h1 className="text-xl font-semibold text-text-900 dark:text-text-50">
+              Notifications
+            </h1>
+            <p className="mt-1 text-sm text-text-400">
+              Unread notifications: {notifications.data.unreadCount}
+            </p>
           </div>
           <button
             className="rounded-full bg-[var(--primary-600)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
@@ -63,7 +70,7 @@ export default function NotificationsPage() {
             />
           ))
         ) : (
-          <div className="rounded-[24px] border border-dashed border-[var(--background-300)] px-5 py-10 text-center text-sm text-[var(--text-400)]">
+          <div className="rounded-[24px] border border-dashed border-background-300 px-5 py-10 text-center text-sm text-text-400">
             You do not have any notifications yet.
           </div>
         )}

@@ -1,24 +1,26 @@
 import type { Metadata, Viewport } from "next";
-import { Glory, Figtree } from "next/font/google";
+import { Questrial, Figtree } from "next/font/google";
 import { MemberShell } from "@/components/member-shell";
 import { Providers } from "./providers";
 import "./globals.css";
 
-const glory = Glory({
+const body = Questrial({
   subsets: ["latin"],
-  variable: "--font-display-family",
+  variable: "--font-body-family",
+  weight: "400",
   display: "swap",
 });
 
 const figtree = Figtree({
   subsets: ["latin"],
-  variable: "--font-body-family",
+  variable: "--font-display-family",
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "Achievers Member App",
-  description: "Installable member experience for wallet, loans, savings, investments, and profile management.",
+  description:
+    "Installable member experience for wallet, loans, savings, investments, and profile management.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/logo.jpeg",
@@ -39,7 +41,11 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${glory.variable} ${figtree.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${body.variable} ${figtree.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <link rel="icon" href="/logo.jpeg" />
         <link rel="apple-touch-icon" href="/logo.jpeg" />

@@ -9,6 +9,7 @@ const withSerwist = withSerwistInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   turbopack: {},
+  allowedDevOrigins: ["192.168.0.101"],
   images: {
     remotePatterns: [
       {

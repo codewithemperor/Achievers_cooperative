@@ -39,8 +39,16 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   return (
     <div className="flex h-full flex-col py-6">
       <div className="mb-8 flex items-center gap-3 px-5">
-        <Image src="/logo.jpeg" alt="Achievers Cooperative" width={32} height={32} className="h-8 w-auto object-contain brightness-0 invert rounded-lg" />
-        <span className="text-sm font-bold text-white tracking-tight">Achievers Cooperative</span>
+        <Image
+          src="/logo.jpeg"
+          alt="Achievers Cooperative"
+          width={32}
+          height={32}
+          className="h-8 w-auto object-contain brightness-0 invert rounded-lg"
+        />
+        <span className="text-sm font-bold text-white tracking-tight">
+          Achievers Cooperative
+        </span>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3">
@@ -79,8 +87,18 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
           }}
           type="button"
         >
-          <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+          <svg
+            className="h-[18px] w-[18px]"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"
+            />
           </svg>
           Log Out
         </button>
@@ -94,10 +112,12 @@ export function AdminShell({ children }: PropsWithChildren) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const breadcrumb =
-    pathname === "/admin" ? "Dashboard overview" : pathname.replace("/admin/", "").replaceAll("/", " / ");
+    pathname === "/admin"
+      ? "Dashboard overview"
+      : pathname.replace("/admin/", "").replaceAll("/", " / ");
 
   return (
-    <div className="min-h-screen bg-[var(--background-50)] text-[var(--text-800)] dark:bg-[var(--background-950)] dark:text-[var(--text-200)]">
+    <div className="min-h-screen bg-[var(--background-50)] text-text-800 dark:bg-[var(--background-950)] dark:text-[var(--text-200)]">
       <div className="mx-auto flex min-h-screen max-w-400">
         {/* Desktop sidebar — dark green */}
         <aside
@@ -124,13 +144,15 @@ export function AdminShell({ children }: PropsWithChildren) {
                 </button>
 
                 <div>
-                  <p className="text-sm font-medium capitalize text-[var(--text-400)]">{breadcrumb}</p>
+                  <p className="text-sm font-medium capitalize text-text-400">
+                    {breadcrumb}
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <ThemeToggle />
-                <span className="hidden rounded-full border border-[var(--background-200)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--text-400)] sm:inline-block dark:border-[var(--background-700)] dark:bg-[var(--background-800)]">
+                <span className="hidden rounded-full border border-[var(--background-200)] bg-white px-3 py-1.5 text-xs font-medium text-text-400 sm:inline-block dark:border-[var(--background-700)] dark:bg-[var(--background-800)]">
                   Admin Panel
                 </span>
               </div>

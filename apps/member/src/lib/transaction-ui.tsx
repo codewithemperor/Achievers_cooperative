@@ -85,23 +85,70 @@ const transactionToneMap: Record<string, TransactionTone> = {
 };
 
 const statusToneMap: Record<string, StatusTone> = {
-  CONFIRMED: { badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  APPROVED: { badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  ACTIVE: { badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  COMPLETED: { badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  SUCCESS: { badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  PENDING: { badge: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
-  PROCESSING: { badge: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
-  DUE: { badge: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
-  REJECTED: { badge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" },
-  FAILED: { badge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" },
-  OVERDUE: { badge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" },
-  CANCELLED: { badge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" },
-  DISBURSED: { badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  CURRENT: { badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  IN_PROGRESS: { badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  PAID: { badge: "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300" },
-  DEFAULT: { badge: "bg-[var(--background-100)] text-[var(--text-600)] dark:bg-white/10 dark:text-[var(--text-300)]" },
+  CONFIRMED: {
+    badge:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  },
+  APPROVED: {
+    badge:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  },
+  ACTIVE: {
+    badge:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  },
+  COMPLETED: {
+    badge:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  },
+  SUCCESS: {
+    badge:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  },
+  PENDING: {
+    badge:
+      "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  },
+  PROCESSING: {
+    badge:
+      "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  },
+  DUE: {
+    badge:
+      "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  },
+  REJECTED: {
+    badge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  },
+  FAILED: {
+    badge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  },
+  OVERDUE: {
+    badge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  },
+  CANCELLED: {
+    badge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  },
+  DISBURSED: {
+    badge:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  },
+  CURRENT: {
+    badge:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  },
+  IN_PROGRESS: {
+    badge:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  },
+  PAID: {
+    badge:
+      "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
+  },
+  DEFAULT: {
+    badge:
+      "bg-[var(--background-100)] text-text-600 dark:bg-white/10 dark:text-[var(--text-300)]",
+  },
 };
 
 export function getTransactionTone(type?: string | null): TransactionTone {
@@ -113,9 +160,11 @@ export function getTransactionTone(type?: string | null): TransactionTone {
   if (key.includes("PACKAGE")) return transactionToneMap.PACKAGE;
   if (key.includes("TRANSFER")) return transactionToneMap.TRANSFER;
   if (key.includes("BANK")) return transactionToneMap.BANK;
-  if (key.includes("PAYMENT") || key.includes("FUNDING")) return transactionToneMap.PAYMENT;
+  if (key.includes("PAYMENT") || key.includes("FUNDING"))
+    return transactionToneMap.PAYMENT;
   if (key.includes("NOTIFICATION")) return transactionToneMap.NOTICE;
-  if (key.includes("PROFILE") || key.includes("VERIFIED")) return transactionToneMap.VERIFIED;
+  if (key.includes("PROFILE") || key.includes("VERIFIED"))
+    return transactionToneMap.VERIFIED;
   if (key.includes("WALLET")) return transactionToneMap.WALLET;
 
   return transactionToneMap.DEFAULT;
@@ -125,6 +174,9 @@ export function getStatusTone(status?: string | null): StatusTone {
   return statusToneMap[(status || "").toUpperCase()] || statusToneMap.DEFAULT;
 }
 
-export function getTransactionTitle(type?: string | null, fallback?: string | null) {
+export function getTransactionTitle(
+  type?: string | null,
+  fallback?: string | null,
+) {
   return fallback || humanizeLabel(type);
 }

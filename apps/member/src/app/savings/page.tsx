@@ -41,7 +41,10 @@ type ContributionFormValues = z.infer<typeof contributionSchema>;
 
 export default function SavingsPage() {
   const savings = useMemberData<SavingsAccount[]>("/savings/me", []);
-  const transactions = useMemberData<TransactionsPayload>("/wallet/transactions?type=SAVINGS", { items: [] });
+  const transactions = useMemberData<TransactionsPayload>(
+    "/wallet/transactions?type=SAVINGS",
+    { items: [] },
+  );
   const [isContributionModalOpen, setIsContributionModalOpen] = useState(false);
 
   const { control, handleSubmit, reset } = useForm<ContributionFormValues>({
@@ -78,13 +81,17 @@ export default function SavingsPage() {
           setIsContributionModalOpen(true);
         }}
         icon={<PiggyBank className="h-5 w-5" />}
-        gradient="from-[#22a163] via-[#1b8f64] to-[#0f6f61]"
+        gradient="from-[#2a0a0a] via-[#200808] to-[#160505]"
       />
 
-      <section className="space-y-3">
+      <section className="space-y-5 mt-5">
         <div>
-          <h2 className="text-xl font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">Savings transactions</h2>
-          <p className="mt-1 text-sm text-[var(--text-400)]">Every contribution appears as a shared transaction card.</p>
+          <h2 className="text-xl font-semibold font-display tracking-tight text-text-900">
+            Savings transactions
+          </h2>
+          <p className="text-xs text-text-500">
+            Every contribution appears as a shared transaction card.
+          </p>
         </div>
 
         {transactions.data.items.length ? (
@@ -100,7 +107,7 @@ export default function SavingsPage() {
             />
           ))
         ) : (
-          <div className="rounded-[24px] border border-dashed border-[var(--background-300)] px-5 py-10 text-center text-sm text-[var(--text-400)]">
+          <div className="rounded-[24px] border border-dashed border-background-300 px-5 py-10 text-center text-sm text-text-400">
             No savings transactions yet. Make your first contribution above.
           </div>
         )}
@@ -120,10 +127,14 @@ export default function SavingsPage() {
             placeholder="Enter amount"
             isRequired
             min={1}
-            formatOptions={{ style: "currency", currency: "NGN", maximumFractionDigits: 0 }}
+            formatOptions={{
+              style: "currency",
+              currency: "NGN",
+              maximumFractionDigits: 0,
+            }}
           />
           <button
-            className="min-h-[44px] rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+            className="min-h-11 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
             type="submit"
           >
             Submit contribution

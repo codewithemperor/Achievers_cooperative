@@ -28,12 +28,14 @@ export function MemberTable<T>({
         <div className="divide-y divide-[var(--background-200)] dark:divide-[var(--background-800)]">
           {Array.from({ length: 6 }).map((_, rowIndex) => (
             <div key={rowIndex} className="grid gap-3 px-4 py-4 md:grid-cols-4">
-              {Array.from({ length: Math.min(columns.length, 4) }).map((__, cellIndex) => (
-                <div
-                  key={cellIndex}
-                  className="h-4 animate-pulse rounded bg-[var(--background-200)] dark:bg-[var(--background-700)]"
-                />
-              ))}
+              {Array.from({ length: Math.min(columns.length, 4) }).map(
+                (__, cellIndex) => (
+                  <div
+                    key={cellIndex}
+                    className="h-4 animate-pulse rounded bg-[var(--background-200)] dark:bg-[var(--background-700)]"
+                  />
+                ),
+              )}
             </div>
           ))}
         </div>
@@ -43,7 +45,7 @@ export function MemberTable<T>({
 
   if (!data.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-[var(--background-300)] bg-[var(--background-50)] px-6 py-10 text-center text-sm text-[var(--text-400)] dark:border-[var(--background-700)] dark:bg-[var(--background-900)]">
+      <div className="rounded-2xl border border-dashed border-background-300 bg-[var(--background-50)] px-6 py-10 text-center text-sm text-text-400 dark:border-[var(--background-700)] dark:bg-[var(--background-900)]">
         {emptyText}
       </div>
     );
@@ -58,7 +60,7 @@ export function MemberTable<T>({
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={`px-4 py-3 font-semibold text-[var(--text-900)] dark:text-[var(--text-50)] ${column.className ?? ""}`}
+                  className={`px-4 py-3 font-semibold text-text-900 dark:text-text-50 ${column.className ?? ""}`}
                 >
                   {column.header}
                 </th>
@@ -71,7 +73,7 @@ export function MemberTable<T>({
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={`px-4 py-3 text-[var(--text-600)] dark:text-[var(--text-300)] ${column.className ?? ""}`}
+                    className={`px-4 py-3 text-text-600 dark:text-[var(--text-300)] ${column.className ?? ""}`}
                   >
                     {column.render(item)}
                   </td>

@@ -4,7 +4,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { PropsWithChildren, ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { ArrowLeft, House, ReceiptText, UserRound, WalletCards } from "lucide-react";
+import {
+  ArrowLeft,
+  House,
+  ReceiptText,
+  UserRound,
+  WalletCards,
+} from "lucide-react";
 import { getMemberSession, isMemberAuthenticated } from "@/lib/member-session";
 
 interface TabItem {
@@ -62,7 +68,6 @@ export function MemberShell({ children }: PropsWithChildren) {
 
   const session = getMemberSession();
   const isTabScreen = tabItems.some((item) => pathname === item.href);
-  const isHomeScreen = pathname === "/dashboard";
 
   if (isAuthRoute) {
     return <>{children}</>;
@@ -73,50 +78,68 @@ export function MemberShell({ children }: PropsWithChildren) {
   }
 
   return (
-    <div
-      className={
-        isHomeScreen
-          ? "min-h-screen bg-[linear-gradient(180deg,#1d8e61_0%,#14785d_17rem,var(--background-50)_17rem,var(--background-50)_100%)] dark:bg-[linear-gradient(180deg,#14664a_0%,#0f5945_17rem,var(--background-50)_17rem,var(--background-50)_100%)]"
-          : "min-h-screen bg-[var(--background-50)] dark:bg-[var(--background-50)]"
-      }
-    >
-      {!isTabScreen ? (
-        <header className="sticky top-0 z-40 border-b border-[var(--background-200)] bg-white/92 px-5 py-4 backdrop-blur-xl dark:border-white/8 dark:bg-[var(--background-100)]/92">
+    <div className="min-h-screen bg-background-50">
+      {/* {!isTabScreen ? (
+        <header className="sticky top-0 z-40 border-b border-background-200 dark:border-white/8 bg-background-50/92 backdrop-blur-xl px-5 py-4">
           <div className="mx-auto flex w-full max-w-md items-center">
             <button
               type="button"
               onClick={() => router.back()}
-              className="inline-flex items-center gap-2 rounded-full text-sm font-medium text-[var(--text-700)] dark:text-[var(--text-100)]"
+              className="inline-flex items-center gap-2 rounded-full text-sm font-medium text-text-700"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--background-200)] bg-[var(--background-50)] dark:border-white/8 dark:bg-white/8">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full border border-background-200 dark:border-white/8 bg-background-100 dark:bg-white/8">
                 <ArrowLeft className="h-4 w-4" />
               </span>
               <span>Back</span>
             </button>
           </div>
         </header>
-      ) : null}
+      ) : null} */}
 
-      <main className="mx-auto w-full max-w-md px-5 pb-8 pt-6">{children}</main>
+      <main
+        className={`mx-auto w-full max-w-md px-5 pt-6 ${
+          isTabScreen ? "pb-28" : "pb-8"
+        }`}
+      >
+        {children}
+      </main>
 
       {isTabScreen ? (
-        <nav className="sticky bottom-4 z-40 mx-auto mt-2 w-full max-w-md px-5 pb-[env(safe-area-inset-bottom)]">
-          <div className="grid grid-cols-4 rounded-[30px] border border-white/35 bg-white/68 p-2 shadow-[0_24px_48px_rgba(23,38,84,0.18)] backdrop-blur-2xl dark:border-white/8 dark:bg-[color:rgba(15,23,42,0.74)]">
+        <nav className="fixed bottom-4 left-0 right-0 z-50 mx-auto w-full max-w-md px-5 pb-[env(safe-area-inset-bottom)]">
+          {/* Outer glow layer for depth */}
+          <div className="absolute inset-0 mx-5 rounded-[30px] bg-white/20 dark:bg-white/5 blur-xl" />
+
+          <div className="relative grid grid-cols-4 rounded-[30px] border border-white/50 dark:border-white/10 bg-white/75 dark:bg-background-100/80 p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-2xl">
             {tabItems.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active =
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
 
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-[24px] px-2 py-2 transition-all duration-200 ${
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded-[22px] px-2 py-1.5 transition-all duration-200 ${
                     active
-                      ? "bg-white/60 text-[var(--primary-600)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:bg-white/10 dark:text-white"
-                      : "text-[var(--text-500)] dark:text-[var(--text-300)]"
+                      ? "bg-white dark:bg-white/15 text-primary-600 dark:text-primary-400 shadow-[0_2px_8px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.1)]"
+                      : "text-text-400 dark:text-text-500"
                   }`}
                 >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl">{item.icon}</span>
-                  <span className="text-[11px] font-medium leading-tight">{item.label}</span>
+                  <span
+                    className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200 ${
+                      active
+                        ? "bg-primary-50 dark:bg-primary-500/20 text-primary-600 dark:text-primary-400 shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]"
+                        : ""
+                    }`}
+                  >
+                    {item.icon}
+                  </span>
+                  <span
+                    className={`text-[10px] leading-tight tracking-wide ${
+                      active ? "font-semibold" : "font-medium"
+                    }`}
+                  >
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}

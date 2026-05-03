@@ -4,7 +4,11 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { formatDate, formatMoney, formatTime } from "@/lib/member-format";
-import { getStatusTone, getTransactionTitle, getTransactionTone } from "@/lib/transaction-ui";
+import {
+  getStatusTone,
+  getTransactionTitle,
+  getTransactionTone,
+} from "@/lib/transaction-ui";
 
 interface TransactionCardProps {
   type?: string | null;
@@ -35,68 +39,74 @@ export function TransactionCard({
 }: TransactionCardProps) {
   const tone = getTransactionTone(type);
   const statusTone = getStatusTone(status);
+
   const body = (
-    <div className="rounded-[24px] border border-white/55 bg-white/88 p-4 shadow-[0_14px_35px_rgba(15,23,42,0.08)] backdrop-blur-sm dark:border-white/8 dark:bg-white/6">
+    <div className="rounded-[20px] border border-background-200 dark:border-white/8 bg-background-50 dark:bg-background-100 px-4 py-3">
       <div className="flex items-start gap-3">
-        <div className={`mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${tone.iconBg} ${tone.iconColor}`}>
+        {/* Icon */}
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone.iconBg} ${tone.iconColor}`}
+        >
           {tone.icon}
         </div>
 
+        {/* Body */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-2">
+            {/* Left: title + subtitle */}
             <div className="min-w-0">
-              <p className="truncate text-[15px] font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">
+              <p className="truncate text-sm font-semibold font-display text-text-900 dark:text-text-50">
                 {getTransactionTitle(type, title)}
               </p>
               {subtitle ? (
-                <p className="mt-1 line-clamp-2 text-sm text-[var(--text-500)] dark:text-[var(--text-300)]">
+                <p className="truncate text-xs text-text-400 mt-0.5">
                   {subtitle}
                 </p>
               ) : null}
             </div>
 
+            {/* Right: amount + status */}
             <div className="shrink-0 text-right">
               {typeof amount === "number" ? (
-                <p className="text-[15px] font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">
+                <p className="text-sm font-semibold text-text-900 dark:text-text-50">
                   {formatMoney(amount)}
                 </p>
               ) : amountLabel ? (
-                <p className="text-[15px] font-semibold text-[var(--text-900)] dark:text-[var(--text-50)]">
+                <p className="text-sm font-semibold text-text-900 dark:text-text-50">
                   {amountLabel}
                 </p>
               ) : null}
               {status ? (
-                <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${statusTone.badge}`}>
+                <span
+                  className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest ${statusTone.badge}`}
+                >
                   {status.replaceAll("_", " ")}
                 </span>
               ) : null}
             </div>
           </div>
 
-          <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[var(--text-400)] dark:text-[var(--text-400)]">
-            <span>{formatDate(timestamp)}</span>
-            <span>{formatTime(timestamp)}</span>
-          </div>
+          {/* Footer row: date/time + cta or extra inline */}
+          <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-text-400">
+            <span>
+              {formatDate(timestamp)} · {formatTime(timestamp)}
+            </span>
 
-          {extra ? <div className="mt-3">{extra}</div> : null}
-
-          {ctaLabel ? (
-            <div className="mt-3">
-              <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--primary-600)] dark:text-[var(--primary-700)]">
+            {ctaLabel ? (
+              <span className="inline-flex items-center gap-0.5 font-semibold text-primary-600 dark:text-primary-400">
                 {ctaLabel}
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-3.5 w-3.5" />
               </span>
-            </div>
-          ) : null}
+            ) : extra ? (
+              <div className="flex items-center gap-1.5">{extra}</div>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
   );
 
-  if (href) {
-    return <Link href={href}>{body}</Link>;
-  }
-
+  if (href) return <Link href={href}>{body}</Link>;
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className="w-full text-left">
@@ -104,6 +114,5 @@ export function TransactionCard({
       </button>
     );
   }
-
   return body;
 }

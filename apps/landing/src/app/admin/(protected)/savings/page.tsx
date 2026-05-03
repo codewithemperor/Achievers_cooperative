@@ -77,16 +77,20 @@ export default function SavingsPage() {
         />
         <StatCard
           title="Avg. Savings / Member"
-          value={totalMembers > 0 ? currency.format(totalSavings / totalMembers) : currency.format(0)}
+          value={
+            totalMembers > 0
+              ? currency.format(totalSavings / totalMembers)
+              : currency.format(0)
+          }
           accent="dark"
         />
       </div>
 
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-400)]" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-400" />
           <input
-            className="w-full rounded-2xl border border-[var(--primary-900)/12] bg-white py-3 pl-10 pr-4 text-sm outline-none placeholder:text-[var(--text-400)] focus:border-[var(--primary-700)] transition"
+            className="w-full rounded-2xl border border-[var(--primary-900)/12] bg-white py-3 pl-10 pr-4 text-sm outline-none placeholder:text-text-400 focus:border-[var(--primary-700)] transition"
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, membership number, or email..."
             type="text"
@@ -102,8 +106,8 @@ export default function SavingsPage() {
             header: "Member",
             render: (item) => (
               <div>
-                <p className="font-semibold text-[var(--text-900)]">{item.fullName}</p>
-                <p className="text-xs text-[var(--text-400)]">{item.membershipNumber}</p>
+                <p className="font-semibold text-text-900">{item.fullName}</p>
+                <p className="text-xs text-text-400">{item.membershipNumber}</p>
               </div>
             ),
           },
@@ -111,7 +115,13 @@ export default function SavingsPage() {
             key: "savings",
             header: "Savings Balance",
             render: (item) => (
-              <span className={item.savingsBalance > 0 ? "font-semibold text-[var(--text-900)]" : "text-[var(--text-400)]"}>
+              <span
+                className={
+                  item.savingsBalance > 0
+                    ? "font-semibold text-text-900"
+                    : "text-text-400"
+                }
+              >
                 {currency.format(item.savingsBalance)}
               </span>
             ),
@@ -120,7 +130,13 @@ export default function SavingsPage() {
             key: "wallet",
             header: "Wallet Balance",
             render: (item) => (
-              <span className={item.walletBalance > 0 ? "font-medium text-[var(--text-900)]" : "text-[var(--text-400)]"}>
+              <span
+                className={
+                  item.walletBalance > 0
+                    ? "font-medium text-text-900"
+                    : "text-text-400"
+                }
+              >
                 {currency.format(item.walletBalance)}
               </span>
             ),
@@ -129,7 +145,9 @@ export default function SavingsPage() {
             key: "loans",
             header: "Total Loans",
             render: (item) => (
-              <span className="text-[var(--text-900)]">{currency.format(item.totalLoans)}</span>
+              <span className="text-text-900">
+                {currency.format(item.totalLoans)}
+              </span>
             ),
           },
           {
@@ -155,7 +173,7 @@ export default function SavingsPage() {
             key: "joined",
             header: "Joined",
             render: (item) => (
-              <span className="text-sm text-[var(--text-400)]">
+              <span className="text-sm text-text-400">
                 {new Date(item.joinedAt).toLocaleDateString("en-NG", {
                   year: "numeric",
                   month: "short",
@@ -166,7 +184,9 @@ export default function SavingsPage() {
           },
         ]}
         data={filteredMembers}
-        emptyDescription={membersReport.error || "No savings data available yet."}
+        emptyDescription={
+          membersReport.error || "No savings data available yet."
+        }
         loading={membersReport.loading}
       />
     </div>
