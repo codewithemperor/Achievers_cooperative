@@ -34,3 +34,13 @@ export type LoanStatus =
   | 'COMPLETED'
   | 'OVERDUE'
   | 'REJECTED';
+
+export type LoanTenorUnit = 'MONTHS' | 'WEEKS';
+
+export type PackageSubscriptionStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'DISBURSED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'REJECTED';

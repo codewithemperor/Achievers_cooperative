@@ -9,7 +9,7 @@ import api from "@/lib/api";
 import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { AdminModal } from "@/components/ui/admin-modal";
-import { TextareaInput } from "@/components/ui/form-input";
+import { NumberInput, TextareaInput } from "@/components/ui/form-input";
 import { useForm } from "react-hook-form";
 import { Building2, ShieldCheck, Calendar } from "lucide-react";
 
@@ -42,6 +42,10 @@ interface LoanDetail {
     fullName: string;
     membershipNumber: string;
     user: { email: string };
+    wallet?: {
+      availableBalance: number;
+      pendingBalance: number;
+    } | null;
   };
   guarantorOne?: { fullName: string; membershipNumber: string } | null;
   guarantorTwo?: { fullName: string; membershipNumber: string } | null;
@@ -101,14 +105,18 @@ export default function LoanDetailPage() {
   const params = useParams<{ id: string }>();
   const loan = useApi<LoanDetail>(`/loans/${params.id}`);
   const [rejecting, setRejecting] = useState(false);
-  const { control, handleSubmit, reset } = useForm<{ reason: string }>({
-    defaultValues: { reason: "" },
+  const [repaying, setRepaying] = useState(false);
+  const { control, handleSubmit, reset } = useForm<{ reason: string; amount: number | undefined }>({
+    defaultValues: { reason: "", amount: undefined },
   });
 
   const status = loan.data?.status;
   const isNewLoan = status === "PENDING";
   const isApprovedLoan = status === "APPROVED";
   const isDisbursedLoan = status === "DISBURSED";
+  const isRepayable = ["DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(
+    status || "",
+  );
 
   async function runAction(
     action: "approve" | "reject" | "disburse" | "markInProgress",
@@ -152,6 +160,27 @@ export default function LoanDetailPage() {
         // Error handled in runAction
       } finally {
         setRejecting(false);
+      }
+    });
+
+  const handleRepay = (close?: () => void) =>
+    handleSubmit(async (values) => {
+      try {
+        setRepaying(true);
+        await api.post(`/loans/${params.id}/admin-repay`, {
+          amount: Number(values.amount),
+        });
+        showSuccessToast("Loan repayment processed successfully.");
+        reset({ reason: "", amount: undefined });
+        await loan.refetch();
+        close?.();
+      } catch (error: any) {
+        showErrorToast(
+          error?.response?.data?.message ||
+            "Unable to process loan repayment.",
+        );
+      } finally {
+        setRepaying(false);
       }
     });
 
@@ -239,6 +268,54 @@ export default function LoanDetailPage() {
                 tone="success"
               />
             ) : null}
+            {isRepayable ? (
+              <AdminModal
+                description="Enter the repayment amount to deduct directly from the member's wallet."
+                title="Pay Loan"
+                trigger={
+                  <button
+                    className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white"
+                    type="button"
+                  >
+                    Pay Loan
+                  </button>
+                }
+              >
+                {({ close }) => (
+                  <>
+                    <div className="rounded-[1.25rem] bg-[var(--background-50)/72] p-4">
+                      <p className="text-sm text-text-400">
+                        Current wallet balance
+                      </p>
+                      <p className="mt-1 text-lg font-semibold text-text-900">
+                        {currency.format(
+                          loan.data?.member.wallet?.availableBalance ?? 0,
+                        )}
+                      </p>
+                    </div>
+                    <div className="mt-4">
+                      <NumberInput
+                        control={control}
+                        label="Repayment Amount"
+                        name="amount"
+                        placeholder="Enter repayment amount"
+                        min={1}
+                      />
+                    </div>
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                        disabled={repaying}
+                        onClick={() => void handleRepay(close)()}
+                        type="button"
+                      >
+                        {repaying ? "Processing..." : "Process repayment"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </AdminModal>
+            ) : null}
           </>
         }
       />
@@ -255,6 +332,10 @@ export default function LoanDetailPage() {
             </p>
             <p className="mt-1 text-sm text-text-400">
               {loan.data?.member.user.email || ""}
+            </p>
+            <p className="mt-3 text-sm text-text-400">Wallet balance</p>
+            <p className="mt-1 text-lg font-semibold text-text-900">
+              {currency.format(loan.data?.member.wallet?.availableBalance ?? 0)}
             </p>
             {loan.data?.bankAccount ? (
               <p className="mt-1 text-sm text-text-400">

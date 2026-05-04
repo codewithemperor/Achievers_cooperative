@@ -211,6 +211,7 @@ export class MembersService {
         wallet: true,
         investments: { include: { product: true }, take: 5, orderBy: { maturityDate: 'desc' } },
         loanApplications: { take: 5, orderBy: { submittedAt: 'desc' } },
+        packageSubscriptions: { include: { package: true }, take: 10, orderBy: { createdAt: 'desc' } },
       },
     });
 
@@ -247,6 +248,9 @@ export class MembersService {
       (loan) =>
         ['DISBURSED', 'IN_PROGRESS', 'OVERDUE'].includes(loan.status) &&
         Number(loan.remainingBalance) > 0,
+    );
+    const activePackage = member.packageSubscriptions.find((subscription) =>
+      ['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(subscription.status),
     );
     const mergedActivity = [
       ...recentTransactions.map((transaction) => ({
@@ -300,6 +304,17 @@ export class MembersService {
               amount: Number(activeLoan.amount),
               remainingBalance: Number(activeLoan.remainingBalance),
               status: activeLoan.status,
+            }
+          : null,
+        activePackage: activePackage
+          ? {
+              id: activePackage.id,
+              packageId: activePackage.packageId,
+              packageName: activePackage.package.name,
+              subscribedAmount: Number(activePackage.package.totalAmount),
+              amountPaid: Number(activePackage.amountPaid),
+              amountRemaining: Number(activePackage.amountRemaining),
+              status: activePackage.status,
             }
           : null,
       },

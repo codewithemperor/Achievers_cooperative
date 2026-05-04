@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { Autocomplete, ListBox } from "@heroui/react";
@@ -8,10 +8,15 @@ import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminModal } from "@/components/ui/admin-modal";
-import { NumberInput, TextareaInput } from "@/components/ui/form-input";
+import {
+  NumberInput,
+  SelectInput,
+  TextareaInput,
+} from "@/components/ui/form-input";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
+import { Plus } from "lucide-react";
 
 interface BankAccountInfo {
   id: string;
@@ -28,6 +33,7 @@ interface LoansResponse {
     amount: number;
     remainingBalance: number;
     tenorMonths: number;
+    tenorUnit?: "MONTHS" | "WEEKS";
     purpose: string;
     status: string;
     dueDate?: string | null;
@@ -104,13 +110,16 @@ export default function LoansPage() {
   const loans = useApi<LoansResponse>(loansUrl);
   const members = useApi<MemberSearchResponse>("/members/search");
   const [submitting, setSubmitting] = useState(false);
+  const [memberBankAccounts, setMemberBankAccounts] = useState<BankAccountInfo[]>([]);
   const { control, handleSubmit, reset, setValue, watch } = useForm<{
     memberId: string;
     guarantorOneId: string;
     guarantorTwoId: string;
     amount: number | undefined;
     tenorMonths: number | undefined;
+    tenorUnit: "MONTHS" | "WEEKS";
     purpose: string;
+    bankAccountId: string;
   }>({
     defaultValues: {
       memberId: "",
@@ -118,13 +127,44 @@ export default function LoansPage() {
       guarantorTwoId: "",
       amount: undefined,
       tenorMonths: undefined,
+      tenorUnit: "MONTHS",
       purpose: "",
+      bankAccountId: "",
     },
   });
 
   const selectedMemberId = watch("memberId");
   const selectedGuarantorOneId = watch("guarantorOneId");
   const selectedGuarantorTwoId = watch("guarantorTwoId");
+
+  useEffect(() => {
+    if (!selectedMemberId) {
+      setMemberBankAccounts([]);
+      setValue("bankAccountId", "");
+      return;
+    }
+
+    let active = true;
+    void api
+      .get<BankAccountInfo[]>(`/bank-accounts/member/${selectedMemberId}`)
+      .then((response) => {
+        if (!active) return;
+        const accounts = response.data;
+        setMemberBankAccounts(accounts);
+        const defaultId =
+          accounts.find((item) => item.isDefault)?.id ?? accounts[0]?.id ?? "";
+        setValue("bankAccountId", defaultId);
+      })
+      .catch(() => {
+        if (!active) return;
+        setMemberBankAccounts([]);
+        setValue("bankAccountId", "");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedMemberId, setValue]);
 
   const createLoan = (close?: () => void) =>
     handleSubmit(async (values) => {
@@ -136,7 +176,9 @@ export default function LoansPage() {
           guarantorTwoId: values.guarantorTwoId || undefined,
           amount: Number(values.amount),
           tenorMonths: Number(values.tenorMonths),
+          tenorUnit: values.tenorUnit,
           purpose: values.purpose,
+          bankAccountId: values.bankAccountId || undefined,
         });
         showSuccessToast("Loan request created successfully.");
         reset();
@@ -158,14 +200,29 @@ export default function LoansPage() {
         subtitle="Filter by status, track repayment balance, and capture optional guarantors during application."
         actions={
           <AdminModal
-            description="Create a loan request directly for an existing member. Guarantors are optional but cannot duplicate the applicant or each other."
+            description="Create or update a loan request using the same fields and repayment setup available to members."
             title="New Loan Request"
             trigger={
               <button
                 className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
+                onClick={() => {
+                  reset({
+                    memberId: "",
+                    guarantorOneId: "",
+                    guarantorTwoId: "",
+                    amount: undefined,
+                    tenorMonths: undefined,
+                    tenorUnit: "MONTHS",
+                    purpose: "",
+                    bankAccountId: "",
+                  });
+                }}
                 type="button"
               >
-                New loan
+                <span className="inline-flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  New loan
+                </span>
               </button>
             }
           >
@@ -245,8 +302,33 @@ export default function LoansPage() {
                     control={control}
                     label="Tenor Months"
                     name="tenorMonths"
-                    placeholder="Tenor months"
+                    placeholder="Tenor value"
                     min={1}
+                  />
+                  <SelectInput
+                    className="rounded-2xl"
+                    control={control}
+                    label="Tenor Unit"
+                    name="tenorUnit"
+                    options={[
+                      { id: "MONTHS", label: "Months" },
+                      { id: "WEEKS", label: "Weeks" },
+                    ]}
+                  />
+                  <SelectInput
+                    className="rounded-2xl md:col-span-2"
+                    control={control}
+                    label="Disbursement Bank Account"
+                    name="bankAccountId"
+                    options={memberBankAccounts.map((account) => ({
+                      id: account.id,
+                      label: `${account.bankName} - ${account.accountNumber}`,
+                    }))}
+                    description={
+                      selectedMemberId && memberBankAccounts.length === 0
+                        ? "No bank accounts found for the selected member."
+                        : undefined
+                    }
                   />
                   <TextareaInput
                     className="rounded-2xl md:col-span-2"
@@ -264,7 +346,9 @@ export default function LoansPage() {
                     onClick={() => void createLoan(close)()}
                     type="button"
                   >
-                    {submitting ? "Creating..." : "Create loan"}
+                    {submitting
+                      ? "Creating..."
+                      : "Create loan"}
                   </button>
                 </div>
               </>
@@ -344,14 +428,16 @@ export default function LoansPage() {
           },
           {
             key: "view",
-            header: "View",
+            header: "Actions",
             render: (item) => (
-              <Link
-                className="font-semibold text-[var(--primary-700)]"
-                href={`/admin/loans/${item.id}`}
-              >
-                Loan detail
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link
+                  className="font-semibold text-[var(--primary-700)]"
+                  href={`/admin/loans/${item.id}`}
+                >
+                  Loan detail
+                </Link>
+              </div>
             ),
           },
         ]}

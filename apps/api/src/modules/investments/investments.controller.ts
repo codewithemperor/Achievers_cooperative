@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards, Request, Patch } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -38,6 +38,13 @@ export class InvestmentsController {
   @ApiOperation({ summary: 'Update investment product' })
   updateProduct(@Param('id') id: string, @Request() req: any, @Body() body: any) {
     return this.investmentsService.updateProduct(id, req.user.id, body);
+  }
+
+  @Delete('products/:id')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Delete investment product' })
+  deleteProduct(@Param('id') id: string, @Request() req: any) {
+    return this.investmentsService.deleteProduct(id, req.user.id);
   }
 
   @Post('subscribe')

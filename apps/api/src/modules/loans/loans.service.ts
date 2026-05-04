@@ -9,12 +9,13 @@ import { WalletService } from '../../common/services/wallet.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { AuditService } from '../../common/services/audit.service';
 import { ApplyLoanDto, QueryLoansDto, RepayLoanDto } from './dto/index';
-import type { LoanStatus } from '@prisma/client';
+import type { LoanStatus, LoanTenorUnit } from '../../common/prisma-types';
 
 type LoanLike = {
   amount: any;
   remainingBalance: any;
   tenorMonths: number;
+  tenorUnit?: LoanTenorUnit;
   submittedAt: Date;
   approvedAt?: Date | null;
   disbursedAt?: Date | null;
@@ -51,7 +52,7 @@ export class LoansService {
       orderBy: { submittedAt: 'desc' },
     });
 
-    if (existingActiveLoan) {
+    if (existingActiveLoan && user?.role !== 'SUPER_ADMIN') {
       throw new ForbiddenException(
         `You already have an active loan application (#${member.membershipNumber}). Please complete your current loan before applying for a new one.`,
       );
@@ -91,15 +92,17 @@ export class LoansService {
         guarantorTwoId: dto.guarantorTwoId,
         amount: dto.amount,
         tenorMonths: dto.tenorMonths,
+        tenorUnit: dto.tenorUnit ?? 'MONTHS',
         purpose: dto.purpose,
         remainingBalance: dto.amount,
         bankAccountId: dto.bankAccountId,
-      },
+      } as any,
     });
 
     await this.audit.log(userId, 'APPLY_LOAN', 'LoanApplication', loan.id, {
       amount: dto.amount,
       tenorMonths: dto.tenorMonths,
+      tenorUnit: dto.tenorUnit ?? 'MONTHS',
     });
 
     return {
@@ -152,6 +155,7 @@ export class LoansService {
       items: items.map((l) => ({
         ...l,
         amount: Number(l.amount),
+        tenorUnit: (l as any).tenorUnit ?? 'MONTHS',
         remainingBalance: this.shouldExposeRemainingBalance(l.status) ? Number(l.remainingBalance) : 0,
         amountPaidSoFar: this.shouldExposeRemainingBalance(l.status)
           ? Math.max(Number(l.amount) - Number(l.remainingBalance), 0)
@@ -214,8 +218,7 @@ export class LoansService {
     const installmentAmount = loan.tenorMonths > 0 ? amount / loan.tenorMonths : amount;
     const paymentSchedule = Array.from({ length: Math.max(loan.tenorMonths, 1) }).map((_, index) => {
       const anchorDate = loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt;
-      const dueDate = new Date(anchorDate);
-      dueDate.setMonth(dueDate.getMonth() + index + 1);
+      const dueDate = this.addTenorStep(anchorDate, ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, index + 1);
       const dueAmount = Math.round(installmentAmount * 100) / 100;
       const cumulativeDue = dueAmount * (index + 1);
       const isLoanLive = ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(loan.status);
@@ -242,6 +245,7 @@ export class LoansService {
     return {
       ...loan,
       amount,
+      tenorUnit: (loan as any).tenorUnit ?? 'MONTHS',
       remainingBalance,
       amountPaidSoFar,
       repaymentProgress,
@@ -251,6 +255,16 @@ export class LoansService {
         ...item,
         amount: Number(item.amount),
       })),
+      member: {
+        ...loan.member,
+        wallet: loan.member.wallet
+          ? {
+              ...loan.member.wallet,
+              availableBalance: Number(loan.member.wallet.availableBalance),
+              pendingBalance: Number(loan.member.wallet.pendingBalance),
+            }
+          : null,
+      },
       canEdit: loan.status === 'PENDING',
       canDelete: loan.status === 'PENDING',
     };
@@ -334,8 +348,7 @@ export class LoansService {
     if (loan.status !== 'APPROVED') throw new BadRequestException('Loan must be approved before it can be disbursed.');
 
     // Compute dueDate: approvedAt + tenorMonths
-    const dueDate = new Date();
-    dueDate.setMonth(dueDate.getMonth() + loan.tenorMonths);
+    const dueDate = this.addTenorStep(new Date(), ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, loan.tenorMonths);
 
     // Create a LOAN_DISBURSEMENT transaction for record-keeping only (no wallet credit)
     const reference = `LOAN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -389,6 +402,7 @@ export class LoansService {
     return {
       ...updated,
       amount,
+      tenorUnit: (updated as any).tenorUnit ?? 'MONTHS',
       message,
       reference,
     };
@@ -414,6 +428,7 @@ export class LoansService {
     return {
       ...updated,
       amount: Number(updated.amount),
+      tenorUnit: (updated as any).tenorUnit ?? 'MONTHS',
       remainingBalance: Number(updated.remainingBalance),
     };
   }
@@ -437,20 +452,23 @@ export class LoansService {
         guarantorTwoId: dto.guarantorTwoId || null,
         amount: dto.amount,
         tenorMonths: dto.tenorMonths,
+        tenorUnit: dto.tenorUnit ?? (loan as any).tenorUnit ?? 'MONTHS',
         purpose: dto.purpose,
         remainingBalance: dto.amount,
         bankAccountId: dto.bankAccountId || null,
-      },
+      } as any,
     });
 
     await this.audit.log(userId, 'UPDATE_PENDING_LOAN', 'LoanApplication', id, {
       amount: dto.amount,
       tenorMonths: dto.tenorMonths,
+      tenorUnit: dto.tenorUnit ?? (loan as any).tenorUnit ?? 'MONTHS',
     });
 
     return {
       ...updated,
       amount: Number(updated.amount),
+      tenorUnit: (updated as any).tenorUnit ?? 'MONTHS',
       remainingBalance: 0,
     };
   }
@@ -495,31 +513,13 @@ export class LoansService {
       );
     }
 
-    const reference = `REPAY-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    await this.walletService.debitWallet(member.id, dto.amount, 'LOAN_REPAYMENT', reference, {
-      category: 'loan repayment',
-      description: `Loan repayment for loan ${loan.id}`,
-      editable: false,
-      lockReason: 'Loan repayment transactions are system-generated and cannot be edited.',
-      metadata: { loanId: loan.id },
-    });
-
+    const repayment = await this.walletService.applyLoanRepayment(member.id, loan.id, dto.amount, 'MEMBER');
     const newRemainingBalance = Number(loan.remainingBalance) - dto.amount;
     const isFullyRepaid = newRemainingBalance <= 0;
 
-    await this.prisma.loanApplication.update({
-      where: { id },
-      data: {
-        remainingBalance: {
-          decrement: dto.amount,
-        },
-        ...(isFullyRepaid ? { status: 'COMPLETED' } : { status: 'IN_PROGRESS' }),
-      },
-    });
-
     await this.audit.log(userId, 'REPAY_LOAN', 'LoanApplication', id, {
       amount: dto.amount,
-      reference,
+      reference: repayment.reference,
     });
 
     if (isFullyRepaid) {
@@ -537,8 +537,48 @@ export class LoansService {
         : `Payment of ₦${dto.amount.toLocaleString()} received. Remaining balance: ₦${remaining.toLocaleString()}. Thank you, ${member.fullName}!`,
       amount: dto.amount,
       remainingBalance: remaining,
-      reference,
+      reference: repayment.reference,
       status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
+    };
+  }
+
+  async repayAsAdmin(id: string, actorId: string, dto: RepayLoanDto) {
+    const loan = await this.prisma.loanApplication.findUnique({
+      where: { id },
+      include: {
+        member: {
+          include: {
+            wallet: true,
+          },
+        },
+      },
+    });
+
+    if (!loan) throw new NotFoundException('Loan not found');
+    if (!['DISBURSED', 'IN_PROGRESS', 'OVERDUE'].includes(loan.status)) {
+      throw new BadRequestException('This loan is not currently active for repayment.');
+    }
+
+    const walletBalance = loan.member.wallet ? Number(loan.member.wallet.availableBalance) : 0;
+    if (walletBalance < dto.amount) {
+      throw new BadRequestException(
+        `Insufficient wallet balance. Member wallet balance is ₦${walletBalance.toLocaleString()}.`,
+      );
+    }
+
+    const repayment = await this.walletService.applyLoanRepayment(loan.memberId, loan.id, dto.amount, 'ADMIN');
+    const remaining = Math.max(Number(loan.remainingBalance) - dto.amount, 0);
+
+    await this.audit.log(actorId, 'ADMIN_REPAY_LOAN', 'LoanApplication', id, {
+      amount: dto.amount,
+      reference: repayment.reference,
+    });
+
+    return {
+      amount: dto.amount,
+      remainingBalance: remaining,
+      reference: repayment.reference,
+      status: remaining <= 0 ? 'COMPLETED' : 'IN_PROGRESS',
     };
   }
 
@@ -628,5 +668,16 @@ export class LoansService {
       }));
 
     return [...baseTimeline, ...repayments];
+  }
+
+  private addTenorStep(date: Date, tenorUnit: LoanTenorUnit, steps: number) {
+    const next = new Date(date);
+    if (tenorUnit === 'WEEKS') {
+      next.setDate(next.getDate() + steps * 7);
+      return next;
+    }
+
+    next.setMonth(next.getMonth() + steps);
+    return next;
   }
 }

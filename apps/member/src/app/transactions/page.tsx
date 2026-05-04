@@ -24,8 +24,9 @@ const filters = [
   { key: "ALL", label: "All" },
   { key: "WALLET", label: "Wallet" },
   { key: "SAVINGS", label: "Savings" },
-  { key: "LOAN", label: "Loans" },
-  { key: "PAYMENT", label: "Payments" },
+  { key: "LOANS", label: "Loans" },
+  { key: "PACKAGE", label: "Package" },
+  { key: "INVESTMENT", label: "Investment" },
 ];
 
 export default function TransactionsPage() {
@@ -40,11 +41,16 @@ export default function TransactionsPage() {
 
     return data.items.filter((item) => {
       const type = item.type.toUpperCase();
-      if (filter === "WALLET") return type.includes("WALLET");
+      if (filter === "WALLET")
+        return (
+          type.includes("WALLET") ||
+          type.includes("FUNDING") ||
+          type.includes("MEMBERSHIP_CHARGE")
+        );
       if (filter === "SAVINGS") return type.includes("SAVING");
-      if (filter === "LOAN") return type.includes("LOAN");
-      if (filter === "PAYMENT")
-        return type.includes("PAYMENT") || type.includes("FUNDING");
+      if (filter === "LOANS") return type.includes("LOAN");
+      if (filter === "PACKAGE") return type.includes("PACKAGE");
+      if (filter === "INVESTMENT") return type.includes("INVEST");
       return true;
     });
   }, [data.items, filter]);

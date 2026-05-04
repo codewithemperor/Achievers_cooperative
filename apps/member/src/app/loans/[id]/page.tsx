@@ -13,6 +13,7 @@ interface LoanDetail {
   remainingBalance: number;
   amountPaidSoFar: number;
   tenorMonths: number;
+  tenorUnit?: "MONTHS" | "WEEKS";
   purpose: string;
   status: string;
   repaymentProgress: number;
@@ -167,6 +168,9 @@ export default function LoanDetailPage() {
   }
 
   const progress = loan.amount > 0 ? Math.min(100, ((loan.amountPaidSoFar ?? 0) / loan.amount) * 100) : 0;
+  const isActiveLoan = ["DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(
+    loan.status.toUpperCase(),
+  );
 
   return (
     <div className="space-y-6">
@@ -185,7 +189,13 @@ export default function LoanDetailPage() {
         ) : null}
       </div>
 
-      <section className="rounded-2xl border border-[var(--background-200)] bg-[var(--background-50)] p-5 dark:border-[var(--background-800)] dark:bg-[var(--background-900)]">
+      <section
+        className={`rounded-2xl border p-5 ${
+          isActiveLoan
+            ? "border-[#5d0910] bg-[#fff1f2] dark:border-[#7a0d16] dark:bg-[#2d070b]"
+            : "border-[var(--background-200)] bg-[var(--background-50)] dark:border-[var(--background-800)] dark:bg-[var(--background-900)]"
+        }`}
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-display text-lg font-semibold text-text-900">{loan.purpose}</p>
@@ -214,7 +224,10 @@ export default function LoanDetailPage() {
             { label: "Loan amount", value: money.format(loan.amount) },
             { label: "Paid so far", value: money.format(loan.amountPaidSoFar ?? 0) },
             { label: "Remaining balance", value: money.format(loan.remainingBalance ?? 0) },
-            { label: "Tenor", value: `${loan.tenorMonths} months` },
+            {
+              label: "Tenor",
+              value: `${loan.tenorMonths} ${loan.tenorUnit === "WEEKS" ? "weeks" : "months"}`,
+            },
             { label: "Due date", value: formatDate(loan.dueDate) },
             { label: "Applied on", value: formatDate(loan.submittedAt) },
           ].map((item) => (

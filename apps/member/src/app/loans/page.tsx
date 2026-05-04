@@ -26,6 +26,7 @@ interface LoanItem {
   remainingBalance: number;
   amountPaidSoFar?: number;
   tenorMonths: number;
+  tenorUnit?: "MONTHS" | "WEEKS";
   purpose: string;
   status: string;
   repaymentProgress?: number;
@@ -67,8 +68,9 @@ const loanSchema = z.object({
   tenorMonths: z.coerce
     .number()
     .int()
-    .positive("Enter tenor in months")
-    .max(60, "Maximum tenor is 60 months"),
+    .positive("Enter a valid tenor")
+    .max(60, "Maximum tenor is 60"),
+  tenorUnit: z.enum(["MONTHS", "WEEKS"]),
   purpose: z.string().min(1, "Loan purpose is required").max(500),
   guarantorOneId: z.string(),
   guarantorTwoId: z.string(),
@@ -108,6 +110,7 @@ export default function LoansPage() {
     defaultValues: {
       amount: 0,
       tenorMonths: 0,
+      tenorUnit: "MONTHS",
       purpose: "",
       guarantorOneId: "",
       guarantorTwoId: "",
@@ -157,6 +160,7 @@ export default function LoansPage() {
         method(endpoint, {
           amount: values.amount,
           tenorMonths: values.tenorMonths,
+          tenorUnit: values.tenorUnit,
           purpose: values.purpose,
           guarantorOneId: values.guarantorOneId || undefined,
           guarantorTwoId: values.guarantorTwoId || undefined,
@@ -183,6 +187,7 @@ export default function LoansPage() {
     reset({
       amount: 0,
       tenorMonths: 0,
+      tenorUnit: "MONTHS",
       purpose: "",
       guarantorOneId: "",
       guarantorTwoId: "",
@@ -196,6 +201,7 @@ export default function LoansPage() {
     reset({
       amount: loan.amount,
       tenorMonths: loan.tenorMonths,
+      tenorUnit: loan.tenorUnit ?? "MONTHS",
       purpose: loan.purpose,
       guarantorOneId: "",
       guarantorTwoId: "",
@@ -248,7 +254,11 @@ export default function LoansPage() {
             : undefined
         }
         icon={<HandCoins className="h-5 w-5" />}
-        gradient="from-[#2a1210] via-[#200e0c] to-[#160908]"
+        gradient={
+          hasActiveLoan
+            ? "from-[#7a0d16] via-[#5d0910] to-[#340407]"
+            : "from-[#5b0b12] via-[#43080d] to-[#260406]"
+        }
       />
 
       {/* Active loan notice — styled to match the loan card's dark burgundy tone */}
@@ -299,7 +309,7 @@ export default function LoansPage() {
                 key={loan.id}
                 type="LOAN"
                 title={loan.purpose}
-                subtitle={`${loan.tenorMonths} months${loan.bankAccount ? ` · ${loan.bankAccount.bankName}` : ""}`}
+                subtitle={`${loan.tenorMonths} ${loan.tenorUnit === "WEEKS" ? "weeks" : "months"}${loan.bankAccount ? ` · ${loan.bankAccount.bankName}` : ""}`}
                 amount={loan.remainingBalance ?? loan.amount}
                 status={loan.status}
                 timestamp={new Date().toISOString()}
@@ -389,11 +399,22 @@ export default function LoansPage() {
           <NumberInput
             control={control}
             name="tenorMonths"
-            label="Tenor in months"
+            label="Tenor value"
             placeholder="e.g. 12"
             isRequired
             min={1}
             max={60}
+          />
+          <SelectInput
+            control={control}
+            name="tenorUnit"
+            label="Tenor unit"
+            placeholder="Select tenor unit"
+            isRequired
+            options={[
+              { id: "MONTHS", label: "Months" },
+              { id: "WEEKS", label: "Weeks" },
+            ]}
           />
           <TextareaInput
             control={control}

@@ -13,12 +13,33 @@ const variantMap = {
   neutral: "bg-stone-100 text-stone-700 border-stone-200",
 } as const;
 
+const statusVariantMap: Record<string, keyof typeof variantMap> = {
+  ACTIVE: "success",
+  APPROVED: "success",
+  COMPLETED: "success",
+  PAID: "success",
+  PENDING: "warning",
+  DISBURSED: "info",
+  IN_PROGRESS: "info",
+  CURRENT: "info",
+  REJECTED: "danger",
+  OVERDUE: "danger",
+  DEFAULTING: "danger",
+  INACTIVE: "neutral",
+  UPCOMING: "neutral",
+};
+
 export function StatusBadge({ status, variant = "neutral" }: StatusBadgeProps) {
+  const resolvedVariant =
+    variant === "neutral"
+      ? statusVariantMap[status.toUpperCase()] ?? variant
+      : variant;
+
   return (
     <span
       className={clsx(
         "inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em]",
-        variantMap[variant],
+        variantMap[resolvedVariant],
       )}
     >
       {status.replaceAll("_", " ")}

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class ApplyLoanDto {
   @IsOptional()
@@ -20,6 +20,11 @@ export class ApplyLoanDto {
   @IsNumber()
   @Min(1)
   tenorMonths!: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['MONTHS', 'WEEKS'])
+  tenorUnit?: 'MONTHS' | 'WEEKS';
 
   @IsString()
   @IsNotEmpty()

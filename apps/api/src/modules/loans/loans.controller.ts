@@ -109,6 +109,13 @@ export class LoansController {
     return this.loansService.repay(req.user.id, id, dto);
   }
 
+  @Post(':id/admin-repay')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Repay a loan from member wallet as admin' })
+  adminRepay(@Param('id') id: string, @Request() req: any, @Body() dto: RepayLoanDto) {
+    return this.loansService.repayAsAdmin(id, req.user.id, dto);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Edit a pending loan application' })
   updatePending(@Param('id') id: string, @Request() req: any, @Body() dto: ApplyLoanDto) {

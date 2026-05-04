@@ -28,7 +28,7 @@ export function MemberModal({
         onClick={onClose}
         type="button"
       />
-      <div className="relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-background-200 bg-white shadow-xl dark:border-background-700 dark:bg-background-800">
+      <div className="relative z-10 flex max-h-[75vh] max-sm:-mt-10 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-background-200 bg-white shadow-xl dark:border-background-700 dark:bg-background-800">
         <div className="flex items-start justify-between gap-4 border-b border-background-200 px-5 py-4 dark:border-background-700">
           <div>
             <h2 className="font-display text-xl font-semibold text-text-900">

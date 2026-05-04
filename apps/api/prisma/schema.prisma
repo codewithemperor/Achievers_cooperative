@@ -72,6 +72,20 @@ enum LoanStatus {
   REJECTED
 }
 
+enum LoanTenorUnit {
+  MONTHS
+  WEEKS
+}
+
+enum PackageSubscriptionStatus {
+  PENDING
+  APPROVED
+  DISBURSED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
 model User {
   id                     String      @id @default(cuid())
   email                  String      @unique
@@ -112,6 +126,7 @@ model Member {
   referredMembers       Member[]               @relation("MemberReferrals")
   wallet                Wallet?
   savingsAccounts       SavingsAccount[]
+  savingsWithdrawalRequests SavingsWithdrawalRequest[]
   loanApplications      LoanApplication[]
   investments           InvestmentSubscription[]
   payments              Payment[]
@@ -156,6 +171,7 @@ model SavingsAccount {
   balance               Decimal  @default(0)
   contributionFrequency String
   member                Member   @relation(fields: [memberId], references: [id])
+  withdrawalRequests    SavingsWithdrawalRequest[]
 }
 
 model LoanApplication {
@@ -165,6 +181,7 @@ model LoanApplication {
   guarantorTwoId   String?
   amount           Decimal
   tenorMonths      Int
+  tenorUnit        LoanTenorUnit  @default(MONTHS)
   purpose          String
   status           LoanStatus     @default(PENDING)
   submittedAt      DateTime       @default(now())
@@ -252,6 +269,9 @@ model Package {
   name             String
   totalAmount      Decimal
   durationMonths   Int
+  startDate        DateTime?
+  endDate          DateTime?
+  repaymentFrequency String             @default("WEEKLY")
   penaltyType      String
   penaltyValue     Decimal
   penaltyFrequency String
@@ -262,18 +282,42 @@ model Package {
 }
 
 model PackageSubscription {
-  id             String   @id @default(cuid())
-  packageId      String
-  memberId       String
-  amountPaid     Decimal  @default(0)
-  amountRemaining Decimal
-  penaltyAccrued Decimal  @default(0)
-  status         String   @default("ACTIVE")
-  nextDueAt      DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  package        Package  @relation(fields: [packageId], references: [id])
-  member         Member   @relation(fields: [memberId], references: [id])
+  id                      String                    @id @default(cuid())
+  packageId               String
+  memberId                String
+  amountPaid              Decimal                   @default(0)
+  amountRemaining         Decimal
+  penaltyAccrued          Decimal                   @default(0)
+  status                  PackageSubscriptionStatus @default(PENDING)
+  nextDueAt               DateTime?
+  approvedAt              DateTime?
+  disbursedAt             DateTime?
+  completedAt             DateTime?
+  rejectedAt              DateTime?
+  disbursementBankAccountId String?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  package                 Package                   @relation(fields: [packageId], references: [id])
+  member                  Member                    @relation(fields: [memberId], references: [id])
+  disbursementBankAccount BankAccount?              @relation(fields: [disbursementBankAccountId], references: [id])
+}
+
+model SavingsWithdrawalRequest {
+  id            String   @id @default(cuid())
+  memberId      String
+  savingsAccountId String
+  amount        Decimal
+  bankName      String
+  accountNumber String
+  accountName   String
+  status        String   @default("PENDING")
+  rejectionReason String?
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  member        Member   @relation(fields: [memberId], references: [id])
+  savingsAccount SavingsAccount @relation(fields: [savingsAccountId], references: [id])
 }
 
 model CooperativeWallet {
@@ -297,6 +341,7 @@ model BankAccount {
   createdAt     DateTime  @default(now())
   member        Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
   loanApplications LoanApplication[]
+  packageSubscriptions PackageSubscription[]
 
   @@unique([memberId, accountNumber])
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   ArrowRightLeft,
   BellRing,
+  BriefcaseBusiness,
   Landmark,
   PiggyBank,
   TrendingUp,
@@ -36,6 +37,12 @@ interface DashboardPayload {
     pendingPaymentsTotal: number;
     pendingPaymentsCount: number;
     activeLoan: { remainingBalance: number } | null;
+    activePackage: {
+      subscribedAmount: number;
+      amountRemaining: number;
+      packageName: string;
+      status: string;
+    } | null;
   };
   recentTransactions: Array<{
     id: string;
@@ -67,6 +74,7 @@ const fallbackData: DashboardPayload = {
     pendingPaymentsTotal: 0,
     pendingPaymentsCount: 0,
     activeLoan: null,
+    activePackage: null,
   },
   recentTransactions: [],
 };
@@ -128,6 +136,17 @@ const cardMeta = [
     gradient: "from-[#16112e] via-[#110d26] to-[#0c081e]",
   },
   {
+    title: "Package plan",
+    valueKey: "packages" as const,
+    eyebrow: "Subscriptions",
+    caption:
+      "Track your active package progress and outstanding contributions.",
+    href: "/packages",
+    ctaLabel: "Open packages",
+    icon: <BriefcaseBusiness className="h-5 w-5" />,
+    gradient: "from-[#7c3a00] via-[#5e2b00] to-[#341700]",
+  },
+  {
     title: "Loan balance",
     valueKey: "loans" as const,
     eyebrow: "Repayment",
@@ -135,8 +154,7 @@ const cardMeta = [
     href: "/loans",
     ctaLabel: "Manage loan",
     icon: <Landmark className="h-5 w-5" />,
-    // Deep burgundy / dark peach
-    gradient: "from-[#2a1210] via-[#200e0c] to-[#160908]",
+    gradient: "from-[#5b0b12] via-[#43080d] to-[#260406]",
   },
 ];
 
@@ -153,6 +171,7 @@ export default function DashboardPage() {
     wallet: formatMoney(data.wallet.availableBalance),
     savings: formatMoney(data.summary.totalSavings),
     investments: formatMoney(data.summary.totalInvestments),
+    packages: formatMoney(data.summary.activePackage?.subscribedAmount ?? 0),
     loans: formatMoney(data.summary.activeLoan?.remainingBalance ?? 0),
   };
 
@@ -195,7 +214,7 @@ export default function DashboardPage() {
                 <Link
                   key={action.href}
                   href={action.href}
-                  className={`flex min-w-28 items-center gap-2 rounded-2xl border border-white/14 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-xl
+                  className={`flex  items-center gap-2 rounded-2xl border border-white/14 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-xl
                     ${index === 0 ? "ml-5" : ""}
                     ${index === quickActions.length - 1 ? "mr-5" : ""}
                   `}
@@ -224,26 +243,33 @@ export default function DashboardPage() {
 
         <ScrollShadow orientation="horizontal">
           <div className="hide-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3">
-            {cardMeta.map((card, index) => (
-              <div
-                key={card.title}
-                className={`w-[84%] shrink-0 snap-center
+            {cardMeta.map((card, index) => {
+              const gradient =
+                card.valueKey === "loans" && data.summary.activeLoan
+                  ? "from-[#7a0d16] via-[#5d0910] to-[#340407]"
+                  : card.gradient;
+
+              return (
+                <div
+                  key={card.title}
+                  className={`w-[84%] shrink-0 snap-center
                   ${index === 0 ? "ml-5" : ""}
                   ${index === cardMeta.length - 1 ? "mr-5" : ""}
                 `}
-              >
-                <SummaryCard
-                  eyebrow={card.eyebrow}
-                  title={card.title}
-                  value={cardValues[card.valueKey]}
-                  caption={card.caption}
-                  href={card.href}
-                  ctaLabel={card.ctaLabel}
-                  icon={card.icon}
-                  gradient={card.gradient}
-                />
-              </div>
-            ))}
+                >
+                  <SummaryCard
+                    eyebrow={card.eyebrow}
+                    title={card.title}
+                    value={cardValues[card.valueKey]}
+                    caption={card.caption}
+                    href={card.href}
+                    ctaLabel={card.ctaLabel}
+                    icon={card.icon}
+                    gradient={gradient}
+                  />
+                </div>
+              );
+            })}
           </div>
         </ScrollShadow>
       </section>

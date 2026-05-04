@@ -108,6 +108,30 @@ export class InvestmentsService {
     };
   }
 
+  async deleteProduct(id: string, actorId: string) {
+    const product = await this.prisma.investmentProduct.findUnique({
+      where: { id },
+      include: {
+        subscriptions: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Investment product not found');
+    }
+
+    if (product.subscriptions.length > 0) {
+      throw new BadRequestException('This investment product has subscribers and cannot be deleted.');
+    }
+
+    await this.prisma.investmentProduct.delete({ where: { id } });
+    await this.audit.log(actorId, 'DELETE_INVESTMENT_PRODUCT', 'InvestmentProduct', id, {});
+
+    return { success: true };
+  }
+
   async getAllInvestments(query: { page?: number; limit?: number }) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;

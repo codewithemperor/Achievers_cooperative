@@ -90,7 +90,7 @@ export function TextInput<T extends FieldValues>({
             isInvalid={!!error}
           >
             <Label>{label}</Label>
-            <InputGroup className="rounded-xl border border-primary-500 focus-visible:border-0 ring-primary-500/20 ">
+            <InputGroup className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
               {startContent && (
                 <InputGroup.Prefix>{startContent}</InputGroup.Prefix>
               )}
@@ -98,7 +98,7 @@ export function TextInput<T extends FieldValues>({
                 {...restField}
                 type={type}
                 placeholder={placeholder}
-                className="rounded-xl py-3 "
+                className="p-0 focus:outline-none"
                 value={formattedValue}
                 onChange={(e) => onChange(e.target.value)}
               />
@@ -148,14 +148,14 @@ export function PasswordInput<T extends FieldValues>({
           isInvalid={!!error}
         >
           <Label>{label}</Label>
-          <InputGroup className="rounded-xl border border-primary-500 focus-visible:border-0 ring-primary-500/20">
+          <InputGroup className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
             {startContent && (
               <InputGroup.Prefix>{startContent}</InputGroup.Prefix>
             )}
             <InputGroup.Input
               {...field}
               type={showPassword ? "text" : "password"}
-              className="rounded-xl py-3 "
+              className="p-0 focus:outline-none"
               placeholder={placeholder}
               value={field.value ?? ""}
             />
@@ -163,12 +163,11 @@ export function PasswordInput<T extends FieldValues>({
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="flex items-center bg-primary justify-center text-default-400 hover:text-foreground focus:outline-none"
+                className="flex items-center justify-center text-default-400 hover:text-foreground focus:outline-none"
                 tabIndex={-1}
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
-                  // Eye-slash icon
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
@@ -184,7 +183,6 @@ export function PasswordInput<T extends FieldValues>({
                     />
                   </svg>
                 ) : (
-                  // Eye icon
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
@@ -269,10 +267,13 @@ export function NumberInput<T extends FieldValues>({
           }}
         >
           <Label>{label}</Label>
-          <NumberField.Group>
-            <NumberField.DecrementButton />
-            <NumberField.Input placeholder={placeholder} />
-            <NumberField.IncrementButton />
+          <NumberField.Group className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
+            <NumberField.DecrementButton className="h-full px-2" />
+            <NumberField.Input
+              placeholder={placeholder}
+              className="h-full flex-1 px-0 focus:outline-none"
+            />
+            <NumberField.IncrementButton className="h-full px-2" />
           </NumberField.Group>
           {description && !error && <Description>{description}</Description>}
           <FieldError>{error?.message}</FieldError>
@@ -320,14 +321,14 @@ export function TextareaInput<T extends FieldValues>({
             isInvalid={!!error}
           >
             <Label>{label}</Label>
-            <InputGroup>
+            <InputGroup className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
               <InputGroup.TextArea
                 {...field}
                 placeholder={placeholder}
                 value={field.value ?? ""}
                 rows={rows}
                 maxLength={maxLength}
-                className="resize-none"
+                className="min-h-12 resize-none px-3 py-2 text-sm focus:outline-none"
               />
             </InputGroup>
             {(description || (showCount && maxLength)) && !error && (
@@ -349,7 +350,6 @@ export function TextareaInput<T extends FieldValues>({
 }
 
 // ==================== DATE PICKER INPUT ====================
-// Replaces: <TextInput type="date" />
 
 interface DatePickerInputProps<
   T extends FieldValues,
@@ -378,51 +378,62 @@ export function DatePickerInput<T extends FieldValues>({
       control={control}
       name={name}
       render={({ field, fieldState: { error } }) => (
-        <DatePicker
-          className={className}
-          isDisabled={isDisabled}
-          isRequired={isRequired}
-          isInvalid={!!error}
-          minValue={minValue}
-          maxValue={maxValue}
-          granularity={granularity}
-          value={(field.value as DateValue | null | undefined) ?? null}
-          onChange={(val) => field.onChange(val)}
+        <div
+          className={`flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20 ${
+            className ?? ""
+          }`}
         >
-          <Label>{label}</Label>
-          <DateField.Group fullWidth>
-            <DateField.Input>
-              {(segment) => <DateField.Segment segment={segment} />}
-            </DateField.Input>
-            <DateField.Suffix>
-              <DatePicker.Trigger>
-                <DatePicker.TriggerIndicator />
-              </DatePicker.Trigger>
-            </DateField.Suffix>
-          </DateField.Group>
-          <DatePicker.Popover>
-            <Calendar aria-label={label}>
-              <Calendar.Header>
-                <Calendar.YearPickerTrigger>
-                  <Calendar.YearPickerTriggerHeading />
-                  <Calendar.YearPickerTriggerIndicator />
-                </Calendar.YearPickerTrigger>
-                <Calendar.NavButton slot="previous" />
-                <Calendar.NavButton slot="next" />
-              </Calendar.Header>
-              <Calendar.Grid>
-                <Calendar.GridHeader>
-                  {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
-                </Calendar.GridHeader>
-                <Calendar.GridBody>
-                  {(date) => <Calendar.Cell date={date} />}
-                </Calendar.GridBody>
-              </Calendar.Grid>
-            </Calendar>
-          </DatePicker.Popover>
-          {description && !error && <Description>{description}</Description>}
-          <FieldError>{error?.message}</FieldError>
-        </DatePicker>
+          <DatePicker
+            className="w-full"
+            isDisabled={isDisabled}
+            isRequired={isRequired}
+            isInvalid={!!error}
+            minValue={minValue}
+            maxValue={maxValue}
+            granularity={granularity}
+            value={(field.value as DateValue | null | undefined) ?? null}
+            onChange={(val) => field.onChange(val)}
+          >
+            <Label className="block text-sm font-medium">{label}</Label>
+            <DateField.Group fullWidth>
+              <DateField.Input className="flex min-h-12 w-full items-center">
+                {(segment) => (
+                  <DateField.Segment
+                    segment={segment}
+                    className="focus:outline-none"
+                  />
+                )}
+              </DateField.Input>
+              <DateField.Suffix>
+                <DatePicker.Trigger>
+                  <DatePicker.TriggerIndicator />
+                </DatePicker.Trigger>
+              </DateField.Suffix>
+            </DateField.Group>
+            <DatePicker.Popover>
+              <Calendar aria-label={label}>
+                <Calendar.Header>
+                  <Calendar.YearPickerTrigger>
+                    <Calendar.YearPickerTriggerHeading />
+                    <Calendar.YearPickerTriggerIndicator />
+                  </Calendar.YearPickerTrigger>
+                  <Calendar.NavButton slot="previous" />
+                  <Calendar.NavButton slot="next" />
+                </Calendar.Header>
+                <Calendar.Grid>
+                  <Calendar.GridHeader>
+                    {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                  </Calendar.GridHeader>
+                  <Calendar.GridBody>
+                    {(date) => <Calendar.Cell date={date} />}
+                  </Calendar.GridBody>
+                </Calendar.Grid>
+              </Calendar>
+            </DatePicker.Popover>
+            {description && !error && <Description>{description}</Description>}
+            <FieldError>{error?.message}</FieldError>
+          </DatePicker>
+        </div>
       )}
     />
   );
@@ -464,59 +475,81 @@ export function DateRangePickerInput<T extends FieldValues>({
       control={control}
       name={name}
       render={({ field, fieldState: { error } }) => (
-        <DateRangePicker
-          className={className}
-          isDisabled={isDisabled}
-          isInvalid={!!error}
-          minValue={minValue}
-          maxValue={maxValue}
-          startName={startName}
-          endName={endName}
-          value={(field.value as DateRange | null | undefined) ?? null}
-          onChange={(val) => field.onChange(val)}
+        <div
+          className={`flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20 ${
+            className ?? ""
+          }`}
         >
-          <Label>{label}</Label>
-          <DateField.Group fullWidth>
-            <DateField.InputContainer>
-              <DateField.Input slot="start">
-                {(segment) => <DateField.Segment segment={segment} />}
-              </DateField.Input>
-              <DateRangePicker.RangeSeparator />
-              <DateField.Input slot="end">
-                {(segment) => <DateField.Segment segment={segment} />}
-              </DateField.Input>
-            </DateField.InputContainer>
-            <DateField.Suffix>
-              <DateRangePicker.Trigger>
-                <DateRangePicker.TriggerIndicator />
-              </DateRangePicker.Trigger>
-            </DateField.Suffix>
-          </DateField.Group>
-          <DateRangePicker.Popover>
-            <RangeCalendar aria-label={label}>
-              <RangeCalendar.Header>
-                <RangeCalendar.YearPickerTrigger>
-                  <RangeCalendar.YearPickerTriggerHeading />
-                  <RangeCalendar.YearPickerTriggerIndicator />
-                </RangeCalendar.YearPickerTrigger>
-                <RangeCalendar.NavButton slot="previous" />
-                <RangeCalendar.NavButton slot="next" />
-              </RangeCalendar.Header>
-              <RangeCalendar.Grid>
-                <RangeCalendar.GridHeader>
-                  {(day) => (
-                    <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>
+          <DateRangePicker
+            className="w-full"
+            isDisabled={isDisabled}
+            isInvalid={!!error}
+            minValue={minValue}
+            maxValue={maxValue}
+            startName={startName}
+            endName={endName}
+            value={(field.value as DateRange | null | undefined) ?? null}
+            onChange={(val) => field.onChange(val)}
+          >
+            <Label className="block text-sm font-medium">{label}</Label>
+            <DateField.Group fullWidth>
+              <DateField.InputContainer>
+                <DateField.Input
+                  slot="start"
+                  className="flex min-h-12 items-center"
+                >
+                  {(segment) => (
+                    <DateField.Segment
+                      segment={segment}
+                      className="focus:outline-none"
+                    />
                   )}
-                </RangeCalendar.GridHeader>
-                <RangeCalendar.GridBody>
-                  {(date) => <RangeCalendar.Cell date={date} />}
-                </RangeCalendar.GridBody>
-              </RangeCalendar.Grid>
-            </RangeCalendar>
-          </DateRangePicker.Popover>
-          {description && !error && <Description>{description}</Description>}
-          <FieldError>{error?.message}</FieldError>
-        </DateRangePicker>
+                </DateField.Input>
+                <DateRangePicker.RangeSeparator />
+                <DateField.Input
+                  slot="end"
+                  className="flex min-h-12 items-center"
+                >
+                  {(segment) => (
+                    <DateField.Segment
+                      segment={segment}
+                      className="focus:outline-none"
+                    />
+                  )}
+                </DateField.Input>
+              </DateField.InputContainer>
+              <DateField.Suffix>
+                <DateRangePicker.Trigger>
+                  <DateRangePicker.TriggerIndicator />
+                </DateRangePicker.Trigger>
+              </DateField.Suffix>
+            </DateField.Group>
+            <DateRangePicker.Popover>
+              <RangeCalendar aria-label={label}>
+                <RangeCalendar.Header>
+                  <RangeCalendar.YearPickerTrigger>
+                    <RangeCalendar.YearPickerTriggerHeading />
+                    <RangeCalendar.YearPickerTriggerIndicator />
+                  </RangeCalendar.YearPickerTrigger>
+                  <RangeCalendar.NavButton slot="previous" />
+                  <RangeCalendar.NavButton slot="next" />
+                </RangeCalendar.Header>
+                <RangeCalendar.Grid>
+                  <RangeCalendar.GridHeader>
+                    {(day) => (
+                      <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>
+                    )}
+                  </RangeCalendar.GridHeader>
+                  <RangeCalendar.GridBody>
+                    {(date) => <RangeCalendar.Cell date={date} />}
+                  </RangeCalendar.GridBody>
+                </RangeCalendar.Grid>
+              </RangeCalendar>
+            </DateRangePicker.Popover>
+            {description && !error && <Description>{description}</Description>}
+            <FieldError>{error?.message}</FieldError>
+          </DateRangePicker>
+        </div>
       )}
     />
   );
@@ -557,38 +590,50 @@ export function TimeFieldInput<T extends FieldValues>({
       control={control}
       name={name}
       render={({ field, fieldState: { error } }) => (
-        <TimeField
-          className={className}
-          isDisabled={isDisabled}
-          isRequired={isRequired}
-          isInvalid={!!error}
-          granularity={granularity}
-          hourCycle={hourCycle}
-          hideTimeZone={hideTimeZone}
-          minValue={minValue ?? undefined}
-          maxValue={maxValue ?? undefined}
-          value={(field.value as TimeValue | null | undefined) ?? null}
-          onChange={(val) => field.onChange(val)}
+        <div
+          className={`flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20 ${
+            className ?? ""
+          }`}
         >
-          <Label>{label}</Label>
-          <TimeField.Group fullWidth>
-            {startContent && (
-              <TimeField.Prefix>{startContent}</TimeField.Prefix>
-            )}
-            <TimeField.Input>
-              {(segment) => <TimeField.Segment segment={segment} />}
-            </TimeField.Input>
-            {endContent && <TimeField.Suffix>{endContent}</TimeField.Suffix>}
-          </TimeField.Group>
-          {description && !error && <Description>{description}</Description>}
-          <FieldError>{error?.message}</FieldError>
-        </TimeField>
+          <TimeField
+            className="w-full"
+            isDisabled={isDisabled}
+            isRequired={isRequired}
+            isInvalid={!!error}
+            granularity={granularity}
+            hourCycle={hourCycle}
+            hideTimeZone={hideTimeZone}
+            minValue={minValue ?? undefined}
+            maxValue={maxValue ?? undefined}
+            value={(field.value as TimeValue | null | undefined) ?? null}
+            onChange={(val) => field.onChange(val)}
+          >
+            <Label className="block text-sm font-medium">{label}</Label>
+            <TimeField.Group fullWidth>
+              {startContent && (
+                <TimeField.Prefix>{startContent}</TimeField.Prefix>
+              )}
+              <TimeField.Input className="flex min-h-12 items-center">
+                {(segment) => (
+                  <TimeField.Segment
+                    segment={segment}
+                    className="focus:outline-none"
+                  />
+                )}
+              </TimeField.Input>
+              {endContent && <TimeField.Suffix>{endContent}</TimeField.Suffix>}
+            </TimeField.Group>
+            {description && !error && <Description>{description}</Description>}
+            <FieldError>{error?.message}</FieldError>
+          </TimeField>
+        </div>
       )}
     />
   );
 }
 
 // ==================== SELECT INPUT ====================
+
 interface SelectOption {
   id: Key;
   label: string;
@@ -634,7 +679,6 @@ export function SelectInput<T extends FieldValues>({
       control={control}
       name={name}
       render={({ field, fieldState: { error } }) => {
-        // Normalize value: RHF stores plain string/string[]; Select expects Key | Key[] | null
         const value: Key | Key[] | null =
           field.value === undefined || field.value === null
             ? null
@@ -655,7 +699,7 @@ export function SelectInput<T extends FieldValues>({
             onChange={(val) => field.onChange(val)}
           >
             <Label>{label}</Label>
-            <Select.Trigger>
+            <Select.Trigger className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
               <Select.Value />
               <Select.Indicator />
             </Select.Trigger>
@@ -744,7 +788,7 @@ export function AutocompleteInput({
         selectedKey={selectedKey}
         onSelectionChange={(key) => onSelectionChange(key)}
       >
-        <Autocomplete.Trigger className="flex min-h-12 w-full items-center gap-3 rounded-2xl border border-background-200 bg-white px-3 text-sm outline-none transition-colors focus:border-primary-400 dark:border-background-700 dark:bg-background-900">
+        <Autocomplete.Trigger className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
           <Autocomplete.Value />
           <Autocomplete.ClearButton className="text-sm text-text-400" />
           <Autocomplete.Indicator />

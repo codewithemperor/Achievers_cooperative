@@ -104,6 +104,16 @@ export class BankAccountsService {
     return accounts;
   }
 
+  async findByMemberId(memberId: string) {
+    const member = await this.prisma.member.findUnique({ where: { id: memberId } });
+    if (!member) throw new NotFoundException('Member profile not found');
+
+    return this.prisma.bankAccount.findMany({
+      where: { memberId },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
   async create(userId: string, dto: CreateBankAccountDto) {
     const member = await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');

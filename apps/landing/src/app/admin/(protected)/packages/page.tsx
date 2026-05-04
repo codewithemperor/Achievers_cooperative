@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { parseDate } from "@internationalized/date";
 import { useForm } from "react-hook-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -10,21 +11,36 @@ import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { AdminModal } from "@/components/ui/admin-modal";
 import {
+  DateRangePickerInput,
   NumberInput,
   SelectInput,
   TextInput,
 } from "@/components/ui/form-input";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
+import { Pencil, Trash2 } from "lucide-react";
 
 interface PackagesResponse {
   items: Array<{
     id: string;
     name: string;
     totalAmount: number;
+    pendingRequestCount: number;
+    subscriberCount: number;
     durationMonths: number;
+    startDate?: string | null;
+    endDate?: string | null;
     penaltyType: string;
     isActive: boolean;
   }>;
+}
+
+interface PackageFormValues {
+  name: string;
+  totalAmount: number | undefined;
+  schedule: { start: any; end: any } | null;
+  penaltyType: string;
+  penaltyValue: number | undefined;
+  penaltyFrequency: string;
 }
 
 const penaltyOptions: Array<{ id: string; label: string }> = [
@@ -42,62 +58,68 @@ const currency = new Intl.NumberFormat("en-NG", {
 export default function PackagesPage() {
   const packages = useApi<PackagesResponse>("/packages");
   const [submitting, setSubmitting] = useState(false);
-  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
-  const { control, handleSubmit, reset } = useForm<{
-    name: string;
-    totalAmount: number | undefined;
-    durationMonths: number | undefined;
-    penaltyType: string;
-    penaltyValue: number | undefined;
-    penaltyFrequency: string;
-  }>({
+  const [editingPackage, setEditingPackage] = useState<
+    PackagesResponse["items"][number] | null
+  >(null);
+  const { control, handleSubmit, reset } = useForm<PackageFormValues>({
     defaultValues: {
       name: "",
       totalAmount: undefined,
-      durationMonths: undefined,
+      schedule: null,
       penaltyType: "FIXED",
       penaltyValue: undefined,
-      penaltyFrequency: "MONTHLY",
+      penaltyFrequency: "WEEKLY",
     },
   });
+
+  function buildPackagePayload(values: PackageFormValues) {
+    return {
+      name: values.name.trim(),
+      totalAmount: Number(values.totalAmount),
+      startDate: values.schedule?.start?.toString?.() || undefined,
+      endDate: values.schedule?.end?.toString?.() || undefined,
+      penaltyType: values.penaltyType,
+      penaltyValue: Number(values.penaltyValue ?? 0),
+      penaltyFrequency: "WEEKLY",
+    };
+  }
+
+  function toScheduleRange(item: PackagesResponse["items"][number]) {
+    if (!item.startDate || !item.endDate) {
+      return null;
+    }
+
+    return {
+      start: parseDate(item.startDate.slice(0, 10)),
+      end: parseDate(item.endDate.slice(0, 10)),
+    };
+  }
 
   const createPackage = handleSubmit(async (values) => {
     try {
       setSubmitting(true);
-      await api.post("/packages", {
-        name: values.name,
-        totalAmount: Number(values.totalAmount),
-        durationMonths: Number(values.durationMonths),
-        penaltyType: values.penaltyType,
-        penaltyValue: Number(values.penaltyValue),
-        penaltyFrequency: values.penaltyFrequency,
-      });
-      showSuccessToast("Package created successfully.");
+      const endpoint = editingPackage
+        ? `/packages/${editingPackage.id}`
+        : "/packages";
+      const method = editingPackage ? api.patch : api.post;
+      await method(endpoint, buildPackagePayload(values));
+      showSuccessToast(
+        editingPackage
+          ? "Package updated successfully."
+          : "Package created successfully.",
+      );
       reset();
+      setEditingPackage(null);
       await packages.refetch();
     } catch (error: any) {
       showErrorToast(
-        error?.response?.data?.message || "Unable to create package.",
+        error?.response?.data?.message || "Unable to save package.",
       );
+      throw error;
     } finally {
       setSubmitting(false);
     }
   });
-
-  async function updateStatus(id: string, isActive: boolean) {
-    try {
-      setStatusUpdatingId(id);
-      await api.patch(`/packages/${id}`, { isActive });
-      showSuccessToast("Package status updated successfully.");
-      await packages.refetch();
-    } catch (error: any) {
-      showErrorToast(
-        error?.response?.data?.message || "Unable to update package status.",
-      );
-    } finally {
-      setStatusUpdatingId(null);
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -111,6 +133,17 @@ export default function PackagesPage() {
             trigger={
               <button
                 className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
+                onClick={() => {
+                  setEditingPackage(null);
+                  reset({
+                    name: "",
+                    totalAmount: undefined,
+                    schedule: null,
+                    penaltyType: "FIXED",
+                    penaltyValue: 0,
+                    penaltyFrequency: "WEEKLY",
+                  });
+                }}
                 type="button"
               >
                 Add package
@@ -135,13 +168,12 @@ export default function PackagesPage() {
                     placeholder="Total amount"
                     min={0}
                   />
-                  <NumberInput
+                  <DateRangePickerInput
                     className="rounded-2xl"
                     control={control}
-                    label="Duration Months"
-                    name="durationMonths"
-                    placeholder="Duration months"
-                    min={1}
+                    label="Date Range"
+                    name="schedule"
+                    description="Repayment frequency is fixed to weekly."
                   />
                   <SelectInput
                     className="rounded-2xl"
@@ -163,32 +195,12 @@ export default function PackagesPage() {
                   <button
                     className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
                     disabled={submitting}
-                    onClick={() =>
-                      void handleSubmit(async (values) => {
-                        try {
-                          setSubmitting(true);
-                          await api.post("/packages", {
-                            name: values.name,
-                            totalAmount: Number(values.totalAmount),
-                            durationMonths: Number(values.durationMonths),
-                            penaltyType: values.penaltyType,
-                            penaltyValue: Number(values.penaltyValue),
-                            penaltyFrequency: values.penaltyFrequency,
-                          });
-                          showSuccessToast("Package created successfully.");
-                          reset();
-                          await packages.refetch();
-                          close();
-                        } catch (error: any) {
-                          showErrorToast(
-                            error?.response?.data?.message ||
-                              "Unable to create package.",
-                          );
-                        } finally {
-                          setSubmitting(false);
-                        }
-                      })()
-                    }
+                    onClick={async () => {
+                      try {
+                        await createPackage();
+                        close();
+                      } catch {}
+                    }}
                     type="button"
                   >
                     {submitting ? "Saving..." : "Save package"}
@@ -215,13 +227,26 @@ export default function PackagesPage() {
           },
           {
             key: "duration",
-            header: "Duration",
-            render: (item) => `${item.durationMonths} months`,
+            header: "Date Range",
+            render: (item) =>
+              item.startDate && item.endDate
+                ? `${new Date(item.startDate).toLocaleDateString("en-NG")} - ${new Date(item.endDate).toLocaleDateString("en-NG")}`
+                : `${item.durationMonths} months`,
           },
           {
             key: "penalty",
             header: "Penalty",
             render: (item) => item.penaltyType,
+          },
+          {
+            key: "pendingRequests",
+            header: "Pending Requests",
+            render: (item) => item.pendingRequestCount ?? 0,
+          },
+          {
+            key: "subscribers",
+            header: "Subscribers",
+            render: (item) => item.subscriberCount ?? 0,
           },
           {
             key: "status",
@@ -235,7 +260,7 @@ export default function PackagesPage() {
           },
           {
             key: "detail",
-            header: "Detail",
+            header: "Actions",
             render: (item) => (
               <div className="flex items-center gap-3">
                 <Link
@@ -244,17 +269,105 @@ export default function PackagesPage() {
                 >
                   Open detail
                 </Link>
+                <AdminModal
+                  description="Update package configuration."
+                  title="Edit Package"
+                  trigger={
+                    <button
+                      className="text-text-700"
+                      onClick={() => {
+                        setEditingPackage(item);
+                        reset({
+                          name: item.name,
+                          totalAmount: item.totalAmount,
+                          schedule: toScheduleRange(item),
+                          penaltyType: item.penaltyType,
+                          penaltyValue: 0,
+                          penaltyFrequency: "WEEKLY",
+                        });
+                      }}
+                      type="button"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  }
+                >
+                  {({ close }) => (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <TextInput
+                          className="rounded-2xl md:col-span-2"
+                          control={control}
+                          label="Package Name"
+                          name="name"
+                          placeholder="Package name"
+                        />
+                        <NumberInput
+                          className="rounded-2xl"
+                          control={control}
+                          label="Total Amount"
+                          name="totalAmount"
+                          placeholder="Total amount"
+                          min={0}
+                        />
+                        <DateRangePickerInput
+                          className="rounded-2xl"
+                          control={control}
+                          label="Date Range"
+                          name="schedule"
+                          description="Repayment frequency is fixed to weekly."
+                        />
+                        <SelectInput
+                          className="rounded-2xl"
+                          control={control}
+                          label="Penalty Type"
+                          name="penaltyType"
+                          options={penaltyOptions}
+                        />
+                        <NumberInput
+                          className="rounded-2xl"
+                          control={control}
+                          label="Penalty Value"
+                          name="penaltyValue"
+                          placeholder="Penalty value"
+                          min={0}
+                        />
+                      </div>
+                      <div className="mt-6 flex justify-end">
+                        <button
+                          className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                          disabled={submitting}
+                          onClick={async () => {
+                            try {
+                              await createPackage();
+                              close();
+                            } catch {}
+                          }}
+                          type="button"
+                        >
+                          {submitting ? "Saving..." : "Save package"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </AdminModal>
                 <button
-                  className="text-xs font-semibold text-text-700"
-                  disabled={statusUpdatingId === item.id}
-                  onClick={() => void updateStatus(item.id, !item.isActive)}
+                  className="text-[#b42318]"
+                  onClick={async () => {
+                    try {
+                      await api.delete(`/packages/${item.id}`);
+                      showSuccessToast("Package deleted successfully.");
+                      await packages.refetch();
+                    } catch (error: any) {
+                      showErrorToast(
+                        error?.response?.data?.message ||
+                          "Unable to delete package.",
+                      );
+                    }
+                  }}
                   type="button"
                 >
-                  {statusUpdatingId === item.id
-                    ? "Updating..."
-                    : item.isActive
-                      ? "Deactivate"
-                      : "Activate"}
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             ),

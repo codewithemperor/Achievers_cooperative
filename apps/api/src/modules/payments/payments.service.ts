@@ -107,13 +107,13 @@ export class PaymentsService {
     const { charge, netAmount } = await this.membershipChargeService.applyCharge(grossAmount);
     const reference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
-    await this.walletService.creditWallet(payment.memberId, netAmount, 'WALLET_FUNDING', reference, {
+    const fundingResult = await this.walletService.creditWallet(payment.memberId, netAmount, 'WALLET_FUNDING', reference, {
       category: 'wallet funding',
       description: `Approved wallet funding for ${payment.member.fullName}`,
       editable: false,
       lockReason: 'Wallet funding transactions come from verified payment records and cannot be edited.',
     });
-    const autoSettlements = await this.walletService.settleOutstandingObligations(payment.memberId);
+    const autoSettlements = fundingResult.settlements;
 
     await this.prisma.wallet.update({
       where: { memberId: payment.memberId },

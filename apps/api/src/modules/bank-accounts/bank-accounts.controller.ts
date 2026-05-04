@@ -13,11 +13,13 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse } from '@nestjs/swa
 import { BankAccountsService } from './bank-accounts.service';
 import { CreateBankAccountDto, UpdateBankAccountDto, VerifyBankAccountDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ApiTags('bank-accounts')
 @ApiBearerAuth()
 @Controller('bank-accounts')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class BankAccountsController {
   constructor(private readonly bankAccountsService: BankAccountsService) {}
 
@@ -39,6 +41,13 @@ export class BankAccountsController {
   @ApiOkResponse({ description: 'List of bank accounts' })
   findAll(@Request() req: any) {
     return this.bankAccountsService.findAll(req.user.id);
+  }
+
+  @Get('member/:memberId')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'List bank accounts for a member' })
+  findByMemberId(@Param('memberId') memberId: string) {
+    return this.bankAccountsService.findByMemberId(memberId);
   }
 
   @Post()
