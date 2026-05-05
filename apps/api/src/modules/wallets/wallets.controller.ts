@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Body, Query, UseGuards, Request, Param } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Body, Query, UseGuards, Request, Param } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 import { WalletsService } from './wallets.service';
-import { AdminWalletSpendDto, FundWalletDto } from './dto/index';
+import { AdminWalletSpendDto, FundWalletDto, RequestWalletWithdrawalDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -48,6 +48,46 @@ export class WalletsController {
       offset: offset ? Number(offset) : undefined,
       type,
     });
+  }
+
+  @Get('withdrawals/me')
+  @ApiOperation({ summary: 'Get my wallet withdrawal requests' })
+  getMyWithdrawals(@Request() req: any) {
+    return this.walletsService.getMyWithdrawalRequests(req.user.id);
+  }
+
+  @Post('withdrawals/request')
+  @ApiOperation({ summary: 'Request wallet withdrawal' })
+  requestWithdrawal(@Request() req: any, @Body() dto: RequestWalletWithdrawalDto) {
+    return this.walletsService.requestWithdrawal(req.user.id, dto);
+  }
+
+  @Get('withdrawals')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'List wallet withdrawal requests' })
+  listWithdrawals() {
+    return this.walletsService.listWithdrawalRequests();
+  }
+
+  @Patch('withdrawals/:id/approve')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Approve wallet withdrawal request' })
+  approveWithdrawal(@Param('id') id: string, @Request() req: any) {
+    return this.walletsService.approveWithdrawal(id, req.user.id);
+  }
+
+  @Patch('withdrawals/:id/reject')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Reject wallet withdrawal request' })
+  rejectWithdrawal(@Param('id') id: string, @Request() req: any, @Body() body?: { reason?: string }) {
+    return this.walletsService.rejectWithdrawal(id, req.user.id, body?.reason);
+  }
+
+  @Patch('withdrawals/:id/disburse')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Disburse approved wallet withdrawal' })
+  disburseWithdrawal(@Param('id') id: string, @Request() req: any) {
+    return this.walletsService.disburseWithdrawal(id, req.user.id);
   }
 
   @Get(':memberId')

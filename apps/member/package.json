@@ -29,6 +29,7 @@
     "serwist": "9.5.7",
     "sweetalert2": "^11.26.24",
     "sweetalert2-react-content": "^5.1.2",
+    "zustand": "^5.0.8",
     "zod": "^3.24.1"
   },
   "devDependencies": {

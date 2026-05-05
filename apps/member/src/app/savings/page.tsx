@@ -7,9 +7,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { PiggyBank } from "lucide-react";
 import { MemberModal } from "@/components/member-modal";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { NumberInput, SelectInput } from "@/components/form-input";
 import { SummaryCard } from "@/components/summary-card";
 import { TransactionCard } from "@/components/transaction-card";
+import {
+  TransactionDetailModal,
+  type TransactionDetailItem,
+} from "@/components/transaction-detail-modal";
 import { apiCallWithAlert } from "@/lib/alert";
 import api from "@/lib/member-api";
 import { useMemberData } from "@/hooks/use-member-data";
@@ -82,6 +87,8 @@ export default function SavingsPage() {
   const [isContributionModalOpen, setIsContributionModalOpen] = useState(false);
   const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("transactions");
+  const [selectedTransaction, setSelectedTransaction] =
+    useState<TransactionDetailItem | null>(null);
 
   const { control, handleSubmit, reset } = useForm<ContributionFormValues>({
     resolver: zodResolver(contributionSchema),
@@ -131,38 +138,56 @@ export default function SavingsPage() {
   const savingsTransactions = transactions.data.items.filter((item) =>
     item.type.toUpperCase().includes("SAVING"),
   );
+  const requestButtonLabel =
+    activeTab === "withdrawals" ? "Request Withdrawal" : "Save Now";
+  const requestButtonDisabled =
+    activeTab === "withdrawals" && !bankAccounts.data.length;
+  const handlePrimaryAction = () => {
+    if (activeTab === "withdrawals") {
+      const defaultBank =
+        bankAccounts.data.find((account) => account.isDefault)?.id ??
+        bankAccounts.data[0]?.id ??
+        "";
+      resetWithdrawal({ amount: 0, bankAccountId: defaultBank });
+      setIsWithdrawalModalOpen(true);
+      return;
+    }
+
+    reset();
+    setIsContributionModalOpen(true);
+  };
 
   return (
-    <div className="space-y-5">
+    <PullToRefresh
+      className="space-y-5"
+      onRefresh={async () => {
+        await Promise.all([
+          savings.refetch(),
+          transactions.refetch(),
+          withdrawals.refetch(),
+          bankAccounts.refetch(),
+        ]);
+      }}
+    >
       <SummaryCard
         eyebrow="Savings"
         title="Current savings balance"
         value={formatMoney(primaryAccount?.balance ?? 0)}
         caption={`Contribution frequency: ${primaryAccount?.contributionFrequency || "MONTHLY"}`}
-        ctaLabel="Save now"
-        onCtaClick={() => {
-          reset();
-          setIsContributionModalOpen(true);
-        }}
+        ctaLabel={requestButtonLabel}
+        onCtaClick={handlePrimaryAction}
         icon={<PiggyBank className="h-5 w-5" />}
         gradient="from-[#2a0a0a] via-[#200808] to-[#160505]"
       />
 
-      <div className="flex gap-3">
+      <div className="sticky top-3 z-10 flex justify-end">
         <button
-          className="min-h-11 rounded-2xl border border-background-200 px-4 py-3 text-sm font-semibold text-text-900 dark:border-white/10 dark:text-text-50"
-          onClick={() => {
-            const defaultBank =
-              bankAccounts.data.find((account) => account.isDefault)?.id ??
-              bankAccounts.data[0]?.id ??
-              "";
-            resetWithdrawal({ amount: 0, bankAccountId: defaultBank });
-            setIsWithdrawalModalOpen(true);
-          }}
+          className="min-h-11 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary-900/10 disabled:opacity-50"
+          onClick={handlePrimaryAction}
           type="button"
-          disabled={!bankAccounts.data.length}
+          disabled={requestButtonDisabled}
         >
-          Request Withdrawal
+          {requestButtonLabel}
         </button>
       </div>
 
@@ -219,6 +244,13 @@ export default function SavingsPage() {
                   amount={tx.amount}
                   status={tx.status}
                   timestamp={tx.createdAt}
+                  onClick={() =>
+                    setSelectedTransaction({
+                      ...tx,
+                      source: "TRANSACTION",
+                      reference: tx.id,
+                    })
+                  }
                 />
               ))
             ) : (
@@ -250,6 +282,15 @@ export default function SavingsPage() {
                   amount={request.amount}
                   status={request.status}
                   timestamp={request.createdAt}
+                  onClick={() =>
+                    setSelectedTransaction({
+                      ...request,
+                      type: "SAVINGS_WITHDRAWAL",
+                      source: "WITHDRAWAL_REQUEST",
+                      reference: request.id,
+                      description: `${request.bankName} - ${request.accountNumber}`,
+                    })
+                  }
                 />
               ))
             ) : (
@@ -332,6 +373,11 @@ export default function SavingsPage() {
           </button>
         </form>
       </MemberModal>
-    </div>
+
+      <TransactionDetailModal
+        transaction={selectedTransaction}
+        onClose={() => setSelectedTransaction(null)}
+      />
+    </PullToRefresh>
   );
 }

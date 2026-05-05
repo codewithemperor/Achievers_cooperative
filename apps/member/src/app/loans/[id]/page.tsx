@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { apiCallWithAlert } from "@/lib/alert";
 import api, { fetchMemberApi } from "@/lib/member-api";
 import { TransactionCard } from "@/components/transaction-card";
+import { goBackOrDashboard } from "@/lib/navigation";
 
 interface LoanDetail {
   id: string;
@@ -157,9 +157,13 @@ export default function LoanDetailPage() {
   if (error || !loan) {
     return (
       <div className="space-y-6">
-        <Link href="/loans" className="inline-flex items-center gap-2 text-sm font-semibold text-primary-600 dark:text-primary-400">
-          Back to Loans
-        </Link>
+        <button
+          className="inline-flex items-center gap-2 text-sm font-semibold text-primary-600 dark:text-primary-400"
+          onClick={() => goBackOrDashboard(router)}
+          type="button"
+        >
+          Back
+        </button>
         <div className="rounded-2xl border border-dashed border-background-300 bg-background-50 p-8 text-center dark:border-background-700 dark:bg-background-900">
           <p className="text-sm text-text-400">{error || "Loan not found"}</p>
         </div>
@@ -175,9 +179,13 @@ export default function LoanDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <Link href="/loans" className="inline-flex items-center gap-2 text-sm font-semibold text-primary-600 dark:text-primary-400">
-          Back to Loans
-        </Link>
+        <button
+          className="inline-flex items-center gap-2 text-sm font-semibold text-primary-600 dark:text-primary-400"
+          onClick={() => goBackOrDashboard(router)}
+          type="button"
+        >
+          Back
+        </button>
         {loan.canDelete ? (
           <button
             className="rounded-2xl border border-red-200 px-4 py-3 text-sm font-semibold text-red-600 dark:border-red-800 dark:text-red-400"

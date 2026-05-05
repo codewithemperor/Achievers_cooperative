@@ -7,7 +7,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { InvestmentsService } from './investments.service';
-import { SubscribeInvestmentDto, QueryInvestmentsDto } from './dto/index';
+import { QueryInvestmentsDto, RejectInvestmentCancellationDto, RequestInvestmentCancellationDto, SubscribeInvestmentDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -79,6 +79,47 @@ export class InvestmentsController {
   @ApiOkResponse({ description: 'My investments' })
   getMyInvestments(@Request() req: any, @Query() query: QueryInvestmentsDto) {
     return this.investmentsService.getMyInvestments(req.user.id, query);
+  }
+
+  @Get('my/:id')
+  @ApiOperation({ summary: 'Get my investment detail' })
+  getMyInvestment(@Request() req: any, @Param('id') id: string) {
+    return this.investmentsService.getMyInvestment(req.user.id, id);
+  }
+
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Request investment cancellation' })
+  requestCancellation(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: RequestInvestmentCancellationDto,
+  ) {
+    return this.investmentsService.requestCancellation(req.user.id, id, dto.reason);
+  }
+
+  @Get('cancellations')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'List investment cancellation requests' })
+  listCancellationRequests() {
+    return this.investmentsService.listCancellationRequests();
+  }
+
+  @Patch('cancellations/:id/approve')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Approve investment cancellation' })
+  approveCancellation(@Param('id') id: string, @Request() req: any) {
+    return this.investmentsService.approveCancellation(id, req.user.id);
+  }
+
+  @Patch('cancellations/:id/reject')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Reject investment cancellation' })
+  rejectCancellation(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body() dto: RejectInvestmentCancellationDto,
+  ) {
+    return this.investmentsService.rejectCancellation(id, req.user.id, dto?.reason);
   }
 
   @Post('subscribe/:id/approve')

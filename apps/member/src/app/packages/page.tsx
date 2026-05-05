@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { Tabs } from "@heroui/react";
 import { BriefcaseBusiness } from "lucide-react";
 import { MemberModal } from "@/components/member-modal";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { SelectInput } from "@/components/form-input";
 import { apiCallWithAlert } from "@/lib/alert";
 import api from "@/lib/member-api";
@@ -100,22 +101,42 @@ export default function PackagesPage() {
     }
   }
 
-  const totalSubscribed = subscriptions.data.items.reduce(
-    (sum, item) => sum + item.subscribedAmount,
+  const activeStatuses = ["APPROVED", "DISBURSED", "IN_PROGRESS"];
+  const activePackageTotal = subscriptions.data.items.reduce(
+    (sum, item) =>
+      activeStatuses.includes(item.status)
+        ? sum + item.subscribedAmount
+        : sum,
     0,
   );
-  const totalOutstanding = subscriptions.data.items.reduce(
-    (sum, item) => sum + item.amountRemaining + item.penaltyAccrued,
+  const activePackageRemaining = subscriptions.data.items.reduce(
+    (sum, item) =>
+      activeStatuses.includes(item.status)
+        ? sum + item.amountRemaining + item.penaltyAccrued
+        : sum,
     0,
   );
-
+  const pendingPackageTotal = subscriptions.data.items.reduce(
+    (sum, item) =>
+      item.status === "PENDING" ? sum + item.subscribedAmount : sum,
+    0,
+  );
   return (
-    <div className="space-y-5">
+    <PullToRefresh
+      className="space-y-5"
+      onRefresh={async () => {
+        await Promise.all([
+          packages.refetch(),
+          subscriptions.refetch(),
+          bankAccounts.refetch(),
+        ]);
+      }}
+    >
       <SummaryCard
         eyebrow="Packages"
-        title="Subscribed amount"
-        value={formatMoney(totalSubscribed)}
-        caption={`Outstanding: ${formatMoney(totalOutstanding)}`}
+        title="Active package balance"
+        value={formatMoney(activePackageRemaining)}
+        caption={`Your active package total is ${formatMoney(activePackageTotal)}, while ${formatMoney(pendingPackageTotal)} is still waiting for approval.`}
         icon={<BriefcaseBusiness className="h-5 w-5" />}
         gradient="from-[#7c3a00] via-[#5e2b00] to-[#341700]"
       />
@@ -193,7 +214,11 @@ export default function PackagesPage() {
                   type="PACKAGE"
                   title={item.package.name}
                   subtitle={`Paid ${formatMoney(item.amountPaid)} · Remaining ${formatMoney(item.amountRemaining)}`}
-                  amount={item.subscribedAmount}
+                  amount={
+                    activeStatuses.includes(item.status)
+                      ? item.subscribedAmount
+                      : 0
+                  }
                   status={item.status}
                   timestamp={item.nextDueAt || item.createdAt}
                   href={`/packages/${item.id}`}
@@ -234,6 +259,6 @@ export default function PackagesPage() {
           </button>
         </form>
       </MemberModal>
-    </div>
+    </PullToRefresh>
   );
 }

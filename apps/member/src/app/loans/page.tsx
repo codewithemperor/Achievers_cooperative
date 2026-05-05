@@ -96,12 +96,24 @@ export default function LoansPage() {
   const hasActiveLoan = loans.data.items.some((loan) =>
     ACTIVE_STATUSES.includes(loan.status.toUpperCase()),
   );
-  const totalOutstanding = loans.data.items.reduce(
-    (sum, item) => sum + (item.remainingBalance || 0),
+  const repaymentStatuses = ["DISBURSED", "IN_PROGRESS", "OVERDUE"];
+  const activeLoanOutstanding = loans.data.items.reduce(
+    (sum, item) =>
+      repaymentStatuses.includes(item.status.toUpperCase())
+        ? sum + (item.remainingBalance || 0)
+        : sum,
     0,
   );
-  const totalRequested = loans.data.items.reduce(
-    (sum, item) => sum + item.amount,
+  const activeLoanTotal = loans.data.items.reduce(
+    (sum, item) =>
+      repaymentStatuses.includes(item.status.toUpperCase())
+        ? sum + item.amount
+        : sum,
+    0,
+  );
+  const pendingLoanTotal = loans.data.items.reduce(
+    (sum, item) =>
+      item.status.toUpperCase() === "PENDING" ? sum + item.amount : sum,
     0,
   );
 
@@ -240,9 +252,9 @@ export default function LoansPage() {
     <div className="space-y-5">
       <SummaryCard
         eyebrow="Loans"
-        title="Outstanding balance"
-        value={formatMoney(totalOutstanding)}
-        caption={`Total requested: ${formatMoney(totalRequested)}`}
+        title="Active loan balance"
+        value={formatMoney(activeLoanOutstanding)}
+        caption={`Your active loan total is ${formatMoney(activeLoanTotal)}, while ${formatMoney(pendingLoanTotal)} is still waiting for approval.`}
         ctaLabel={
           !hasActiveLoan && bankAccounts.data.length
             ? "New application"

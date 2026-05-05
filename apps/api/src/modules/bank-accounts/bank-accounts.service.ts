@@ -15,6 +15,11 @@ interface PaystackBank {
 
 @Injectable()
 export class BankAccountsService {
+  private bankListCache: {
+    expiresAt: number;
+    banks: Array<{ name: string; code: string }>;
+  } | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -22,34 +27,60 @@ export class BankAccountsService {
   ) {}
 
   async getBanks() {
+    if (this.bankListCache && this.bankListCache.expiresAt > Date.now()) {
+      return this.bankListCache.banks;
+    }
+
     const secretKey = this.config.get<string>('PAYSTACK_SECRET_KEY');
     if (!secretKey) {
       throw new BadRequestException('Paystack secret key is not configured.');
     }
 
     try {
-      const response = await fetch('https://api.paystack.co/bank?country=nigeria&perPage=100', {
-        headers: {
-          Authorization: `Bearer ${secretKey}`,
-        },
-      });
+      const banks: PaystackBank[] = [];
+      let next: string | undefined;
 
-      const body = (await response.json()) as {
-        message?: string;
-        data?: PaystackBank[];
-      };
+      do {
+        const url = new URL('https://api.paystack.co/bank');
+        url.searchParams.set('country', 'nigeria');
+        url.searchParams.set('perPage', '100');
+        url.searchParams.set('use_cursor', 'true');
+        if (next) url.searchParams.set('next', next);
 
-      if (!response.ok) {
-        throw new BadRequestException(body.message || 'Unable to load bank list from Paystack.');
-      }
+        const response = await fetch(url.toString(), {
+          headers: {
+            Authorization: `Bearer ${secretKey}`,
+          },
+        });
 
-      return (body.data ?? [])
+        const body = (await response.json()) as {
+          message?: string;
+          data?: PaystackBank[];
+          meta?: { next?: string };
+        };
+
+        if (!response.ok) {
+          throw new BadRequestException(body.message || 'Unable to load bank list from Paystack.');
+        }
+
+        banks.push(...(body.data ?? []));
+        next = body.meta?.next;
+      } while (next);
+
+      const collatedBanks = banks
         .filter((bank) => bank.code && bank.name && bank.active !== false)
         .map((bank) => ({
           name: bank.name,
           code: bank.code,
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
+
+      this.bankListCache = {
+        banks: collatedBanks,
+        expiresAt: Date.now() + 6 * 60 * 60 * 1000,
+      };
+
+      return collatedBanks;
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       throw new BadRequestException('Unable to reach Paystack bank list right now. Please try again later.');

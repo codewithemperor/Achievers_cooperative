@@ -22,7 +22,9 @@ export type TransactionType =
   | 'WEEKLY_COOPERATIVE'
   | 'MANUAL_ADJUSTMENT'
   | 'ADMIN_REFUND'
-  | 'FEE_WAIVER';
+  | 'FEE_WAIVER'
+  | 'WALLET_WITHDRAWAL'
+  | 'INVESTMENT_CANCELLATION_REFUND';
 
 export type CooperativeEntryType = 'INCOME' | 'EXPENSE';
 

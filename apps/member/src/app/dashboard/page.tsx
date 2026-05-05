@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowRightLeft,
@@ -13,6 +14,11 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SummaryCard } from "@/components/summary-card";
 import { TransactionCard } from "@/components/transaction-card";
+import { PullToRefresh } from "@/components/pull-to-refresh";
+import {
+  TransactionDetailModal,
+  type TransactionDetailItem,
+} from "@/components/transaction-detail-modal";
 import { useMemberData } from "@/hooks/use-member-data";
 import { useProfileData } from "@/hooks/use-profile-data";
 import { formatMoney, initialsFromName } from "@/lib/member-format";
@@ -36,9 +42,13 @@ interface DashboardPayload {
     transactionCount: number;
     pendingPaymentsTotal: number;
     pendingPaymentsCount: number;
+    pendingPackagesTotal?: number;
+    pendingLoansTotal?: number;
     activeLoan: { remainingBalance: number } | null;
     activePackage: {
+      totalAmount?: number;
       subscribedAmount: number;
+      amountPaid?: number;
       amountRemaining: number;
       packageName: string;
       status: string;
@@ -159,24 +169,29 @@ const cardMeta = [
 ];
 
 export default function DashboardPage() {
-  const { data, loading } = useMemberData<DashboardPayload>(
+  const { data, loading, refetch } = useMemberData<DashboardPayload>(
     "/members/me/dashboard",
     fallbackData,
   );
   const profile = useProfileData(fallbackProfile);
   const member = profile.data.member;
   const displayName = member?.fullName || data.profile.fullName || "Member";
+  const [selectedTransaction, setSelectedTransaction] =
+    useState<TransactionDetailItem | null>(null);
 
   const cardValues = {
     wallet: formatMoney(data.wallet.availableBalance),
     savings: formatMoney(data.summary.totalSavings),
     investments: formatMoney(data.summary.totalInvestments),
-    packages: formatMoney(data.summary.activePackage?.subscribedAmount ?? 0),
+    packages: formatMoney(data.summary.activePackage?.amountRemaining ?? 0),
     loans: formatMoney(data.summary.activeLoan?.remainingBalance ?? 0),
   };
 
   return (
-    <div className="space-y-6 -mt-6 -mx-5 overflow-hidden bg-[linear-gradient(180deg,var(--color-primary-600)_0%,var(--color-primary-700)_17rem,var(--color-background-50)_17rem,var(--color-background-50)_100%)] dark:bg-[linear-gradient(180deg,var(--color-primary-200)_0%,var(--color-primary-300)_17rem,var(--color-background-50)_17rem,var(--color-background-50)_100%)]">
+    <PullToRefresh
+      className="space-y-6 -mt-6 -mx-5 overflow-hidden bg-[linear-gradient(180deg,var(--color-primary-600)_0%,var(--color-primary-700)_17rem,var(--color-background-50)_17rem,var(--color-background-50)_100%)] dark:bg-[linear-gradient(180deg,var(--color-primary-200)_0%,var(--color-primary-300)_17rem,var(--color-background-50)_17rem,var(--color-background-50)_100%)]"
+      onRefresh={refetch}
+    >
       {/* Header */}
       <section className="text-white px-5 pt-6">
         <div className="flex items-center justify-between gap-4">
@@ -261,7 +276,17 @@ export default function DashboardPage() {
                     eyebrow={card.eyebrow}
                     title={card.title}
                     value={cardValues[card.valueKey]}
-                    caption={card.caption}
+                    caption={
+                      card.valueKey === "packages"
+                        ? data.summary.activePackage
+                          ? `Your active package is worth ${formatMoney(data.summary.activePackage.totalAmount ?? data.summary.activePackage.subscribedAmount)}, with ${formatMoney(data.summary.pendingPackagesTotal ?? 0)} still waiting for approval.`
+                          : `You have ${formatMoney(data.summary.pendingPackagesTotal ?? 0)} in package requests waiting for approval.`
+                        : card.valueKey === "loans"
+                          ? data.summary.activeLoan
+                            ? `Your active loan still has ${formatMoney(data.summary.activeLoan.remainingBalance)} outstanding, with ${formatMoney(data.summary.pendingLoansTotal ?? 0)} waiting for approval.`
+                            : `You have ${formatMoney(data.summary.pendingLoansTotal ?? 0)} in loan requests waiting for approval.`
+                          : card.caption
+                    }
                     href={card.href}
                     ctaLabel={card.ctaLabel}
                     icon={card.icon}
@@ -306,6 +331,7 @@ export default function DashboardPage() {
                 amount={item.amount}
                 status={item.status}
                 timestamp={item.createdAt}
+                onClick={() => setSelectedTransaction(item)}
               />
             ))
           ) : (
@@ -316,6 +342,10 @@ export default function DashboardPage() {
           )}
         </div>
       </section>
-    </div>
+      <TransactionDetailModal
+        transaction={selectedTransaction}
+        onClose={() => setSelectedTransaction(null)}
+      />
+    </PullToRefresh>
   );
 }

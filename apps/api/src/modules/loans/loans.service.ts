@@ -201,11 +201,8 @@ export class LoansService {
       ? await this.prisma.transaction.findMany({
           where: {
             walletId: loan.member.wallet.id,
-            OR: [
-              { metadata: { path: ['loanId'], equals: loan.id } },
-              { type: 'LOAN_DISBURSEMENT' },
-              { type: 'LOAN_REPAYMENT' },
-            ],
+            metadata: { path: ['loanId'], equals: loan.id },
+            type: { in: ['LOAN_DISBURSEMENT', 'LOAN_REPAYMENT'] as any },
           },
           orderBy: { createdAt: 'asc' },
         })

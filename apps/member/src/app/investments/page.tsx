@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { MemberModal } from "@/components/member-modal";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { NumberInput } from "@/components/form-input";
 import api from "@/lib/member-api";
 import { useMemberData } from "@/hooks/use-member-data";
@@ -92,7 +93,12 @@ export default function InvestmentsPage() {
   );
 
   return (
-    <div className="space-y-5">
+    <PullToRefresh
+      className="space-y-5"
+      onRefresh={async () => {
+        await Promise.all([products.refetch(), myInvestments.refetch()]);
+      }}
+    >
       <SummaryCard
         eyebrow="Investments"
         title="Maturity value"
@@ -115,7 +121,7 @@ export default function InvestmentsPage() {
               <Tabs.Indicator />
             </Tabs.Tab>
             <Tabs.Tab id="transactions">
-              My Investments
+              My Investment
               <Tabs.Indicator />
             </Tabs.Tab>
           </Tabs.List>
@@ -160,6 +166,8 @@ export default function InvestmentsPage() {
                   amount={item.principal}
                   status={item.status}
                   timestamp={item.maturityDate}
+                  href={`/investments/${item.id}`}
+                  ctaLabel="Open"
                 />
               ))
             ) : (
@@ -204,6 +212,6 @@ export default function InvestmentsPage() {
           </button>
         </form>
       </MemberModal>
-    </div>
+    </PullToRefresh>
   );
 }

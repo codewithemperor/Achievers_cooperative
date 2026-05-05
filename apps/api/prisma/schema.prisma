@@ -49,6 +49,8 @@ enum TransactionType {
   MANUAL_ADJUSTMENT
   ADMIN_REFUND
   FEE_WAIVER
+  WALLET_WITHDRAWAL
+  INVESTMENT_CANCELLATION_REFUND
 }
 
 enum CooperativeEntryType {
@@ -127,8 +129,10 @@ model Member {
   wallet                Wallet?
   savingsAccounts       SavingsAccount[]
   savingsWithdrawalRequests SavingsWithdrawalRequest[]
+  walletWithdrawalRequests WalletWithdrawalRequest[]
   loanApplications      LoanApplication[]
   investments           InvestmentSubscription[]
+  investmentCancellationRequests InvestmentCancellationRequest[]
   payments              Payment[]
   packageSubscriptions  PackageSubscription[]
   guaranteedLoansOne    LoanApplication[]      @relation("LoanGuarantorOne")
@@ -146,6 +150,7 @@ model Wallet {
   currency         String        @default("NGN")
   member           Member        @relation(fields: [memberId], references: [id])
   transactions     Transaction[]
+  withdrawalRequests WalletWithdrawalRequest[]
 }
 
 model Transaction {
@@ -217,6 +222,7 @@ model InvestmentSubscription {
   status         ApprovalStatus    @default(PENDING)
   member         Member            @relation(fields: [memberId], references: [id])
   product        InvestmentProduct @relation(fields: [productId], references: [id])
+  cancellationRequests InvestmentCancellationRequest[]
 }
 
 model Notification {
@@ -318,6 +324,40 @@ model SavingsWithdrawalRequest {
   updatedAt     DateTime @updatedAt
   member        Member   @relation(fields: [memberId], references: [id])
   savingsAccount SavingsAccount @relation(fields: [savingsAccountId], references: [id])
+}
+
+model WalletWithdrawalRequest {
+  id              String   @id @default(cuid())
+  memberId        String
+  walletId        String
+  amount          Decimal
+  bankName        String
+  accountNumber   String
+  accountName     String
+  status          String   @default("PENDING")
+  rejectionReason String?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  disbursedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  member          Member   @relation(fields: [memberId], references: [id])
+  wallet          Wallet   @relation(fields: [walletId], references: [id])
+}
+
+model InvestmentCancellationRequest {
+  id               String                 @id @default(cuid())
+  memberId         String
+  investmentId     String
+  reason           String?
+  status           ApprovalStatus         @default(PENDING)
+  rejectionReason  String?
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  member           Member                 @relation(fields: [memberId], references: [id])
+  investment       InvestmentSubscription @relation(fields: [investmentId], references: [id])
 }
 
 model CooperativeWallet {

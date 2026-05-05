@@ -27,3 +27,12 @@ export class AdminWalletSpendDto {
   @Min(1)
   amount?: number;
 }
+
+export class RequestWalletWithdrawalDto {
+  @IsNumber()
+  @Min(1)
+  amount!: number;
+
+  @IsString()
+  bankAccountId!: string;
+}

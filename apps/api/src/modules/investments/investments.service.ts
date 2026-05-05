@@ -290,6 +290,145 @@ export class InvestmentsService {
     };
   }
 
+  async getMyInvestment(userId: string, id: string) {
+    const member = await this.prisma.member.findUnique({ where: { userId } });
+    if (!member) throw new NotFoundException('Member profile not found');
+
+    const investment = await this.prisma.investmentSubscription.findUnique({
+      where: { id },
+      include: {
+        product: true,
+        cancellationRequests: { orderBy: { createdAt: 'desc' }, take: 1 },
+      } as any,
+    });
+
+    if (!investment || investment.memberId !== member.id) {
+      throw new NotFoundException('Investment not found');
+    }
+
+    return this.serializeInvestment(investment);
+  }
+
+  async requestCancellation(userId: string, investmentId: string, reason?: string) {
+    const member = await this.prisma.member.findUnique({ where: { userId } });
+    if (!member) throw new NotFoundException('Member profile not found');
+
+    const investment = await this.prisma.investmentSubscription.findUnique({
+      where: { id: investmentId },
+      include: { product: true },
+    });
+    if (!investment || investment.memberId !== member.id) {
+      throw new NotFoundException('Investment not found');
+    }
+    if (investment.status !== 'APPROVED') {
+      throw new BadRequestException('Only active approved investments can be cancelled.');
+    }
+
+    const existing = await (this.prisma as any).investmentCancellationRequest.findFirst({
+      where: { investmentId, status: 'PENDING' },
+    });
+    if (existing) {
+      throw new BadRequestException('A cancellation request is already pending for this investment.');
+    }
+
+    const created = await (this.prisma as any).investmentCancellationRequest.create({
+      data: {
+        memberId: member.id,
+        investmentId,
+        reason: reason || null,
+      },
+    });
+
+    await this.audit.log(userId, 'REQUEST_INVESTMENT_CANCELLATION', 'InvestmentCancellationRequest', created.id, {
+      investmentId,
+      reason,
+    });
+
+    return created;
+  }
+
+  async listCancellationRequests() {
+    const items = await (this.prisma as any).investmentCancellationRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        member: { select: { id: true, fullName: true, membershipNumber: true } },
+        investment: { include: { product: true } },
+      },
+    });
+
+    return {
+      items: items.map((item: any) => ({
+        ...item,
+        investment: this.serializeInvestment(item.investment),
+      })),
+    };
+  }
+
+  async approveCancellation(id: string, actorId: string) {
+    const request = await (this.prisma as any).investmentCancellationRequest.findUnique({
+      where: { id },
+      include: { investment: true },
+    });
+    if (!request) throw new NotFoundException('Cancellation request not found');
+    if (request.status !== 'PENDING') throw new BadRequestException('Cancellation request is not pending.');
+    if (request.investment.status !== 'APPROVED') {
+      throw new BadRequestException('Only active approved investments can be refunded.');
+    }
+
+    const reference = `INV-CANCEL-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.investmentSubscription.update({
+        where: { id: request.investmentId },
+        data: { status: 'REJECTED' },
+      });
+      await (tx as any).investmentCancellationRequest.update({
+        where: { id },
+        data: { status: 'APPROVED', approvedAt: new Date() },
+      });
+    });
+
+    await this.walletService.creditWallet(
+      request.memberId,
+      Number(request.investment.principal),
+      'INVESTMENT_CANCELLATION_REFUND' as any,
+      reference,
+      {
+        category: 'investment cancellation',
+        description: `Investment cancellation refund for ${request.investmentId}`,
+        editable: false,
+        lockReason: 'Investment cancellation refunds are generated after admin approval.',
+        metadata: { investmentId: request.investmentId, cancellationRequestId: id },
+      },
+    );
+
+    await this.audit.log(actorId, 'APPROVE_INVESTMENT_CANCELLATION', 'InvestmentCancellationRequest', id, {
+      investmentId: request.investmentId,
+      amount: Number(request.investment.principal),
+      reference,
+    });
+
+    return { success: true, reference };
+  }
+
+  async rejectCancellation(id: string, actorId: string, reason?: string) {
+    const request = await (this.prisma as any).investmentCancellationRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('Cancellation request not found');
+    if (request.status !== 'PENDING') throw new BadRequestException('Cancellation request is not pending.');
+
+    const updated = await (this.prisma as any).investmentCancellationRequest.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectedAt: new Date(),
+        rejectionReason: reason || null,
+      },
+    });
+
+    await this.audit.log(actorId, 'REJECT_INVESTMENT_CANCELLATION', 'InvestmentCancellationRequest', id, { reason });
+
+    return updated;
+  }
+
   async approveSubscription(id: string, actorId: string) {
     const subscription = await this.prisma.investmentSubscription.findUnique({
       where: { id },
@@ -312,5 +451,27 @@ export class InvestmentsService {
     );
 
     return { ...updated, principal: Number(updated.principal) };
+  }
+
+  private serializeInvestment(investment: any) {
+    const principal = Number(investment.principal);
+    const annualRate = Number(investment.product?.annualRate ?? 0);
+    const durationMonths = Number(investment.product?.durationMonths ?? 0);
+    const interest = principal * (annualRate / 100) * (durationMonths / 12);
+
+    return {
+      ...investment,
+      principal,
+      interest,
+      maturityAmount: principal + interest,
+      product: investment.product
+        ? {
+            ...investment.product,
+            annualRate: Number(investment.product.annualRate),
+            minimumAmount: Number(investment.product.minimumAmount),
+            maximumAmount: investment.product.maximumAmount ? Number(investment.product.maximumAmount) : null,
+          }
+        : null,
+    };
   }
 }

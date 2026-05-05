@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { AuditService } from '../../common/services/audit.service';
-import { AdminWalletSpendDto, FundWalletDto } from './dto/index';
+import { AdminWalletSpendDto, FundWalletDto, RequestWalletWithdrawalDto } from './dto/index';
 
 @Injectable()
 export class WalletsService {
@@ -146,13 +146,15 @@ export class WalletsService {
 
     const { limit = 50, offset = 0, type } = options ?? {};
 
-    const includePaymentRequests = !type || type === 'WALLET_FUNDING_REQUEST' || type === 'WALLET_FUNDING';
+    const effectiveType = type ?? 'WALLET_FUNDING';
+    const fundingOnly = effectiveType === 'WALLET_FUNDING' || effectiveType === 'WALLET_FUNDING_REQUEST';
+    const includePaymentRequests = effectiveType === 'WALLET_FUNDING_REQUEST' || effectiveType === 'WALLET_FUNDING';
 
     const [items, payments, total, totalPayments] = await Promise.all([
       this.prisma.transaction.findMany({
         where: {
           walletId: member.wallet.id,
-          ...(type ? { type: type as any } : {}),
+          ...(fundingOnly ? { type: 'WALLET_FUNDING' as any } : { type: effectiveType as any }),
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -169,7 +171,7 @@ export class WalletsService {
       this.prisma.transaction.count({
         where: {
           walletId: member.wallet.id,
-          ...(type ? { type: type as any } : {}),
+          ...(fundingOnly ? { type: 'WALLET_FUNDING' as any } : { type: effectiveType as any }),
         },
       }),
       includePaymentRequests ? this.prisma.payment.count({ where: { memberId: member.id } }) : Promise.resolve(0),
@@ -211,5 +213,141 @@ export class WalletsService {
       limit,
       offset,
     };
+  }
+
+  async getMyWithdrawalRequests(userId: string) {
+    const member = await this.prisma.member.findUnique({ where: { userId } });
+    if (!member) throw new NotFoundException('Member profile not found');
+
+    const items = await (this.prisma as any).walletWithdrawalRequest.findMany({
+      where: { memberId: member.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { items: items.map((item: any) => ({ ...item, amount: Number(item.amount) })) };
+  }
+
+  async requestWithdrawal(userId: string, dto: RequestWalletWithdrawalDto) {
+    const member = await this.prisma.member.findUnique({
+      where: { userId },
+      include: { wallet: true },
+    });
+    if (!member || !member.wallet) throw new NotFoundException('Wallet not found');
+
+    if (Number(member.wallet.availableBalance) < dto.amount) {
+      throw new NotFoundException('Insufficient wallet balance for this withdrawal request');
+    }
+
+    const bankAccount = await this.prisma.bankAccount.findUnique({ where: { id: dto.bankAccountId } });
+    if (!bankAccount || bankAccount.memberId !== member.id) {
+      throw new NotFoundException('Invalid bank account selected');
+    }
+
+    const created = await (this.prisma as any).walletWithdrawalRequest.create({
+      data: {
+        memberId: member.id,
+        walletId: member.wallet.id,
+        amount: dto.amount,
+        bankName: bankAccount.bankName,
+        accountNumber: bankAccount.accountNumber,
+        accountName: bankAccount.accountName,
+      },
+    });
+
+    await this.audit.log(userId, 'REQUEST_WALLET_WITHDRAWAL', 'WalletWithdrawalRequest', created.id, {
+      amount: dto.amount,
+      bankAccountId: dto.bankAccountId,
+    });
+
+    return { ...created, amount: Number(created.amount) };
+  }
+
+  async listWithdrawalRequests() {
+    const items = await (this.prisma as any).walletWithdrawalRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        member: { select: { id: true, fullName: true, membershipNumber: true } },
+      },
+    });
+
+    return { items: items.map((item: any) => ({ ...item, amount: Number(item.amount) })) };
+  }
+
+  async approveWithdrawal(id: string, actorId: string) {
+    const request = await (this.prisma as any).walletWithdrawalRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('Wallet withdrawal request not found');
+    if (request.status !== 'PENDING') throw new NotFoundException('Withdrawal request is not pending');
+
+    const updated = await (this.prisma as any).walletWithdrawalRequest.update({
+      where: { id },
+      data: { status: 'APPROVED', approvedAt: new Date() },
+    });
+
+    await this.audit.log(actorId, 'APPROVE_WALLET_WITHDRAWAL', 'WalletWithdrawalRequest', id, {
+      amount: Number(request.amount),
+    });
+
+    return { ...updated, amount: Number(updated.amount) };
+  }
+
+  async rejectWithdrawal(id: string, actorId: string, reason?: string) {
+    const request = await (this.prisma as any).walletWithdrawalRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('Wallet withdrawal request not found');
+    if (request.status !== 'PENDING') throw new NotFoundException('Withdrawal request is not pending');
+
+    const updated = await (this.prisma as any).walletWithdrawalRequest.update({
+      where: { id },
+      data: { status: 'REJECTED', rejectedAt: new Date(), rejectionReason: reason || null },
+    });
+
+    await this.audit.log(actorId, 'REJECT_WALLET_WITHDRAWAL', 'WalletWithdrawalRequest', id, { reason });
+
+    return { ...updated, amount: Number(updated.amount) };
+  }
+
+  async disburseWithdrawal(id: string, actorId: string) {
+    const request = await (this.prisma as any).walletWithdrawalRequest.findUnique({
+      where: { id },
+      include: { wallet: true },
+    });
+    if (!request) throw new NotFoundException('Wallet withdrawal request not found');
+    if (request.status !== 'APPROVED') throw new NotFoundException('Withdrawal request must be approved first');
+    if (request.disbursedAt) throw new NotFoundException('Withdrawal request has already been disbursed');
+    if (Number(request.wallet.availableBalance) < Number(request.amount)) {
+      throw new NotFoundException('Member wallet balance is no longer sufficient');
+    }
+
+    const reference = `WALLET-WD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.wallet.update({
+        where: { id: request.walletId },
+        data: { availableBalance: { decrement: request.amount }, totalCharges: { increment: request.amount } },
+      });
+      await tx.transaction.create({
+        data: {
+          walletId: request.walletId,
+          type: 'WALLET_WITHDRAWAL' as any,
+          amount: request.amount,
+          status: 'APPROVED',
+          reference,
+          category: 'wallet withdrawal',
+          description: `Wallet withdrawal disbursed to ${request.bankName} - ${request.accountNumber}`,
+          editable: false,
+          lockReason: 'Wallet withdrawal disbursements are system-generated.',
+          metadata: { withdrawalRequestId: id },
+        },
+      });
+      return (tx as any).walletWithdrawalRequest.update({
+        where: { id },
+        data: { status: 'DISBURSED', disbursedAt: new Date() },
+      });
+    });
+
+    await this.audit.log(actorId, 'DISBURSE_WALLET_WITHDRAWAL', 'WalletWithdrawalRequest', id, {
+      amount: Number(request.amount),
+      reference,
+    });
+
+    return { ...updated, amount: Number(updated.amount), reference };
   }
 }

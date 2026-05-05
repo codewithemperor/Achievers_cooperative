@@ -20,3 +20,15 @@ export class QueryInvestmentsDto {
   @IsOptional()
   limit?: number = 20;
 }
+
+export class RequestInvestmentCancellationDto {
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class RejectInvestmentCancellationDto {
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}

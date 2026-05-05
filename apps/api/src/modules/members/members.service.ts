@@ -252,6 +252,12 @@ export class MembersService {
     const activePackage = member.packageSubscriptions.find((subscription) =>
       ['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(subscription.status),
     );
+    const pendingPackagesTotal = member.packageSubscriptions
+      .filter((subscription) => subscription.status === 'PENDING')
+      .reduce((sum, subscription) => sum + Number(subscription.package.totalAmount), 0);
+    const pendingLoansTotal = member.loanApplications
+      .filter((loan) => loan.status === 'PENDING')
+      .reduce((sum, loan) => sum + Number(loan.amount), 0);
     const mergedActivity = [
       ...recentTransactions.map((transaction) => ({
         id: transaction.id,
@@ -298,6 +304,8 @@ export class MembersService {
         transactionCount,
         pendingPaymentsTotal: pendingPayments.reduce((sum, item) => sum + Number(item.amount), 0),
         pendingPaymentsCount: pendingPayments.length,
+        pendingPackagesTotal,
+        pendingLoansTotal,
         activeLoan: activeLoan
           ? {
               id: activeLoan.id,
