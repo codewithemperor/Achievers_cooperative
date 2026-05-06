@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AdminModal } from "@/components/ui/admin-modal";
+import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import api from "@/lib/api";
@@ -19,7 +20,11 @@ const labels: Record<string, string> = {
   MEMBERSHIP_FEE_AMOUNT: "Membership Fee Amount",
   COOPERATIVE_DEDUCTION_DAY: "Weekly Deduction Day",
   COOPERATIVE_DEDUCTION_AMOUNT: "Weekly Deduction Amount",
+  COOPERATIVE_DEDUCTION_ENABLED: "Weekly Deduction Enabled",
   COOPERATIVE_DEDUCTION_LAST_RUN: "Last Deduction Run",
+  COOPERATIVE_DEDUCTION_LAST_STATUS: "Last Deduction Status",
+  COOPERATIVE_DEDUCTION_LAST_ERROR: "Last Deduction Error",
+  COOPERATIVE_DEDUCTION_LAST_CHECKED_AT: "Last Deduction Check",
   BANK_ACCOUNT_NAME: "Bank Account Name",
   BANK_ACCOUNT_NUMBER: "Bank Account Number",
   BANK_NAME: "Bank Name",
@@ -32,7 +37,15 @@ const descriptions: Record<string, string> = {
     "The weekday on which weekly deductions become due.",
   COOPERATIVE_DEDUCTION_AMOUNT:
     "Deducted from every active member once per scheduled week.",
+  COOPERATIVE_DEDUCTION_ENABLED:
+    "Controls whether the backend auto-deduction service is allowed to run.",
   COOPERATIVE_DEDUCTION_LAST_RUN: "Managed by the backend auto-deduction flow.",
+  COOPERATIVE_DEDUCTION_LAST_STATUS:
+    "The latest status recorded by the auto-deduction service.",
+  COOPERATIVE_DEDUCTION_LAST_ERROR:
+    "The last error captured by the auto-deduction service, if any.",
+  COOPERATIVE_DEDUCTION_LAST_CHECKED_AT:
+    "The last time the scheduled job checked whether deductions were due.",
   BANK_ACCOUNT_NAME: "Displayed to members for wallet funding transfers.",
   BANK_ACCOUNT_NUMBER: "Displayed to members for wallet funding transfers.",
   BANK_NAME: "Displayed to members for wallet funding transfers.",
@@ -48,6 +61,11 @@ const dayOptions = [
   "FRIDAY",
   "SATURDAY",
   "SUNDAY",
+];
+
+const booleanOptions = [
+  { value: "true", label: "Enabled" },
+  { value: "false", label: "Disabled" },
 ];
 
 function sortRows(items: ConfigItem[]) {
@@ -83,11 +101,49 @@ export default function SettingsPage() {
     }
   }
 
+  async function runWeeklyDeductions(force = false) {
+    try {
+      setSaving(true);
+      await api.post("/config/actions/weekly-deductions/run", { force });
+      showSuccessToast("Weekly deduction run completed.");
+      await config.refetch();
+    } catch (error: any) {
+      showErrorToast(
+        error?.response?.data?.message ||
+          "Unable to run weekly deductions right now.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Settings"
         subtitle="Manage all system configuration keys from the table below. Weekly deductions now auto-run once on the scheduled day when the API receives live traffic."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <ConfirmActionButton
+              confirmMessage="Run weekly deductions only if today matches the configured deduction day."
+              confirmTitle="Run scheduled deduction check?"
+              isDisabled={saving}
+              label="Run if due"
+              onConfirm={() => runWeeklyDeductions(false)}
+              pendingLabel="Running..."
+              tone="neutral"
+            />
+            <ConfirmActionButton
+              confirmMessage="Force run weekly deductions now, even if today is not the configured deduction day. Duplicate deductions are still blocked by references and last-run checks unless force is explicitly allowed by the backend flow."
+              confirmTitle="Force run deductions?"
+              isDisabled={saving}
+              label="Force run"
+              onConfirm={() => runWeeklyDeductions(true)}
+              pendingLabel="Running..."
+              tone="success"
+            />
+          </div>
+        }
       />
 
       <section className="overflow-hidden rounded-[2rem] border border-[var(--primary-900)/8] bg-white">
@@ -116,8 +172,12 @@ export default function SettingsPage() {
               {rows.map((item) => {
                 const isTerms = item.key === "MEMBER_TERMS_HTML";
                 const isReadonly =
-                  item.key === "COOPERATIVE_DEDUCTION_LAST_RUN";
+                  item.key === "COOPERATIVE_DEDUCTION_LAST_RUN" ||
+                  item.key === "COOPERATIVE_DEDUCTION_LAST_STATUS" ||
+                  item.key === "COOPERATIVE_DEDUCTION_LAST_ERROR" ||
+                  item.key === "COOPERATIVE_DEDUCTION_LAST_CHECKED_AT";
                 const isDay = item.key === "COOPERATIVE_DEDUCTION_DAY";
+                const isBoolean = item.key === "COOPERATIVE_DEDUCTION_ENABLED";
                 const isNumber =
                   item.key === "MEMBERSHIP_FEE_AMOUNT" ||
                   item.key === "COOPERATIVE_DEDUCTION_AMOUNT";
@@ -136,6 +196,9 @@ export default function SettingsPage() {
                           <span
                             dangerouslySetInnerHTML={{ __html: item.value }}
                           />
+                        ) : item.key === "COOPERATIVE_DEDUCTION_LAST_RUN" &&
+                          !item.value ? (
+                          "Never"
                         ) : (
                           item.value || "—"
                         )}
@@ -146,7 +209,7 @@ export default function SettingsPage() {
                         "General system configuration value."}
                     </td>
                     <td className="px-6 py-5 align-top text-sm text-text-400">
-                      {item.value
+                      {item.updatedAt
                         ? new Date(item.updatedAt).toLocaleString()
                         : "—"}
                     </td>
@@ -175,6 +238,7 @@ export default function SettingsPage() {
                             </button>
                           }
                         >
+                          {({ close }) => (
                           <div className="space-y-4">
                             {isTerms ? (
                               <RichTextEditor
@@ -200,6 +264,27 @@ export default function SettingsPage() {
                                 {dayOptions.map((day) => (
                                   <option key={day} value={day}>
                                     {day}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : isBoolean ? (
+                              <select
+                                className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm text-text-900 outline-none"
+                                onChange={(event) =>
+                                  setDraftValue(event.target.value)
+                                }
+                                value={
+                                  draftKey === item.key
+                                    ? draftValue
+                                    : item.value
+                                }
+                              >
+                                {booleanOptions.map((option) => (
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
                                   </option>
                                 ))}
                               </select>
@@ -236,6 +321,7 @@ export default function SettingsPage() {
                               </button>
                             </div>
                           </div>
+                          )}
                         </AdminModal>
                       )}
                     </td>

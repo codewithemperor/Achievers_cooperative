@@ -5,6 +5,8 @@ import {
   Activity,
   ArrowDownCircle,
   ArrowUpCircle,
+  CheckCircle2,
+  Clock3,
   PiggyBank,
   Users,
 } from "lucide-react";
@@ -21,7 +23,14 @@ interface DashboardResponse {
     wallet: { totalBalance: number };
     savings: { totalBalance: number };
     loans: { totalDisbursed: number; pending: number };
-    investments: { totalPrincipal: number };
+    investments: { totalPrincipal: number; pendingCancellations: number };
+    packages: { pending: number };
+    approvals: {
+      walletWithdrawals: number;
+      investmentCancellations: number;
+      total: number;
+    };
+    autoDeduction: { status: string; lastRun: string };
     cooperativeTreasury: {
       balance: number;
       totalIncome: number;
@@ -54,6 +63,14 @@ interface DashboardResponse {
     status: string;
     purpose: string;
     member: { fullName: string };
+  }>;
+  pendingWalletWithdrawals: Array<{
+    id: string;
+    amount: number;
+    status: string;
+    bankName: string;
+    createdAt: string;
+    member: { fullName: string; membershipNumber: string };
   }>;
 }
 
@@ -113,6 +130,81 @@ function ListSkeleton({ rows = 5 }: { rows?: number }) {
 const card =
   "rounded-2xl border border-[var(--background-200)] bg-white p-5 shadow-sm dark:border-[var(--background-800)] dark:bg-[var(--background-900)]";
 
+function AttentionCard({
+  title,
+  value,
+  subtitle,
+  href,
+  tone = "neutral",
+}: {
+  title: string;
+  value: string | number;
+  subtitle: string;
+  href: string;
+  tone?: "neutral" | "warning" | "danger" | "success";
+}) {
+  const toneClass = {
+    neutral: "bg-background-50 text-text-900",
+    warning: "bg-[#fff7e6] text-[#9a5b00]",
+    danger: "bg-[#fff1f0] text-[#b42318]",
+    success: "bg-[#edf7ed] text-[var(--primary-800)]",
+  }[tone];
+
+  return (
+    <Link
+      className="group rounded-2xl border border-primary-900/10 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      href={href}
+    >
+      <div
+        className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${toneClass}`}
+      >
+        {tone === "success" ? (
+          <CheckCircle2 className="h-5 w-5" />
+        ) : (
+          <Clock3 className="h-5 w-5" />
+        )}
+      </div>
+      <p className="text-sm font-semibold text-text-500">{title}</p>
+      <p className="mt-2 text-2xl font-bold text-text-900">{value}</p>
+      <p className="mt-1 text-xs text-text-400">{subtitle}</p>
+    </Link>
+  );
+}
+
+function MiniBarChart({
+  items,
+}: {
+  items: Array<{ label: string; value: number }>;
+}) {
+  const max = Math.max(1, ...items.map((item) => item.value));
+
+  return (
+    <div className="space-y-3">
+      {items.map((item) => {
+        return (
+          <div
+            className="grid grid-cols-[72px_1fr_auto] items-center gap-3"
+            key={item.label}
+          >
+            <span className="truncate text-xs font-medium text-text-400">
+              {item.label}
+            </span>
+            <span className="h-2 overflow-hidden rounded-full bg-background-100">
+              <span
+                className="block h-full rounded-full bg-[var(--primary-600)]"
+                style={{ width: `${Math.max(8, (item.value / max) * 100)}%` }}
+              />
+            </span>
+            <span className="text-xs font-semibold text-text-900">
+              {item.value}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const dashboard = useApi<DashboardResponse>("/reports/dashboard");
   const summary = dashboard.data?.summary;
@@ -123,6 +215,41 @@ export default function AdminDashboardPage() {
         title="Dashboard"
         subtitle="Membership, cooperative treasury, approvals, and activity in one overview."
       />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <AttentionCard
+          href="/admin/withdrawals"
+          subtitle="Wallet transfers waiting for review"
+          title="Withdrawal Requests"
+          tone={(summary?.approvals.walletWithdrawals ?? 0) > 0 ? "warning" : "success"}
+          value={summary?.approvals.walletWithdrawals ?? 0}
+        />
+        <AttentionCard
+          href="/admin/payments"
+          subtitle="Uploaded receipts awaiting verification"
+          title="Payment Requests"
+          tone={(dashboard.data?.pendingPayments.length ?? 0) > 0 ? "warning" : "success"}
+          value={dashboard.data?.pendingPayments.length ?? 0}
+        />
+        <AttentionCard
+          href="/admin/investments"
+          subtitle="Investment cancellations needing action"
+          title="Investment Reviews"
+          tone={(summary?.investments.pendingCancellations ?? 0) > 0 ? "danger" : "success"}
+          value={summary?.investments.pendingCancellations ?? 0}
+        />
+        <AttentionCard
+          href="/admin/settings"
+          subtitle={
+            summary?.autoDeduction.lastRun
+              ? `Last run ${formatDate(summary.autoDeduction.lastRun)}`
+              : "No successful run yet"
+          }
+          title="Auto Deduction"
+          tone={summary?.autoDeduction.status === "FAILED" ? "danger" : "neutral"}
+          value={summary?.autoDeduction.status ?? "NEVER_RUN"}
+        />
+      </div>
 
       {/* ── Stat Cards ── */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -156,9 +283,29 @@ export default function AdminDashboardPage() {
             <StatCard
               accent="blue"
               icon={<PiggyBank className="h-5 w-5" />}
-              sub={`Expense ${currency.format(summary?.cooperativeTreasury.totalExpense ?? 0)}`}
+              sub={`${summary?.investments.pendingCancellations ?? 0} cancellations pending`}
               title="Investments"
               value={currency.format(summary?.investments.totalPrincipal ?? 0)}
+            />
+            <StatCard
+              accent="red"
+              icon={<Activity className="h-5 w-5" />}
+              sub={`${summary?.approvals.walletWithdrawals ?? 0} wallet withdrawals · ${summary?.packages.pending ?? 0} packages`}
+              title="Pending Approvals"
+              value={`${summary?.approvals.total ?? 0}`}
+            />
+            <StatCard
+              accent={
+                summary?.autoDeduction.status === "FAILED" ? "red" : "dark"
+              }
+              icon={<Activity className="h-5 w-5" />}
+              sub={
+                summary?.autoDeduction.lastRun
+                  ? `Last run ${formatDate(summary.autoDeduction.lastRun)}`
+                  : "No successful run yet"
+              }
+              title="Auto Deduction"
+              value={summary?.autoDeduction.status ?? "NEVER_RUN"}
             />
           </>
         )}
@@ -214,6 +361,52 @@ export default function AdminDashboardPage() {
       </section>
 
       <div className="grid gap-6 xl:grid-cols-2">
+        <section className={card}>
+          <SectionHeader
+            href="/admin/withdrawals"
+            subtitle="Wallet withdrawals that require approval or transfer"
+            title="Wallet Withdrawals Pending"
+          />
+          <DataTable
+            columns={[
+              {
+                key: "member",
+                header: "Member",
+                render: (item) => (
+                  <div>
+                    <p className="font-medium text-text-900 dark:text-text-50">
+                      {item.member.fullName}
+                    </p>
+                    <p className="text-xs text-text-400">
+                      {item.member.membershipNumber}
+                    </p>
+                  </div>
+                ),
+              },
+              {
+                key: "amount",
+                header: "Amount",
+                render: (item) => currency.format(item.amount),
+              },
+              {
+                key: "bank",
+                header: "Bank",
+                render: (item) => item.bankName,
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (item) => (
+                  <StatusBadge status={item.status} variant="warning" />
+                ),
+              },
+            ]}
+            data={dashboard.data?.pendingWalletWithdrawals ?? []}
+            emptyDescription={dashboard.error ?? "No pending withdrawals."}
+            loading={dashboard.loading}
+          />
+        </section>
+
         <section className={card}>
           <SectionHeader
             href="/admin/loans"
@@ -318,21 +511,11 @@ export default function AdminDashboardPage() {
           {dashboard.loading ? (
             <ListSkeleton rows={6} />
           ) : (
-            <div className="divide-y divide-[var(--background-200)] dark:divide-[var(--background-800)]">
-              {(dashboard.data?.membershipGrowth ?? [])
+            <MiniBarChart
+              items={(dashboard.data?.membershipGrowth ?? [])
                 .slice(-6)
-                .map((item) => (
-                  <div
-                    key={item.month}
-                    className="flex items-center justify-between py-2.5"
-                  >
-                    <span className="text-sm text-text-400">{item.month}</span>
-                    <span className="text-sm font-semibold text-text-900 dark:text-text-50">
-                      {item.count}
-                    </span>
-                  </div>
-                ))}
-            </div>
+                .map((item) => ({ label: item.month, value: item.count }))}
+            />
           )}
         </section>
 
@@ -343,19 +526,16 @@ export default function AdminDashboardPage() {
           {dashboard.loading ? (
             <ListSkeleton rows={4} />
           ) : (
-            <div className="divide-y divide-[var(--background-200)] dark:divide-[var(--background-800)]">
+            <div className="space-y-3">
               {(dashboard.data?.loanPortfolio ?? []).map((item) => (
-                <div
-                  key={item.status}
-                  className="flex items-center justify-between py-2.5"
-                >
-                  <StatusBadge status={item.status} variant="info" />
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-text-900 dark:text-text-50">
-                      {currency.format(item.totalAmount)}
-                    </p>
+                <div key={item.status} className="rounded-xl bg-background-50 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <StatusBadge status={item.status} variant="info" />
                     <p className="text-xs text-text-400">{item.count} loans</p>
                   </div>
+                  <p className="text-sm font-semibold text-text-900 dark:text-text-50">
+                    {currency.format(item.totalAmount)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -369,19 +549,11 @@ export default function AdminDashboardPage() {
           {dashboard.loading ? (
             <ListSkeleton rows={6} />
           ) : (
-            <div className="divide-y divide-[var(--background-200)] dark:divide-[var(--background-800)]">
-              {(dashboard.data?.revenue ?? []).slice(-6).map((item) => (
-                <div
-                  key={item.month}
-                  className="flex items-center justify-between py-2.5"
-                >
-                  <span className="text-sm text-text-400">{item.month}</span>
-                  <span className="text-sm font-semibold text-text-900 dark:text-text-50">
-                    {currency.format(item.total)}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <MiniBarChart
+              items={(dashboard.data?.revenue ?? [])
+                .slice(-6)
+                .map((item) => ({ label: item.month, value: item.total }))}
+            />
           )}
         </section>
       </div>

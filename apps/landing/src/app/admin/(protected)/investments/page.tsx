@@ -12,6 +12,7 @@ import { AdminModal } from "@/components/ui/admin-modal";
 import { NumberInput, TextInput } from "@/components/ui/form-input";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { Pencil, Trash2 } from "lucide-react";
+import { ActionMenu } from "@/components/ui/action-menu";
 
 interface ProductsResponse {
   items?: Array<{
@@ -27,6 +28,25 @@ interface ProductsResponse {
 
 type ProductRow = NonNullable<ProductsResponse["items"]>[number];
 
+interface InvestmentCancellationsResponse {
+  items: Array<{
+    id: string;
+    reason?: string | null;
+    status: string;
+    rejectionReason?: string | null;
+    createdAt: string;
+    member: { fullName: string; membershipNumber: string };
+    investment: {
+      id: string;
+      principal: number;
+      interest?: number;
+      maturityAmount?: number;
+      maturityDate: string;
+      product?: { name: string } | null;
+    };
+  }>;
+}
+
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
@@ -34,8 +54,12 @@ const currency = new Intl.NumberFormat("en-NG", {
 });
 
 export default function InvestmentsPage() {
+  const [tab, setTab] = useState<"products" | "cancellations">("products");
   const products = useApi<ProductsResponse | Array<any>>(
     "/investments/products",
+  );
+  const cancellations = useApi<InvestmentCancellationsResponse>(
+    "/investments/cancellations",
   );
   const rows = Array.isArray(products.data)
     ? products.data
@@ -97,7 +121,7 @@ export default function InvestmentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Investments"
-        subtitle="Active investment products available for members, including rate, threshold, and term."
+        subtitle="Manage investment products and member cancellation requests from one workspace."
         actions={
           <AdminModal
             description="Create an investment product and publish it to the admin catalog."
@@ -204,7 +228,31 @@ export default function InvestmentsPage() {
           </AdminModal>
         }
       />
-      <DataTable
+      <div className="flex flex-wrap gap-2">
+        {[
+          { id: "products", label: "Products" },
+          {
+            id: "cancellations",
+            label: `Cancellation requests (${cancellations.data?.items.filter((item) => item.status === "PENDING").length ?? 0})`,
+          },
+        ].map((item) => (
+          <button
+            className={
+              tab === item.id
+                ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
+                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
+            }
+            key={item.id}
+            onClick={() => setTab(item.id as typeof tab)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "products" ? (
+        <DataTable
         columns={[
           {
             key: "name",
@@ -358,6 +406,129 @@ export default function InvestmentsPage() {
         emptyDescription={products.error || "No investment products found."}
         loading={products.loading}
       />
+      ) : (
+        <DataTable
+          columns={[
+            {
+              key: "member",
+              header: "Member",
+              render: (item) => (
+                <div>
+                  <p className="font-semibold text-text-900">
+                    {item.member.fullName}
+                  </p>
+                  <p className="text-xs text-text-400">
+                    {item.member.membershipNumber}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: "investment",
+              header: "Investment",
+              render: (item) => (
+                <div>
+                  <p className="font-semibold text-text-900">
+                    {item.investment.product?.name || "Investment"}
+                  </p>
+                  <p className="text-xs text-text-400">
+                    {item.investment.id}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: "amount",
+              header: "Principal",
+              render: (item) => currency.format(item.investment.principal),
+            },
+            {
+              key: "reason",
+              header: "Reason",
+              render: (item) => item.reason || "-",
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (item) => (
+                <StatusBadge
+                  status={item.status}
+                  variant={
+                    item.status === "APPROVED"
+                      ? "success"
+                      : item.status === "REJECTED"
+                        ? "danger"
+                        : "warning"
+                  }
+                />
+              ),
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              render: (item) => (
+                <ActionMenu
+                  items={[
+                    {
+                      label: "Approve",
+                      tone: "success",
+                      isDisabled: item.status !== "PENDING",
+                      confirmTitle: "Approve cancellation?",
+                      confirmMessage: `Approve this cancellation and refund ${currency.format(item.investment.principal)} to the member wallet?`,
+                      onSelect: async () => {
+                        try {
+                          await api.patch(
+                            `/investments/cancellations/${item.id}/approve`,
+                          );
+                          showSuccessToast(
+                            "Investment cancellation approved.",
+                          );
+                          await cancellations.refetch();
+                        } catch (error: any) {
+                          showErrorToast(
+                            error?.response?.data?.message ||
+                              "Unable to approve cancellation.",
+                          );
+                        }
+                      },
+                    },
+                    {
+                      label: "Reject",
+                      tone: "danger",
+                      isDisabled: item.status !== "PENDING",
+                      confirmTitle: "Reject cancellation?",
+                      confirmMessage:
+                        "Are you sure you want to reject this cancellation request?",
+                      onSelect: async () => {
+                        try {
+                          await api.patch(
+                            `/investments/cancellations/${item.id}/reject`,
+                            {},
+                          );
+                          showSuccessToast(
+                            "Investment cancellation rejected.",
+                          );
+                          await cancellations.refetch();
+                        } catch (error: any) {
+                          showErrorToast(
+                            error?.response?.data?.message ||
+                              "Unable to reject cancellation.",
+                          );
+                        }
+                      },
+                    },
+                  ]}
+                />
+              ),
+            },
+          ]}
+          data={cancellations.data?.items ?? []}
+          emptyDescription={
+            cancellations.error || "No investment cancellation requests found."
+          }
+          loading={cancellations.loading}
+        />
+      )}
     </div>
   );
 }

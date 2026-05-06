@@ -16,6 +16,11 @@ export class ReportsService {
       pendingLoans,
       totalInvestments,
       treasury,
+      walletWithdrawalPending,
+      investmentCancellationPending,
+      packagePending,
+      failedDeductionStatus,
+      lastDeductionRun,
     ] = await Promise.all([
       this.prisma.member.count(),
       this.prisma.member.count({ where: { status: 'ACTIVE' } }),
@@ -32,6 +37,11 @@ export class ReportsService {
         where: { status: 'APPROVED' },
       }),
       this.prisma.cooperativeWallet.findFirst(),
+      (this.prisma as any).walletWithdrawalRequest.count({ where: { status: 'PENDING' } }),
+      (this.prisma as any).investmentCancellationRequest.count({ where: { status: 'PENDING' } }),
+      this.prisma.packageSubscription.count({ where: { status: 'PENDING' } }),
+      this.prisma.systemConfig.findUnique({ where: { key: 'COOPERATIVE_DEDUCTION_LAST_STATUS' } }),
+      this.prisma.systemConfig.findUnique({ where: { key: 'COOPERATIVE_DEDUCTION_LAST_RUN' } }),
     ]);
 
     return {
@@ -52,6 +62,19 @@ export class ReportsService {
       },
       investments: {
         totalPrincipal: Number(totalInvestments._sum.principal ?? 0),
+        pendingCancellations: investmentCancellationPending,
+      },
+      packages: {
+        pending: packagePending,
+      },
+      approvals: {
+        walletWithdrawals: walletWithdrawalPending,
+        investmentCancellations: investmentCancellationPending,
+        total: walletWithdrawalPending + investmentCancellationPending + pendingLoans + packagePending,
+      },
+      autoDeduction: {
+        status: failedDeductionStatus?.value ?? 'NEVER_RUN',
+        lastRun: lastDeductionRun?.value ?? '',
       },
       cooperativeTreasury: {
         balance: Number(treasury?.balance ?? 0),
@@ -62,7 +85,7 @@ export class ReportsService {
   }
 
   async getDashboard() {
-    const [summary, membershipGrowth, loanPortfolio, revenue, recentTransactions, pendingPayments, pendingLoans] = await Promise.all([
+    const [summary, membershipGrowth, loanPortfolio, revenue, recentTransactions, pendingPayments, pendingLoans, pendingWalletWithdrawals] = await Promise.all([
       this.getSummary(),
       this.getMembershipGrowth(),
       this.getLoanPortfolio(),
@@ -80,6 +103,12 @@ export class ReportsService {
         orderBy: { submittedAt: 'desc' },
         include: { member: { select: { id: true, fullName: true, membershipNumber: true } } },
       }),
+      (this.prisma as any).walletWithdrawalRequest.findMany({
+        where: { status: 'PENDING' },
+        take: 6,
+        orderBy: { createdAt: 'desc' },
+        include: { member: { select: { id: true, fullName: true, membershipNumber: true } } },
+      }),
     ]);
 
     return {
@@ -95,6 +124,10 @@ export class ReportsService {
       pendingLoans: pendingLoans.map((loan) => ({
         ...loan,
         amount: Number(loan.amount),
+      })),
+      pendingWalletWithdrawals: pendingWalletWithdrawals.map((item: any) => ({
+        ...item,
+        amount: Number(item.amount),
       })),
     };
   }

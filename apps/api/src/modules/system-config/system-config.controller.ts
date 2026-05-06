@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, UseGuards, Request, Post } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -26,6 +26,13 @@ export class SystemConfigController {
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   getAll() {
     return this.systemConfigService.getAll();
+  }
+
+  @Post('actions/weekly-deductions/run')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Run weekly deductions manually' })
+  runWeeklyDeductions(@Request() req: any, @Body() body?: { force?: boolean }) {
+    return this.systemConfigService.runWeeklyDeductions(req.user.id, body?.force ?? false);
   }
 
   @Patch(':key')

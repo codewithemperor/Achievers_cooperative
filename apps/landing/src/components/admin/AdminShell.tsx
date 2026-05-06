@@ -27,6 +27,7 @@ const navItems = [
   { href: "/admin/loans", label: "Loans", icon: Banknote },
   { href: "/admin/savings", label: "Savings", icon: PiggyBank },
   { href: "/admin/payments", label: "Payments", icon: Receipt },
+  { href: "/admin/withdrawals", label: "Withdrawals", icon: ArrowLeftRight },
   { href: "/admin/investments", label: "Investments", icon: TrendingUp },
   { href: "/admin/packages", label: "Packages", icon: Package },
   { href: "/admin/transactions", label: "Transactions", icon: ArrowLeftRight },

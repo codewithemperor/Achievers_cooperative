@@ -4,6 +4,8 @@ import { useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatCard } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { useApi } from "@/hooks/useApi";
 import { PiggyBank } from "lucide-react";
 import api from "@/lib/api";
@@ -54,6 +56,13 @@ const currency = new Intl.NumberFormat("en-NG", {
   currency: "NGN",
   maximumFractionDigits: 0,
 });
+
+function variantForStatus(status: string) {
+  if (status === "APPROVED") return "success";
+  if (status === "REJECTED") return "danger";
+  if (status === "DISBURSED") return "success";
+  return "warning";
+}
 
 export default function SavingsPage() {
   const [tab, setTab] = useState<"transactions" | "withdrawals">(
@@ -143,7 +152,12 @@ export default function SavingsPage() {
             {
               key: "status",
               header: "Status",
-              render: (item) => item.status,
+              render: (item) => (
+                <StatusBadge
+                  status={item.status}
+                  variant={variantForStatus(item.status) as any}
+                />
+              ),
             },
             {
               key: "date",
@@ -195,63 +209,74 @@ export default function SavingsPage() {
             {
               key: "status",
               header: "Status",
-              render: (item) => item.status,
+              render: (item) => (
+                <StatusBadge
+                  status={item.status}
+                  variant={variantForStatus(item.status) as any}
+                />
+              ),
             },
             {
               key: "action",
               header: "Action",
+              align: "right",
+              isAction: true,
               render: (item) =>
                 item.status === "PENDING" ? (
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-full bg-[var(--primary-700)] px-3 py-1 text-xs font-semibold text-white"
-                      onClick={async () => {
-                        try {
-                          await api.patch(
-                            `/savings/withdrawals/${item.id}/approve`,
-                          );
-                          showSuccessToast(
-                            "Withdrawal request approved successfully.",
-                          );
-                          await withdrawals.refetch();
-                          await summary.refetch();
-                        } catch (error: any) {
-                          showErrorToast(
-                            error?.response?.data?.message ||
-                              "Unable to approve withdrawal request.",
-                          );
-                        }
-                      }}
-                      type="button"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      className="rounded-full bg-[#b42318] px-3 py-1 text-xs font-semibold text-white"
-                      onClick={async () => {
-                        try {
-                          await api.patch(
-                            `/savings/withdrawals/${item.id}/reject`,
-                            {},
-                          );
-                          showSuccessToast(
-                            "Withdrawal request rejected successfully.",
-                          );
-                          await withdrawals.refetch();
-                        } catch (error: any) {
-                          showErrorToast(
-                            error?.response?.data?.message ||
-                              "Unable to reject withdrawal request.",
-                          );
-                        }
-                      }}
-                      type="button"
-                    >
-                      Reject
-                    </button>
-                  </div>
+                  <ActionMenu
+                    items={[
+                      {
+                        label: "Approve",
+                        tone: "success",
+                        confirmTitle: "Approve savings withdrawal?",
+                        confirmMessage:
+                          "Are you sure you want to approve this savings withdrawal request?",
+                        onSelect: async () => {
+                          try {
+                            await api.patch(
+                              `/savings/withdrawals/${item.id}/approve`,
+                            );
+                            showSuccessToast(
+                              "Withdrawal request approved successfully.",
+                            );
+                            await withdrawals.refetch();
+                            await summary.refetch();
+                          } catch (error: any) {
+                            showErrorToast(
+                              error?.response?.data?.message ||
+                                "Unable to approve withdrawal request.",
+                            );
+                          }
+                        },
+                      },
+                      {
+                        label: "Reject",
+                        tone: "danger",
+                        confirmTitle: "Reject savings withdrawal?",
+                        confirmMessage:
+                          "Are you sure you want to reject this savings withdrawal request?",
+                        onSelect: async () => {
+                          try {
+                            await api.patch(
+                              `/savings/withdrawals/${item.id}/reject`,
+                              {},
+                            );
+                            showSuccessToast(
+                              "Withdrawal request rejected successfully.",
+                            );
+                            await withdrawals.refetch();
+                          } catch (error: any) {
+                            showErrorToast(
+                              error?.response?.data?.message ||
+                                "Unable to reject withdrawal request.",
+                            );
+                          }
+                        },
+                      },
+                    ]}
+                  />
                 ) : (
-                  "-"
+                  <span />
                 ),
             },
           ]}

@@ -9,7 +9,7 @@ It stores schedule settings in `SystemConfig`:
 - `COOPERATIVE_DEDUCTION_AMOUNT`
 - `COOPERATIVE_DEDUCTION_LAST_RUN`
 
-When due, it loads all `Member` rows with `status = ACTIVE` and debits each member wallet by the configured amount using `WalletService.debitWallet`. The debit creates a `Transaction` with:
+When due, it loads all `Member` rows with `status = ACTIVE` and debits each member wallet by the configured weekly cooperative amount using `WalletService.debitWallet`. The debit creates a `Transaction` with:
 
 - `type = WEEKLY_COOPERATIVE`
 - `reference = WEEKLY-{UTC_DAY_STAMP}-{memberId}`
@@ -18,11 +18,13 @@ When due, it loads all `Member` rows with `status = ACTIVE` and debits each memb
 
 The debit allows negative balances. If a member does not have enough wallet balance, the transaction is left `PENDING`, the wallet can go negative, and `pendingBalance` records the outstanding amount.
 
+Separately, every wallet credit calls `WalletService.settleOutstandingObligations`. That settlement flow attempts to apply available wallet balance to due package payments, active loan repayments, and pending savings transactions.
+
 ## When it runs
 
 The schedule is day-based, using UTC day names. The default day is `MONDAY` and the default amount is `1000`.
 
-There is no fixed clock time. It runs on the first API request received on the configured UTC day, because the middleware calls `runIfDue()` during request handling.
+Previously there was no fixed clock time because the middleware called `runIfDue()` during normal API requests. This has been replaced with a real cron endpoint: `/api/v1/cron/weekly-deductions`.
 
 ## How often it runs
 
@@ -30,7 +32,7 @@ At most once per UTC day. The service writes the UTC start-of-day timestamp into
 
 ## What triggers it
 
-`apps/api/src/common/middleware/weekly-deduction-request.middleware.ts` triggers it for API requests whose path starts with `/api/v1`, excluding API docs. The trigger is lazy/request-driven, not a real cron job.
+Render Cron should trigger `/api/v1/cron/weekly-deductions` with `x-cron-secret`. Admins can also trigger `/api/v1/config/actions/weekly-deductions/run`.
 
 Admins can also trigger the service through system configuration/admin flows that call `WeeklyDeductionsService.run`.
 
@@ -57,6 +59,18 @@ Writes:
 - `Transaction` creates `WEEKLY_COOPERATIVE` rows
 - `AuditEvent` records `RUN_WEEKLY_DEDUCTIONS`
 
+## Payment Coverage
+
+- Weekly savings/payment check: the scheduled job itself only creates `WEEKLY_COOPERATIVE` deductions.
+- Loan due dates: handled by wallet settlement logic after wallet credits, using active loan statuses `DISBURSED`, `IN_PROGRESS`, and `OVERDUE`.
+- Package due dates: handled by wallet settlement logic after wallet credits, using active package statuses `APPROVED`, `DISBURSED`, and `IN_PROGRESS`.
+- Overdue repayments: loan overdue status is updated by loan listing logic; package due detection uses `nextDueAt` and accrued penalties.
+- Active loans only: settlement only targets active loans with remaining balance.
+- Active packages only: settlement only targets active package subscriptions with remaining/penalty balances.
+- No due payments: the scheduled job records/skips based on day/amount/last-run; settlement returns no settlements when nothing is due or no wallet balance is available.
+- Insufficient wallet balance: scheduled deductions may create pending transactions and negative wallet balance; normal settlement only spends available positive wallet balance.
+- Failure: status/error are recorded in `SystemConfig` under `COOPERATIVE_DEDUCTION_LAST_STATUS` and `COOPERATIVE_DEDUCTION_LAST_ERROR`.
+
 ## Risks and edge cases
 
 - The run uses UTC day names, which may not match the cooperative's local business day.
@@ -68,7 +82,14 @@ Writes:
 
 ## Bugs and improvements
 
-- Replace lazy middleware triggering with a real scheduled job or platform cron.
+- The Settings page was showing `--` because `COOPERATIVE_DEDUCTION_LAST_RUN` defaults to an empty string until the first successful run, and the UI only displayed `updatedAt` when `value` was truthy. This made a valid default row look missing.
+- The previous settings payload did not expose an enabled/disabled flag, last run status, or last error.
+- Failed lazy runs were swallowed by middleware without a persisted failure status.
+- Fixed now: defaults include `COOPERATIVE_DEDUCTION_ENABLED`, `COOPERATIVE_DEDUCTION_LAST_STATUS`, and `COOPERATIVE_DEDUCTION_LAST_ERROR`.
+- Fixed now: Settings always shows `updatedAt`, shows `Never` for an empty last-run value, and exposes enabled/status/error fields.
+- Fixed now: the deduction service records statuses such as `SUCCESS`, `DISABLED`, `WAITING_FOR_SCHEDULED_DAY`, `ALREADY_RAN_TODAY`, and `FAILED`.
+- Fixed now: admins can run the service from Settings with either normal schedule validation or force mode.
+- Still recommended: replace lazy middleware triggering with a real scheduled job or platform cron.
 - Store and evaluate the schedule in the cooperative's configured timezone.
 - Use a database-level run lock or transactional advisory lock to protect multi-instance deployments.
 - Move the middleware `next()` call before the deduction work, or run the job out of band, to keep normal API requests fast.

@@ -6,6 +6,10 @@ import { AuditService } from './audit.service';
 const DEDUCTION_DAY_KEY = 'COOPERATIVE_DEDUCTION_DAY';
 const DEDUCTION_AMOUNT_KEY = 'COOPERATIVE_DEDUCTION_AMOUNT';
 const LAST_RUN_KEY = 'COOPERATIVE_DEDUCTION_LAST_RUN';
+const ENABLED_KEY = 'COOPERATIVE_DEDUCTION_ENABLED';
+const LAST_STATUS_KEY = 'COOPERATIVE_DEDUCTION_LAST_STATUS';
+const LAST_ERROR_KEY = 'COOPERATIVE_DEDUCTION_LAST_ERROR';
+const LAST_CHECKED_AT_KEY = 'COOPERATIVE_DEDUCTION_LAST_CHECKED_AT';
 
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 
@@ -25,14 +29,22 @@ export class WeeklyDeductionsService {
 
   async getSettings() {
     await this.ensureDefaults();
-    const [day, amount] = await Promise.all([
+    const [day, amount, enabled, lastRun, lastStatus, lastError] = await Promise.all([
       this.prisma.systemConfig.findUnique({ where: { key: DEDUCTION_DAY_KEY } }),
       this.prisma.systemConfig.findUnique({ where: { key: DEDUCTION_AMOUNT_KEY } }),
+      this.prisma.systemConfig.findUnique({ where: { key: ENABLED_KEY } }),
+      this.prisma.systemConfig.findUnique({ where: { key: LAST_RUN_KEY } }),
+      this.prisma.systemConfig.findUnique({ where: { key: LAST_STATUS_KEY } }),
+      this.prisma.systemConfig.findUnique({ where: { key: LAST_ERROR_KEY } }),
     ]);
 
     return {
       day: day?.value ?? 'MONDAY',
       amount: Number(amount?.value ?? 0),
+      enabled: (enabled?.value ?? 'true') === 'true',
+      lastRun: lastRun?.value ?? '',
+      lastStatus: lastStatus?.value ?? 'NEVER_RUN',
+      lastError: lastError?.value ?? '',
     };
   }
 
@@ -42,22 +54,31 @@ export class WeeklyDeductionsService {
     }
 
     await this.ensureDefaults();
+    await this.touchLastCheckedAt();
     const today = new Date();
     const settings = await this.getSettings();
+    if (!settings.enabled) {
+      await this.recordStatus('DISABLED');
+      return { skipped: true, reason: 'disabled' };
+    }
+
     const expectedDay = settings.day.toUpperCase();
     const actualDay = DAYS[today.getUTCDay()];
     const runStamp = startOfIsoDay(today).toISOString();
     const lastRun = await this.prisma.systemConfig.findUnique({ where: { key: LAST_RUN_KEY } });
 
     if (!settings.amount || settings.amount <= 0) {
+      await this.recordStatus('SKIPPED_AMOUNT_NOT_CONFIGURED');
       return { skipped: true, reason: 'amount-not-configured' };
     }
 
     if (actualDay !== expectedDay) {
+      await this.recordStatus('WAITING_FOR_SCHEDULED_DAY');
       return { skipped: true, reason: 'not-scheduled-day' };
     }
 
     if (lastRun?.value === runStamp) {
+      await this.recordStatus('ALREADY_RAN_TODAY');
       return { skipped: true, reason: 'already-ran-today' };
     }
 
@@ -67,12 +88,16 @@ export class WeeklyDeductionsService {
     });
 
     if (!actor?.id) {
+      await this.recordStatus('SKIPPED_NO_ADMIN_ACTOR');
       return { skipped: true, reason: 'no-admin-actor' };
     }
 
     this.runInFlight = true;
     try {
       return await this.run(actor.id, { trigger: 'LAZY' });
+    } catch (error: any) {
+      await this.recordStatus('FAILED', error?.message || 'Unknown weekly deduction error');
+      throw error;
     } finally {
       this.runInFlight = false;
     }
@@ -81,8 +106,13 @@ export class WeeklyDeductionsService {
   async run(actorId: string, options?: { force?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' }) {
     const today = new Date();
     const settings = await this.getSettings();
+    if (!settings.enabled) {
+      await this.recordStatus('DISABLED');
+      return { skipped: true, processedCount: 0, amount: settings.amount };
+    }
 
     if (!settings.amount || settings.amount <= 0) {
+      await this.recordStatus('FAILED_AMOUNT_NOT_CONFIGURED');
       throw new BadRequestException('Set a cooperative deduction amount before running deductions');
     }
 
@@ -90,12 +120,14 @@ export class WeeklyDeductionsService {
     const actualDay = DAYS[today.getUTCDay()];
 
     if (!options?.force && actualDay !== expectedDay) {
+      await this.recordStatus('WAITING_FOR_SCHEDULED_DAY');
       throw new BadRequestException(`Weekly deductions are scheduled for ${expectedDay}`);
     }
 
     const lastRun = await this.prisma.systemConfig.findUnique({ where: { key: LAST_RUN_KEY } });
     const runStamp = startOfIsoDay(today).toISOString();
     if (!options?.force && lastRun?.value === runStamp) {
+      await this.recordStatus('ALREADY_RAN_TODAY');
       return { alreadyProcessed: true, processedCount: 0, amount: settings.amount };
     }
 
@@ -133,6 +165,7 @@ export class WeeklyDeductionsService {
       update: { value: runStamp },
       create: { key: LAST_RUN_KEY, value: runStamp },
     });
+    await this.recordStatus('SUCCESS');
 
     await this.audit.log(actorId, 'RUN_WEEKLY_DEDUCTIONS', 'SystemConfig', LAST_RUN_KEY, {
       runStamp,
@@ -150,12 +183,35 @@ export class WeeklyDeductionsService {
     };
   }
 
+  async runFromCron(force = false) {
+    const actor = await this.prisma.user.findFirst({
+      where: { role: 'SUPER_ADMIN' },
+      select: { id: true },
+    });
+
+    if (!actor?.id) {
+      await this.recordStatus('FAILED_NO_ADMIN_ACTOR', 'No SUPER_ADMIN user exists for cron audit attribution.');
+      return { skipped: true, reason: 'no-admin-actor' };
+    }
+
+    try {
+      return await this.run(actor.id, { force, trigger: 'CRON' });
+    } catch (error: any) {
+      await this.recordStatus('FAILED', error?.message || 'Unknown cron deduction error');
+      throw error;
+    }
+  }
+
   private async ensureDefaults() {
     await Promise.all(
       [
         [DEDUCTION_DAY_KEY, 'MONDAY'],
         [DEDUCTION_AMOUNT_KEY, '1000'],
         [LAST_RUN_KEY, ''],
+        [ENABLED_KEY, 'true'],
+        [LAST_STATUS_KEY, 'NEVER_RUN'],
+        [LAST_ERROR_KEY, ''],
+        [LAST_CHECKED_AT_KEY, ''],
       ].map(([key, value]) =>
         this.prisma.systemConfig.upsert({
           where: { key },
@@ -164,5 +220,28 @@ export class WeeklyDeductionsService {
         }),
       ),
     );
+  }
+
+  private async recordStatus(status: string, error = '') {
+    await Promise.all([
+      this.prisma.systemConfig.upsert({
+        where: { key: LAST_STATUS_KEY },
+        update: { value: status },
+        create: { key: LAST_STATUS_KEY, value: status },
+      }),
+      this.prisma.systemConfig.upsert({
+        where: { key: LAST_ERROR_KEY },
+        update: { value: error },
+        create: { key: LAST_ERROR_KEY, value: error },
+      }),
+    ]);
+  }
+
+  private async touchLastCheckedAt() {
+    await this.prisma.systemConfig.upsert({
+      where: { key: LAST_CHECKED_AT_KEY },
+      update: { value: new Date().toISOString() },
+      create: { key: LAST_CHECKED_AT_KEY, value: new Date().toISOString() },
+    });
   }
 }

@@ -1,7 +1,6 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './common/prisma.module';
-import { WeeklyDeductionRequestMiddleware } from './common/middleware/weekly-deduction-request.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { MembersModule } from './modules/members/members.module';
 import { WalletsModule } from './modules/wallets/wallets.module';
@@ -19,10 +18,10 @@ import { CooperativeWalletModule } from './modules/cooperative-wallet/cooperativ
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { BankAccountsModule } from './modules/bank-accounts/bank-accounts.module';
 import { HealthController } from './common/health.controller';
+import { CronController } from './common/cron.controller';
 
 @Module({
-  controllers: [HealthController],
-  providers: [WeeklyDeductionRequestMiddleware],
+  controllers: [HealthController, CronController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
@@ -44,8 +43,4 @@ import { HealthController } from './common/health.controller';
     BankAccountsModule,
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(WeeklyDeductionRequestMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}
