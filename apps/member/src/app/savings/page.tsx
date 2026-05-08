@@ -140,8 +140,6 @@ export default function SavingsPage() {
   );
   const requestButtonLabel =
     activeTab === "withdrawals" ? "Request Withdrawal" : "Save Now";
-  const requestButtonDisabled =
-    activeTab === "withdrawals" && !bankAccounts.data.length;
   const handlePrimaryAction = () => {
     if (activeTab === "withdrawals") {
       const defaultBank =
@@ -179,17 +177,6 @@ export default function SavingsPage() {
         icon={<PiggyBank className="h-5 w-5" />}
         gradient="from-[#2a0a0a] via-[#200808] to-[#160505]"
       />
-
-      <div className="sticky top-3 z-10 flex justify-end">
-        <button
-          className="min-h-11 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary-900/10 disabled:opacity-50"
-          onClick={handlePrimaryAction}
-          type="button"
-          disabled={requestButtonDisabled}
-        >
-          {requestButtonLabel}
-        </button>
-      </div>
 
       {bankAccounts.data.length === 0 ? (
         <section className="rounded-[20px] border border-background-200 bg-background-50 px-4 py-3 dark:border-white/8 dark:bg-background-100">
@@ -277,7 +264,7 @@ export default function SavingsPage() {
                 <TransactionCard
                   key={request.id}
                   type="SAVINGS"
-                  title={`${request.bankName} · ${request.accountNumber}`}
+                  title={`${request.bankName} - ${request.accountNumber}`}
                   subtitle={request.accountName}
                   amount={request.amount}
                   status={request.status}

@@ -4,6 +4,7 @@ import { WalletService } from '../../common/services/wallet.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { AuditService } from '../../common/services/audit.service';
 import { SubscribeInvestmentDto, QueryInvestmentsDto } from './dto/index';
+import { normalizePagination } from '../../common/pagination';
 
 @Injectable()
 export class InvestmentsService {
@@ -18,13 +19,29 @@ export class InvestmentsService {
     const products = await this.prisma.investmentProduct.findMany({
       where: { status: 'ACTIVE' },
       orderBy: { id: 'desc' },
+      include: {
+        subscriptions: {
+          include: {
+            cancellationRequests: { select: { id: true, status: true } },
+          },
+        },
+      },
     });
 
-    return products.map((p) => ({
+    return products.map((p) => {
+      const activeSubscriptions = p.subscriptions.filter((item) => item.status === 'APPROVED');
+
+      return {
       ...p,
       annualRate: Number(p.annualRate),
       minimumAmount: Number(p.minimumAmount),
-    }));
+      maximumAmount: p.maximumAmount ? Number(p.maximumAmount) : null,
+      subscriberCount: activeSubscriptions.length,
+      amountSubscribed: activeSubscriptions.reduce((sum, item) => sum + Number(item.principal), 0),
+      withdrawalCount: p.subscriptions.reduce((sum, item) => sum + item.cancellationRequests.length, 0),
+      subscriptions: undefined,
+      };
+    });
   }
 
   async createProduct(
@@ -62,6 +79,12 @@ export class InvestmentsService {
         subscriptions: {
           include: {
             member: { select: { id: true, fullName: true, membershipNumber: true } },
+            cancellationRequests: {
+              include: {
+                member: { select: { id: true, fullName: true, membershipNumber: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
           },
           orderBy: { maturityDate: 'desc' },
         },
@@ -76,8 +99,10 @@ export class InvestmentsService {
       ...subscription,
       principal: Number(subscription.principal),
       maturityAmount:
-        Number(subscription.principal) +
-        Number(subscription.principal) * (Number(product.annualRate) / 100) * (product.durationMonths / 12),
+        subscription.status === 'APPROVED'
+          ? Number(subscription.principal) +
+            Number(subscription.principal) * (Number(product.annualRate) / 100) * (product.durationMonths / 12)
+          : Number(subscription.principal),
       isDefaulter: subscription.maturityDate < new Date() && subscription.status !== 'APPROVED',
     }));
 
@@ -87,6 +112,17 @@ export class InvestmentsService {
       minimumAmount: Number(product.minimumAmount),
       maximumAmount: product.maximumAmount ? Number(product.maximumAmount) : null,
       subscriptions,
+      cancellationRequests: product.subscriptions.flatMap((subscription) =>
+        (subscription as any).cancellationRequests.map((request: any) => ({
+          ...request,
+          investment: {
+            id: subscription.id,
+            principal: Number(subscription.principal),
+            maturityDate: subscription.maturityDate,
+            product: { id: product.id, name: product.name },
+          },
+        })),
+      ),
       subscribers: subscriptions.filter((subscription) => !subscription.isDefaulter),
       defaulters: subscriptions.filter((subscription) => subscription.isDefaulter),
     };
@@ -133,9 +169,7 @@ export class InvestmentsService {
   }
 
   async getAllInvestments(query: { page?: number; limit?: number }) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = normalizePagination(query);
 
     const [items, total] = await Promise.all([
       this.prisma.investmentSubscription.findMany({
@@ -256,8 +290,8 @@ export class InvestmentsService {
     const member = await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');
 
-    const { status, page = 1, limit = 20 } = query;
-    const skip = (page - 1) * limit;
+    const { status } = query;
+    const { page, limit, skip } = normalizePagination(query);
 
     const where: Record<string, unknown> = { memberId: member.id };
     if (status) where.status = status;
@@ -278,8 +312,10 @@ export class InvestmentsService {
         ...i,
         principal: Number(i.principal),
         maturityAmount:
-          Number(i.principal) +
-          Number(i.principal) * (Number(i.product?.annualRate ?? 0) / 100) * ((i.product?.durationMonths ?? 0) / 12),
+          i.status === 'APPROVED'
+            ? Number(i.principal) +
+              Number(i.principal) * (Number(i.product?.annualRate ?? 0) / 100) * ((i.product?.durationMonths ?? 0) / 12)
+            : Number(i.principal),
         product: i.product
           ? { ...i.product, annualRate: Number(i.product.annualRate), minimumAmount: Number(i.product.minimumAmount) }
           : null,
@@ -457,7 +493,8 @@ export class InvestmentsService {
     const principal = Number(investment.principal);
     const annualRate = Number(investment.product?.annualRate ?? 0);
     const durationMonths = Number(investment.product?.durationMonths ?? 0);
-    const interest = principal * (annualRate / 100) * (durationMonths / 12);
+    const isActive = investment.status === 'APPROVED';
+    const interest = isActive ? principal * (annualRate / 100) * (durationMonths / 12) : 0;
 
     return {
       ...investment,

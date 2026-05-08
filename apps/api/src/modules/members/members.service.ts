@@ -7,6 +7,7 @@ import { WeeklyDeductionsService } from '../../common/services/weekly-deductions
 import { WalletService } from '../../common/services/wallet.service';
 import { maskPhoneNumber, isValidNigerianPhoneNumber } from '../../common/member.constants';
 import { CreateMemberDto, UpdateMemberDto, UpdateMemberStatusDto, QueryMembersDto } from './dto/index';
+import { normalizePagination } from '../../common/pagination';
 
 const MEMBERSHIP_FEE_CONFIG_KEY = 'MEMBERSHIP_FEE_AMOUNT';
 
@@ -21,8 +22,8 @@ export class MembersService {
   ) {}
 
   async findAll(query: QueryMembersDto) {
-    const { status, search, page = 1, limit = 20 } = query;
-    const skip = (page - 1) * limit;
+    const { status, search } = query;
+    const { page, limit, skip } = normalizePagination(query);
 
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
@@ -119,6 +120,7 @@ export class MembersService {
         user: { select: { id: true, email: true, role: true } },
         wallet: { select: { id: true, availableBalance: true, pendingBalance: true, currency: true } },
         referrer: { select: { id: true, fullName: true, membershipNumber: true } },
+        savingsAccounts: true,
         payments: {
           orderBy: { createdAt: 'desc' },
         },
@@ -132,6 +134,10 @@ export class MembersService {
         investments: {
           include: { product: true },
           orderBy: { maturityDate: 'desc' },
+        },
+        packageSubscriptions: {
+          include: { package: true },
+          orderBy: { createdAt: 'desc' },
         },
       },
     });
@@ -174,6 +180,21 @@ export class MembersService {
       investments: member.investments.map((investment) => ({
         ...investment,
         principal: Number(investment.principal),
+      })),
+      savingsAccounts: member.savingsAccounts.map((account) => ({
+        ...account,
+        balance: Number(account.balance),
+      })),
+      packageSubscriptions: member.packageSubscriptions.map((subscription) => ({
+        ...subscription,
+        amountPaid: Number(subscription.amountPaid),
+        amountRemaining: Number(subscription.amountRemaining),
+        penaltyAccrued: Number(subscription.penaltyAccrued),
+        package: {
+          ...subscription.package,
+          totalAmount: Number(subscription.package.totalAmount),
+          penaltyValue: Number(subscription.package.penaltyValue),
+        },
       })),
     };
   }
@@ -258,6 +279,14 @@ export class MembersService {
     const pendingLoansTotal = member.loanApplications
       .filter((loan) => loan.status === 'PENDING')
       .reduce((sum, loan) => sum + Number(loan.amount), 0);
+    const cooperativeAccounts = [
+      {
+        bankName: bankName?.value ?? '',
+        accountName: bankAccountName?.value ?? '',
+        accountNumber: bankAccountNumber?.value ?? '',
+      },
+    ].filter((account) => account.bankName || account.accountName || account.accountNumber);
+
     const mergedActivity = [
       ...recentTransactions.map((transaction) => ({
         id: transaction.id,
@@ -300,7 +329,9 @@ export class MembersService {
       },
       summary: {
         totalSavings: Number(savingsTotal._sum.balance ?? 0),
-        totalInvestments: member.investments.reduce((sum, item) => sum + Number(item.principal), 0),
+        totalInvestments: member.investments
+          .filter((item) => item.status === 'APPROVED')
+          .reduce((sum, item) => sum + Number(item.principal), 0),
         transactionCount,
         pendingPaymentsTotal: pendingPayments.reduce((sum, item) => sum + Number(item.amount), 0),
         pendingPaymentsCount: pendingPayments.length,
@@ -332,6 +363,7 @@ export class MembersService {
         accountName: bankAccountName?.value ?? '',
         accountNumber: bankAccountNumber?.value ?? '',
       },
+      cooperativeAccounts,
       termsHtml: termsConfig?.value ?? '<p>Terms and conditions will be published here by your administrator.</p>',
     };
   }

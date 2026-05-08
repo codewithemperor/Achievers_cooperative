@@ -237,7 +237,7 @@ export default function WalletPage() {
 
         <Tabs.Panel id="funding" className="pt-4 outline-none">
           <section className="space-y-5">
-            <div className="flex items-start justify-between gap-3">
+            <div>
               <div>
                 <h2 className="text-xl font-semibold font-display tracking-tight text-text-900">
                   Wallet funding
@@ -246,17 +246,6 @@ export default function WalletPage() {
                   Only wallet funding requests and credits are listed here.
                 </p>
               </div>
-              <button
-                className="min-h-11 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white"
-                onClick={() => {
-                  reset();
-                  setReceiptUrl("");
-                  setIsFundingModalOpen(true);
-                }}
-                type="button"
-              >
-                Add money
-              </button>
             </div>
 
             {transactions.data.items.length ? (
@@ -285,7 +274,7 @@ export default function WalletPage() {
 
         <Tabs.Panel id="withdrawals" className="pt-4 outline-none">
           <section className="space-y-5">
-            <div className="flex items-start justify-between gap-3">
+            <div>
               <div>
                 <h2 className="text-xl font-semibold font-display tracking-tight text-text-900">
                   Withdrawal requests
@@ -294,14 +283,6 @@ export default function WalletPage() {
                   Track wallet withdrawals submitted for admin approval.
                 </p>
               </div>
-              <button
-                className="min-h-11 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                disabled={!bankAccounts.data.length}
-                onClick={openWithdrawalModal}
-                type="button"
-              >
-                Request
-              </button>
             </div>
 
             {bankAccounts.data.length === 0 ? (

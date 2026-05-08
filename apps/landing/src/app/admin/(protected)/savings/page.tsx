@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
-import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionMenu } from "@/components/ui/action-menu";
+import { AdminTabs } from "@/components/ui/admin-tabs";
+import { DashboardMetricCard } from "@/components/admin/dashboard-card";
+import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
 import { useApi } from "@/hooks/useApi";
-import { PiggyBank } from "lucide-react";
+import { Clock3, PiggyBank, Receipt, Wallet } from "lucide-react";
 import api from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
@@ -24,6 +26,8 @@ interface SavingsTransactionsResponse {
     status: string;
     createdAt: string;
     description?: string | null;
+    reference?: string | null;
+    type?: string;
     wallet: {
       member: {
         id: string;
@@ -42,6 +46,9 @@ interface SavingsWithdrawalsResponse {
     bankName: string;
     accountNumber: string;
     accountName: string;
+    rejectionReason?: string | null;
+    approvedAt?: string | null;
+    rejectedAt?: string | null;
     createdAt: string;
     member: {
       id: string;
@@ -73,6 +80,45 @@ export default function SavingsPage() {
     useApi<SavingsTransactionsResponse>("/savings/transactions");
   const withdrawals =
     useApi<SavingsWithdrawalsResponse>("/savings/withdrawals");
+  const [selectedReceipt, setSelectedReceipt] = useState<{
+    title: string;
+    amount: number;
+    date?: string | null;
+    status: string;
+    reference?: string | null;
+    fields: Array<{ label: string; value?: string | number | null }>;
+    timeline?: Array<{ label: string; date?: string | null; status?: string }>;
+  } | null>(null);
+  const transactionRows = transactions.data?.items ?? [];
+  const withdrawalRows = withdrawals.data?.items ?? [];
+  const pendingWithdrawals = withdrawalRows.filter((item) => item.status === "PENDING");
+  const processedWithdrawals = withdrawalRows.filter((item) => item.status !== "PENDING");
+  const savingsTransactionRows = [
+    ...transactionRows.map((item) => ({
+      ...item,
+      source: "SAVINGS" as const,
+      member: item.wallet.member,
+      description: item.description || "Savings contribution",
+      transactionType: "Savings",
+    })),
+    ...processedWithdrawals.map((item) => ({
+      ...item,
+      source: "SAVINGS_WITHDRAWAL" as const,
+      member: item.member,
+      description:
+        item.status === "REJECTED"
+          ? item.rejectionReason || "Savings withdrawal rejected"
+          : `Savings withdrawal to ${item.bankName} - ${item.accountNumber}`,
+      transactionType: "Withdrawal",
+    })),
+  ].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  const pendingWithdrawalAmount = pendingWithdrawals.reduce(
+    (sum, item) => sum + Number(item.amount ?? 0),
+    0,
+  );
 
   return (
     <div className="space-y-6">
@@ -81,46 +127,48 @@ export default function SavingsPage() {
         subtitle="Review savings-only transactions and manage member withdrawal requests."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard
+          description="Total balance in member savings."
+          href="/admin/savings"
+          icon={<PiggyBank className="h-5 w-5" />}
           title="Total Savings"
           value={currency.format(summary.data?.savings?.totalBalance ?? 0)}
-          accent="green"
-          icon={<PiggyBank className="h-5 w-5" />}
+          tone="green"
         />
-        <StatCard
+        <DashboardMetricCard
+          description="Savings contributions and related entries."
+          href="/admin/savings"
+          icon={<Receipt className="h-5 w-5" />}
           title="Savings Transactions"
-          value={String(transactions.data?.items.length ?? 0)}
-          accent="blue"
+          value={transactionRows.length}
         />
-        <StatCard
+        <DashboardMetricCard
+          description="Withdrawal requests waiting for review."
+          href="/admin/savings"
+          icon={<Clock3 className="h-5 w-5" />}
           title="Withdrawal Requests"
-          value={String(withdrawals.data?.items.length ?? 0)}
-          accent="dark"
+          tone={pendingWithdrawals.length ? "amber" : "neutral"}
+          value={pendingWithdrawals.length}
+        />
+        <DashboardMetricCard
+          description="Total savings withdrawals awaiting review."
+          href="/admin/savings"
+          icon={<Wallet className="h-5 w-5" />}
+          title="Pending Withdrawal Amount"
+          value={currency.format(pendingWithdrawalAmount)}
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {[
-          { id: "transactions", label: "Savings Transactions" },
-          { id: "withdrawals", label: "Savings Withdrawal Requests" },
-        ].map((item) => (
-          <button
-            key={item.id}
-            className={
-              tab === item.id
-                ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
-                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
-            }
-            onClick={() =>
-              setTab(item.id as "transactions" | "withdrawals")
-            }
-            type="button"
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <AdminTabs
+        items={[
+          { id: "transactions", label: "Transactions" },
+          { id: "withdrawals", label: "Withdrawal Requests" },
+        ]}
+        meta={`${pendingWithdrawals.length} pending request(s)`}
+        onChange={setTab}
+        value={tab}
+      />
 
       {tab === "transactions" ? (
         <DataTable
@@ -131,23 +179,29 @@ export default function SavingsPage() {
               render: (item) => (
                 <div>
                   <p className="font-semibold text-text-900">
-                    {item.wallet.member.fullName}
+                    {item.member.fullName}
                   </p>
                   <p className="text-xs text-text-400">
-                    {item.wallet.member.membershipNumber}
+                    {item.member.membershipNumber}
                   </p>
                 </div>
               ),
             },
             {
-              key: "amount",
-              header: "Amount",
-              render: (item) => currency.format(item.amount),
+              key: "type",
+              header: "Type",
+              render: (item) => item.transactionType,
+              sortValue: (item) => item.transactionType,
             },
             {
               key: "description",
               header: "Description",
-              render: (item) => item.description || "Savings contribution",
+              render: (item) => item.description,
+            },
+            {
+              key: "amount",
+              header: "Amount",
+              render: (item) => currency.format(item.amount),
             },
             {
               key: "status",
@@ -166,11 +220,71 @@ export default function SavingsPage() {
                 new Date(item.createdAt).toLocaleDateString("en-NG"),
             },
           ]}
-          data={transactions.data?.items ?? []}
+          data={savingsTransactionRows}
           emptyDescription={
             transactions.error || "No savings transactions available yet."
           }
-          loading={transactions.loading}
+          loading={transactions.loading || withdrawals.loading}
+          onRowClick={(item) =>
+            setSelectedReceipt({
+              title:
+                item.source === "SAVINGS"
+                  ? "Savings Contribution"
+                  : "Savings Withdrawal",
+              amount: item.amount,
+              date: item.createdAt,
+              status: item.status,
+              reference:
+                item.source === "SAVINGS"
+                  ? item.reference
+                  : `SAVINGS-WD-${item.id.slice(0, 8)}`,
+              fields: [
+                ["Member", item.member.fullName],
+                ["Membership No.", item.member.membershipNumber],
+                ["Type", item.transactionType],
+                ["Description", item.description],
+                [
+                  "Bank",
+                  item.source === "SAVINGS_WITHDRAWAL" ? item.bankName : "-",
+                ],
+                [
+                  "Account Name",
+                  item.source === "SAVINGS_WITHDRAWAL" ? item.accountName : "-",
+                ],
+                [
+                  "Account Number",
+                  item.source === "SAVINGS_WITHDRAWAL"
+                    ? item.accountNumber
+                    : "-",
+                ],
+              ].map(([label, value]) => ({ label, value })),
+              timeline:
+                item.source === "SAVINGS_WITHDRAWAL"
+                  ? [
+                      {
+                        label: "Requested",
+                        date: item.createdAt,
+                        status: "PENDING",
+                      },
+                      {
+                        label:
+                          item.status === "REJECTED" ? "Rejected" : "Approved",
+                        date:
+                          item.status === "REJECTED"
+                            ? item.rejectedAt
+                            : item.approvedAt,
+                        status: item.status,
+                      },
+                    ]
+                  : [
+                      {
+                        label: "Savings posted",
+                        date: item.createdAt,
+                        status: item.status,
+                      },
+                    ],
+            })
+          }
         />
       ) : (
         <DataTable
@@ -201,7 +315,7 @@ export default function SavingsPage() {
                 <div>
                   <p className="font-medium text-text-900">{item.bankName}</p>
                   <p className="text-xs text-text-400">
-                    {item.accountName} · {item.accountNumber}
+                    {item.accountName} - {item.accountNumber}
                   </p>
                 </div>
               ),
@@ -215,6 +329,13 @@ export default function SavingsPage() {
                   variant={variantForStatus(item.status) as any}
                 />
               ),
+            },
+            {
+              key: "createdAt",
+              header: "Requested",
+              render: (item) =>
+                new Date(item.createdAt).toLocaleDateString("en-NG"),
+              sortValue: (item) => new Date(item.createdAt),
             },
             {
               key: "action",
@@ -280,13 +401,38 @@ export default function SavingsPage() {
                 ),
             },
           ]}
-          data={withdrawals.data?.items ?? []}
+          data={pendingWithdrawals}
           emptyDescription={
             withdrawals.error || "No withdrawal requests available yet."
           }
           loading={withdrawals.loading}
+          onRowClick={(item) =>
+            setSelectedReceipt({
+              title: "Savings Withdrawal Request",
+              amount: item.amount,
+              date: item.createdAt,
+              status: item.status,
+              reference: `SAVINGS-WD-${item.id.slice(0, 8)}`,
+              fields: [
+                { label: "Member", value: item.member.fullName },
+                { label: "Membership No.", value: item.member.membershipNumber },
+                { label: "Bank", value: item.bankName },
+                { label: "Account Name", value: item.accountName },
+                { label: "Account Number", value: item.accountNumber },
+              ],
+              timeline: [
+                { label: "Requested", date: item.createdAt, status: item.status },
+              ],
+            })
+          }
         />
       )}
+      {selectedReceipt ? (
+        <TransactionReceiptModal
+          {...selectedReceipt}
+          onClose={() => setSelectedReceipt(null)}
+        />
+      ) : null}
     </div>
   );
 }

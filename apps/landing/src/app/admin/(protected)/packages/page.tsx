@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { parseDate } from "@internationalized/date";
 import { useForm } from "react-hook-form";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,7 +16,9 @@ import {
   TextInput,
 } from "@/components/ui/form-input";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
-import { Pencil, Trash2 } from "lucide-react";
+import { CheckCircle2, Clock3, Package, Pencil, Trash2, Users } from "lucide-react";
+import { DashboardMetricCard } from "@/components/admin/dashboard-card";
+import { ActionMenu } from "@/components/ui/action-menu";
 
 interface PackagesResponse {
   items: Array<{
@@ -57,6 +58,16 @@ const currency = new Intl.NumberFormat("en-NG", {
 
 export default function PackagesPage() {
   const packages = useApi<PackagesResponse>("/packages");
+  const packageRows = packages.data?.items ?? [];
+  const activePackages = packageRows.filter((item) => item.isActive);
+  const pendingRequests = packageRows.reduce(
+    (sum, item) => sum + Number(item.pendingRequestCount ?? 0),
+    0,
+  );
+  const subscribers = packageRows.reduce(
+    (sum, item) => sum + Number(item.subscriberCount ?? 0),
+    0,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [editingPackage, setEditingPackage] = useState<
     PackagesResponse["items"][number] | null
@@ -125,7 +136,6 @@ export default function PackagesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Packages"
-        subtitle="Structured savings or repayment packages with penalty configuration and subscription visibility."
         actions={
           <AdminModal
             description="Create a package and choose from the default penalty configuration options."
@@ -211,6 +221,40 @@ export default function PackagesPage() {
           </AdminModal>
         }
       />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard
+          description="Package plans created for members."
+          href="/admin/packages"
+          icon={<Package className="h-5 w-5" />}
+          title="Total Packages"
+          tone="green"
+          value={packageRows.length}
+        />
+        <DashboardMetricCard
+          description="Packages currently available to members."
+          href="/admin/packages"
+          icon={<CheckCircle2 className="h-5 w-5" />}
+          title="Active Packages"
+          value={activePackages.length}
+        />
+        <DashboardMetricCard
+          description="Package requests waiting for admin action."
+          href="/admin/packages"
+          icon={<Clock3 className="h-5 w-5" />}
+          title="Pending Requests"
+          tone={pendingRequests ? "amber" : "neutral"}
+          value={pendingRequests}
+        />
+        <DashboardMetricCard
+          description="Total subscribers across package plans."
+          href="/admin/packages"
+          icon={<Users className="h-5 w-5" />}
+          title="Subscribers"
+          value={subscribers}
+        />
+      </div>
+
       <DataTable
         columns={[
           {
@@ -261,21 +305,20 @@ export default function PackagesPage() {
           {
             key: "detail",
             header: "Actions",
+            align: "right",
+            isAction: true,
             render: (item) => (
-              <div className="flex items-center gap-3">
-                <Link
-                  className="font-semibold text-[var(--primary-700)]"
-                  href={`/admin/packages/${item.id}`}
-                >
-                  Open detail
-                </Link>
-                <AdminModal
-                  description="Update package configuration."
-                  title="Edit Package"
-                  trigger={
-                    <button
-                      className="text-text-700"
-                      onClick={() => {
+              <ActionMenu
+                items={[
+                  {
+                    label: "Open details",
+                    onSelect: () => {
+                      window.location.href = `/admin/packages/${item.id}`;
+                    },
+                  },
+                  {
+                    label: "Edit",
+                    onSelect: () => {
                         setEditingPackage(item);
                         reset({
                           name: item.name,
@@ -285,75 +328,15 @@ export default function PackagesPage() {
                           penaltyValue: 0,
                           penaltyFrequency: "WEEKLY",
                         });
-                      }}
-                      type="button"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                  }
-                >
-                  {({ close }) => (
-                    <>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <TextInput
-                          className="rounded-2xl md:col-span-2"
-                          control={control}
-                          label="Package Name"
-                          name="name"
-                          placeholder="Package name"
-                        />
-                        <NumberInput
-                          className="rounded-2xl"
-                          control={control}
-                          label="Total Amount"
-                          name="totalAmount"
-                          placeholder="Total amount"
-                          min={0}
-                        />
-                        <DateRangePickerInput
-                          className="rounded-2xl"
-                          control={control}
-                          label="Date Range"
-                          name="schedule"
-                          description="Repayment frequency is fixed to weekly."
-                        />
-                        <SelectInput
-                          className="rounded-2xl"
-                          control={control}
-                          label="Penalty Type"
-                          name="penaltyType"
-                          options={penaltyOptions}
-                        />
-                        <NumberInput
-                          className="rounded-2xl"
-                          control={control}
-                          label="Penalty Value"
-                          name="penaltyValue"
-                          placeholder="Penalty value"
-                          min={0}
-                        />
-                      </div>
-                      <div className="mt-6 flex justify-end">
-                        <button
-                          className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
-                          disabled={submitting}
-                          onClick={async () => {
-                            try {
-                              await createPackage();
-                              close();
-                            } catch {}
-                          }}
-                          type="button"
-                        >
-                          {submitting ? "Saving..." : "Save package"}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </AdminModal>
-                <button
-                  className="text-[#b42318]"
-                  onClick={async () => {
+                    },
+                  },
+                  {
+                    label: "Delete",
+                    tone: "danger",
+                    confirmTitle: "Delete package?",
+                    confirmMessage:
+                      "Are you sure you want to delete this package?",
+                    onSelect: async () => {
                     try {
                       await api.delete(`/packages/${item.id}`);
                       showSuccessToast("Package deleted successfully.");
@@ -361,24 +344,108 @@ export default function PackagesPage() {
                     } catch (error: any) {
                       showErrorToast(
                         error?.response?.data?.message ||
-                          "Unable to delete package.",
+                        "Unable to delete package.",
                       );
                     }
-                  }}
-                  type="button"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+                    },
+                  },
+                ]}
+              />
             ),
           },
         ]}
-        data={packages.data?.items ?? []}
+        data={packageRows}
+        statusAccessor={(item) => (item.isActive ? "ACTIVE" : "INACTIVE")}
         emptyDescription={
           packages.error || "No packages have been configured yet."
         }
         loading={packages.loading}
       />
+      {editingPackage ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(0,0,0,0.45)] p-4 backdrop-blur-sm">
+          <button
+            aria-label="Close edit package"
+            className="absolute inset-0"
+            onClick={() => setEditingPackage(null)}
+            type="button"
+          />
+          <div className="relative z-[101] max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[1.75rem] border border-primary-900/8 bg-white shadow-[0_24px_60px_var(--primary-900)/12] dark:border-[var(--background-700)] dark:bg-[var(--background-900)]">
+            <div className="flex items-start justify-between gap-4 border-b border-primary-900/8 px-5 py-4 sm:px-6 dark:border-[var(--background-700)]">
+              <div>
+                <h2 className="text-2xl font-semibold text-text-900 dark:text-text-50">
+                  Edit Package
+                </h2>
+                <p className="mt-2 text-sm text-text-400">
+                  Update package configuration.
+                </p>
+              </div>
+              <button
+                className="rounded-full border border-primary-900/12 px-3 py-1 text-sm text-text-900 dark:border-[var(--background-700)] dark:text-text-100"
+                onClick={() => setEditingPackage(null)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <div className="px-5 py-4 sm:px-6 sm:py-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <TextInput
+                  className="rounded-2xl md:col-span-2"
+                  control={control}
+                  label="Package Name"
+                  name="name"
+                  placeholder="Package name"
+                />
+                <NumberInput
+                  className="rounded-2xl"
+                  control={control}
+                  label="Total Amount"
+                  name="totalAmount"
+                  placeholder="Total amount"
+                  min={0}
+                />
+                <DateRangePickerInput
+                  className="rounded-2xl"
+                  control={control}
+                  label="Date Range"
+                  name="schedule"
+                  description="Repayment frequency is fixed to weekly."
+                />
+                <SelectInput
+                  className="rounded-2xl"
+                  control={control}
+                  label="Penalty Type"
+                  name="penaltyType"
+                  options={penaltyOptions}
+                />
+                <NumberInput
+                  className="rounded-2xl"
+                  control={control}
+                  label="Penalty Value"
+                  name="penaltyValue"
+                  placeholder="Penalty value"
+                  min={0}
+                />
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                  disabled={submitting}
+                  onClick={async () => {
+                    try {
+                      await createPackage();
+                      setEditingPackage(null);
+                    } catch {}
+                  }}
+                  type="button"
+                >
+                  {submitting ? "Saving..." : "Save package"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,22 +1,18 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
-import {
-  Tab,
-  TabIndicator,
-  TabList,
-  TabListContainer,
-  TabPanel,
-  TabsRoot,
-} from "@heroui/react";
+import { useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { AdminTabs } from "@/components/ui/admin-tabs";
+import { DashboardMetricCard } from "@/components/admin/dashboard-card";
+import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
+import { CheckCircle2, Clock3, Receipt, XCircle } from "lucide-react";
 
 interface PaymentsResponse {
   items: Array<{
@@ -25,6 +21,9 @@ interface PaymentsResponse {
     status: string;
     receiptUrl: string;
     createdAt: string;
+    verifiedAt?: string | null;
+    rejectionReason?: string | null;
+    netCreditAmount?: number | null;
     member: { fullName: string; membershipNumber?: string };
   }>;
 }
@@ -56,16 +55,27 @@ const currency = new Intl.NumberFormat("en-NG", {
 export default function PaymentsPage() {
   const payments = useApi<PaymentsResponse>("/payments");
   const transactions = useApi<MemberTransactionsResponse>("/transactions");
+  const [tab, setTab] = useState<"requests" | "transactions">("requests");
   const [selectedProof, setSelectedProof] =
     useState<PaymentsResponse["items"][number] | null>(null);
+  const [selectedReceipt, setSelectedReceipt] = useState<{
+    title: string;
+    amount: number;
+    date?: string | null;
+    status: string;
+    reference?: string | null;
+    fields: Array<{ label: string; value?: string | number | null }>;
+    timeline?: Array<{ label: string; date?: string | null; status?: string }>;
+  } | null>(null);
 
-  const paymentTransactions = useMemo(
-    () =>
-      (transactions.data?.items ?? []).filter((item) => {
-        const value = `${item.type} ${item.description || ""}`.toUpperCase();
-        return value.includes("FUND") || value.includes("PAYMENT");
-      }),
-    [transactions.data],
+  const paymentRows = payments.data?.items ?? [];
+  const pendingPayments = paymentRows.filter((item) => item.status === "PENDING");
+  const processedPayments = paymentRows.filter((item) => item.status !== "PENDING");
+  const approvedPayments = paymentRows.filter((item) => item.status === "APPROVED");
+  const rejectedPayments = paymentRows.filter((item) => item.status === "REJECTED");
+  const pendingAmount = pendingPayments.reduce(
+    (sum, item) => sum + Number(item.amount ?? 0),
+    0,
   );
 
   async function approve(id: string) {
@@ -102,32 +112,52 @@ export default function PaymentsPage() {
         title="Payments"
         subtitle="Review uploaded transfer receipts and verification status before wallet credit is applied."
       />
-      <TabsRoot defaultSelectedKey="requests">
-        <TabListContainer className="mb-4 flex flex-col gap-3 rounded-2xl border border-primary-900/10 bg-white p-2 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <TabList
-            aria-label="Payment sections"
-            className="relative flex w-full gap-1 rounded-xl bg-background-100 p-1 sm:w-auto"
-          >
-            <Tab
-              className="relative z-10 flex-1 rounded-lg px-4 py-2 text-sm font-semibold text-text-500 selected:text-text-900 sm:flex-none"
-              id="requests"
-            >
-              Requests
-            </Tab>
-            <Tab
-              className="relative z-10 flex-1 rounded-lg px-4 py-2 text-sm font-semibold text-text-500 selected:text-text-900 sm:flex-none"
-              id="transactions"
-            >
-              Transactions
-            </Tab>
-            <TabIndicator className="rounded-lg bg-white shadow-sm" />
-          </TabList>
-          <p className="px-2 text-xs font-medium text-text-400">
-            {(payments.data?.items ?? []).filter((item) => item.status === "PENDING").length} pending request(s)
-          </p>
-        </TabListContainer>
 
-        <TabPanel id="requests">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard
+          description="Payment proofs waiting for review."
+          href="/admin/payments"
+          icon={<Clock3 className="h-5 w-5" />}
+          title="Pending Requests"
+          tone={pendingPayments.length ? "amber" : "neutral"}
+          value={pendingPayments.length}
+        />
+        <DashboardMetricCard
+          description="Total value waiting for approval."
+          href="/admin/payments"
+          icon={<Receipt className="h-5 w-5" />}
+          title="Pending Amount"
+          tone="green"
+          value={currency.format(pendingAmount)}
+        />
+        <DashboardMetricCard
+          description="Receipts accepted and credited."
+          href="/admin/payments"
+          icon={<CheckCircle2 className="h-5 w-5" />}
+          title="Approved Payments"
+          value={approvedPayments.length}
+        />
+        <DashboardMetricCard
+          description="Rejected payment proofs."
+          href="/admin/payments"
+          icon={<XCircle className="h-5 w-5" />}
+          title="Rejected Payments"
+          tone={rejectedPayments.length ? "red" : "neutral"}
+          value={rejectedPayments.length}
+        />
+      </div>
+
+      <AdminTabs
+        items={[
+          { id: "requests", label: "Requests" },
+          { id: "transactions", label: "Transactions" },
+        ]}
+        meta={`${pendingPayments.length} pending request(s)`}
+        onChange={setTab}
+        value={tab}
+      />
+
+      {tab === "requests" ? (
           <DataTable
             columns={[
               {
@@ -211,7 +241,7 @@ export default function PaymentsPage() {
                 ),
               },
             ]}
-            data={payments.data?.items ?? []}
+            data={pendingPayments}
             emptyDescription={
               payments.error || "No payment verifications are waiting."
             }
@@ -222,9 +252,7 @@ export default function PaymentsPage() {
             }
             searchPlaceholder="Search payment requests..."
           />
-        </TabPanel>
-
-        <TabPanel id="transactions">
+      ) : (
           <DataTable
             columns={[
               {
@@ -233,20 +261,20 @@ export default function PaymentsPage() {
                 render: (item) => (
                   <div>
                     <p className="font-semibold text-text-900">
-                      {item.wallet?.member?.fullName || "Member"}
+                      {item.member.fullName}
                     </p>
                     <p className="text-xs text-text-400">
-                      {item.wallet?.member?.membershipNumber || "-"}
+                      {item.member.membershipNumber || "-"}
                     </p>
                   </div>
                 ),
-                sortValue: (item) => item.wallet?.member?.fullName || "",
+                sortValue: (item) => item.member.fullName,
               },
               {
                 key: "reference",
                 header: "Reference",
-                render: (item) => item.reference || item.description || "-",
-                sortValue: (item) => item.reference || item.description || "",
+                render: (item) => `PAY-${item.id.slice(0, 8)}`,
+                sortValue: (item) => item.id,
               },
               {
                 key: "amount",
@@ -279,19 +307,59 @@ export default function PaymentsPage() {
                 sortValue: (item) => new Date(item.createdAt),
               },
             ]}
-            data={paymentTransactions}
+            data={processedPayments}
             emptyDescription={
               transactions.error || "No payment transactions found."
             }
             getRowKey={(item) => item.id}
-            loading={transactions.loading}
+            loading={payments.loading || transactions.loading}
+            onRowClick={(item) =>
+              setSelectedReceipt({
+                title: "Payment Transaction",
+                amount: item.amount,
+                date: item.createdAt,
+                status: item.status,
+                reference: `PAY-${item.id.slice(0, 8)}`,
+                fields: [
+                  { label: "Member", value: item.member.fullName },
+                  {
+                    label: "Membership No.",
+                    value: item.member.membershipNumber || "-",
+                  },
+                  { label: "Source", value: "Payment proof" },
+                  {
+                    label: "Receipt",
+                    value: item.receiptUrl || "Not uploaded",
+                  },
+                  {
+                    label: "Net credit",
+                    value:
+                      typeof item.netCreditAmount === "number"
+                        ? currency.format(item.netCreditAmount)
+                        : "-",
+                  },
+                  {
+                    label: "Reason",
+                    value: item.rejectionReason || "-",
+                  },
+                ],
+                timeline: [
+                  { label: "Request submitted", date: item.createdAt, status: "PENDING" },
+                  {
+                    label:
+                      item.status === "REJECTED" ? "Payment rejected" : "Payment approved",
+                    date: item.verifiedAt || item.createdAt,
+                    status: item.status,
+                  },
+                ],
+              })
+            }
             searchableText={(item) =>
-              `${item.wallet?.member?.fullName || ""} ${item.wallet?.member?.membershipNumber || ""} ${item.reference || ""} ${item.description || ""} ${item.amount} ${item.status}`
+              `${item.member.fullName} ${item.member.membershipNumber || ""} ${item.amount} ${item.status}`
             }
             searchPlaceholder="Search payment transactions..."
           />
-        </TabPanel>
-      </TabsRoot>
+      )}
 
       {selectedProof?.receiptUrl ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
@@ -326,6 +394,12 @@ export default function PaymentsPage() {
             </div>
           </div>
         </div>
+      ) : null}
+      {selectedReceipt ? (
+        <TransactionReceiptModal
+          {...selectedReceipt}
+          onClose={() => setSelectedReceipt(null)}
+        />
       ) : null}
     </div>
   );

@@ -244,6 +244,22 @@ body {
   color: var(--text-200);
 }
 
+.dark .bg-white {
+  background-color: var(--background-900);
+}
+
+.dark .text-text-900 {
+  color: var(--text-50);
+}
+
+.dark .text-text-800 {
+  color: var(--text-100);
+}
+
+.dark .text-text-700 {
+  color: var(--text-200);
+}
+
 a {
   text-decoration: none;
 }

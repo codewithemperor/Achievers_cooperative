@@ -12,6 +12,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { getMemberSession, isMemberAuthenticated } from "@/lib/member-session";
+import { goBackOrDashboard } from "@/lib/navigation";
 
 interface TabItem {
   label: string;
@@ -79,22 +80,22 @@ export function MemberShell({ children }: PropsWithChildren) {
 
   return (
     <div className="min-h-screen bg-background-50">
-      {/* {!isTabScreen ? (
-        <header className="sticky top-0 z-40 border-b border-background-200 dark:border-white/8 bg-background-50/92 backdrop-blur-xl px-5 py-4">
+      {!isTabScreen ? (
+        <header className="sticky top-0 z-40 bg-background-50/92 px-5 py-3 backdrop-blur-xl">
           <div className="mx-auto flex w-full max-w-md items-center">
             <button
               type="button"
-              onClick={() => router.back()}
-              className="inline-flex items-center gap-2 rounded-full text-sm font-medium text-text-700"
+              onClick={() => goBackOrDashboard(router)}
+              className="inline-flex items-center gap-2 rounded-full text-sm font-medium text-text-700 transition-colors hover:text-primary-600 dark:text-text-200 dark:hover:text-primary-400"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-full border border-background-200 dark:border-white/8 bg-background-100 dark:bg-white/8">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full border border-background-200 bg-background-100 dark:border-white/8 dark:bg-white/8">
                 <ArrowLeft className="h-4 w-4" />
               </span>
               <span>Back</span>
             </button>
           </div>
         </header>
-      ) : null} */}
+      ) : null}
 
       <main
         className={`mx-auto w-full max-w-md px-5 pt-6 ${

@@ -1,10 +1,19 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import {
+  CreditCard,
+  Landmark,
+  Pencil,
+  TrendingUp,
+  WalletCards,
+} from "lucide-react";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { DataTable } from "@/components/ui/data-table";
+import { DashboardMetricCard } from "@/components/admin/dashboard-card";
 import { useApi } from "@/hooks/useApi";
 import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { AdminModal } from "@/components/ui/admin-modal";
@@ -40,6 +49,7 @@ interface MemberDetail {
       amount: number;
       status: string;
       reference?: string | null;
+      createdAt?: string;
     }>;
   } | null;
   payments: Array<{
@@ -48,12 +58,19 @@ interface MemberDetail {
     status: string;
     netCreditAmount?: number | null;
   }>;
+  savingsAccounts?: Array<{
+    id: string;
+    balance: number;
+    contributionFrequency?: string;
+  }>;
   loanApplications: Array<{
     id: string;
     amount: number;
     remainingBalance: number;
     purpose: string;
     status: string;
+    submittedAt?: string | null;
+    createdAt?: string | null;
     disbursedAt?: string | null;
     guarantorOne?: { fullName: string } | null;
     guarantorTwo?: { fullName: string } | null;
@@ -62,7 +79,19 @@ interface MemberDetail {
     id: string;
     principal: number;
     status: string;
+    createdAt?: string | null;
+    maturityDate?: string | null;
     product: { id: string; name: string };
+  }>;
+  packageSubscriptions?: Array<{
+    id: string;
+    amountPaid: number;
+    amountRemaining: number;
+    penaltyAccrued: number;
+    status: string;
+    createdAt?: string | null;
+    completedAt?: string | null;
+    package: { id: string; name: string; totalAmount: number };
   }>;
 }
 
@@ -74,18 +103,81 @@ const currency = new Intl.NumberFormat("en-NG", {
 
 const statusOptions = ["ACTIVE", "INACTIVE", "SUSPENDED", "WITHDRAWN"];
 
+function formatShortDate(value?: string | null) {
+  if (!value) return "No date recorded";
+  return new Date(value).toLocaleDateString("en-NG", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function DetailCard({
   title,
   children,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <section className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-5 sm:p-6">
-      <h2 className="text-xl font-semibold text-text-900">{title}</h2>
+    <section className="rounded-2xl border border-primary-900/10 bg-white p-5 shadow-sm dark:border-[var(--background-800)] dark:bg-[var(--background-900)] sm:p-6">
+      <h2 className="text-lg font-semibold text-text-900 dark:text-text-50">
+        {title}
+      </h2>
       <div className="mt-4">{children}</div>
     </section>
+  );
+}
+
+function FinancialRecordCard({
+  icon,
+  title,
+  subtitle,
+  amount,
+  status,
+  tone = "neutral",
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle: string;
+  amount?: string;
+  status?: string;
+  tone?: "green" | "amber" | "blue" | "red" | "neutral";
+}) {
+  const tones = {
+    green: "bg-[var(--primary-50)] text-[var(--primary-700)]",
+    amber: "bg-[#fff7e6] text-[#9a5b00]",
+    blue: "bg-[#eef4ff] text-[#175cd3]",
+    red: "bg-[#fff1f0] text-[#b42318]",
+    neutral: "bg-background-100 text-text-700",
+  };
+
+  return (
+    <div className="flex min-w-0 items-start gap-3 rounded-2xl border border-primary-900/10 bg-white p-4 dark:border-[var(--background-800)] dark:bg-[var(--background-900)]">
+      <div
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${tones[tone]}`}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-text-900 dark:text-text-50">
+              {title}
+            </p>
+            <p className="mt-1 text-sm text-text-400">{subtitle}</p>
+          </div>
+          {status ? (
+            <StatusBadge status={status} variant={statusVariant(status) as any} />
+          ) : null}
+        </div>
+        {amount ? (
+          <p className="mt-3 text-sm font-medium text-text-700 dark:text-text-200">
+            {amount}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -103,6 +195,10 @@ export default function MemberDetailPage() {
   const [resetting, setResetting] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("ACTIVE");
+  const savingsTotal = (member.data?.savingsAccounts ?? []).reduce(
+    (sum, account) => sum + Number(account.balance ?? 0),
+    0,
+  );
 
   async function resetPassword() {
     try {
@@ -207,76 +303,85 @@ export default function MemberDetailPage() {
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-        <div className="space-y-6">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard
+          description="Spendable wallet balance currently held by this member."
+          href={`/admin/members/${params.id}`}
+          icon={<WalletCards className="h-5 w-5" />}
+          title="Wallet Balance"
+          tone="green"
+          value={currency.format(member.data?.wallet?.availableBalance ?? 0)}
+        />
+        <DashboardMetricCard
+          description="Pending wallet deductions still waiting for settlement."
+          href={`/admin/members/${params.id}`}
+          icon={<CreditCard className="h-5 w-5" />}
+          title="Pending Deductions"
+          tone={(member.data?.wallet?.pendingBalance ?? 0) > 0 ? "amber" : "neutral"}
+          value={currency.format(member.data?.wallet?.pendingBalance ?? 0)}
+        />
+        <DashboardMetricCard
+          description="Loan applications attached to this member profile."
+          href={`/admin/members/${params.id}`}
+          icon={<Landmark className="h-5 w-5" />}
+          title="Loans"
+          value={member.data?.loanApplications.length ?? 0}
+        />
+        <DashboardMetricCard
+          description="Investment subscriptions attached to this member."
+          href={`/admin/members/${params.id}`}
+          icon={<TrendingUp className="h-5 w-5" />}
+          title="Investments"
+          value={member.data?.investments.length ?? 0}
+        />
+      </section>
+
+      <div className="space-y-6">
+        <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
           <DetailCard title="Personal Information">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="text-sm text-text-400">Membership number</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.membershipNumber || "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-text-400">Join date</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.joinedAt
+              {[
+                ["Membership number", member.data?.membershipNumber],
+                [
+                  "Join date",
+                  member.data?.joinedAt
                     ? new Date(member.data.joinedAt).toLocaleDateString("en-NG")
-                    : "-"}
-                </p>
-              </div>
-              <div className="sm:col-span-2">
-                <p className="text-sm text-text-400">Email</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.user.email || "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-text-400">Phone</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.phoneNumber || "-"}
-                </p>
-              </div>
-              <div className="sm:col-span-2">
-                <p className="text-sm text-text-400">Home address</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.homeAddress || "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-text-400">State of origin</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.stateOfOrigin || "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-text-400">Date of birth</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.dateOfBirth
+                    : "-",
+                ],
+                ["Email", member.data?.user.email],
+                ["Phone", member.data?.phoneNumber],
+                ["Home address", member.data?.homeAddress],
+                ["State of origin", member.data?.stateOfOrigin],
+                [
+                  "Date of birth",
+                  member.data?.dateOfBirth
                     ? new Date(member.data.dateOfBirth).toLocaleDateString(
                         "en-NG",
                       )
-                    : "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-text-400">Occupation</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.occupation || "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-text-400">Marital status</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.maritalStatus.replaceAll("_", " ") || "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-text-400">Referrer</p>
-                <p className="mt-1 font-semibold text-text-900">
-                  {member.data?.referrer?.fullName || "No referrer assigned"}
-                </p>
-              </div>
+                    : "-",
+                ],
+                ["Occupation", member.data?.occupation],
+                ["Savings amount", currency.format(savingsTotal)],
+                [
+                  "Marital status",
+                  member.data?.maritalStatus?.replaceAll("_", " "),
+                ],
+                ["Referrer", member.data?.referrer?.fullName || "No referrer"],
+              ].map(([label, value]) => (
+                <div
+                  className={
+                    label === "Email" || label === "Home address"
+                      ? "sm:col-span-2"
+                      : ""
+                  }
+                  key={label}
+                >
+                  <p className="text-sm text-text-400">{label}</p>
+                  <p className="mt-1 break-words font-semibold text-text-900 dark:text-text-50">
+                    {value || "-"}
+                  </p>
+                </div>
+              ))}
               <div>
                 <p className="text-sm text-text-400">Status</p>
                 <div className="mt-2">
@@ -290,154 +395,199 @@ export default function MemberDetailPage() {
           </DetailCard>
 
           <DetailCard title="Identification">
-            <div className="grid gap-4 sm:grid-cols-[1fr_220px]">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-text-400">Identification type</p>
-                  <p className="mt-1 font-semibold text-text-900">
-                    {member.data?.identificationType.replaceAll("_", " ") ||
-                      "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-text-400">Identification number</p>
-                  <p className="mt-1 font-semibold text-text-900">
-                    {member.data?.identificationNumber || "-"}
-                  </p>
-                </div>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-text-400">Identification type</p>
+                <p className="mt-1 font-semibold text-text-900 dark:text-text-50">
+                  {member.data?.identificationType.replaceAll("_", " ") || "-"}
+                </p>
               </div>
               <div>
-                {member.data?.identificationPicture ? (
-                  <AdminModal
-                    title="Identification Document"
-                    trigger={
-                      <img
-                        alt="Identification document"
-                        className="h-40 w-full cursor-zoom-in rounded-[1.5rem] border border-[var(--primary-900)/8] object-cover"
-                        src={member.data.identificationPicture}
-                      />
-                    }
-                  >
+                <p className="text-sm text-text-400">Identification number</p>
+                <p className="mt-1 font-semibold text-text-900 dark:text-text-50">
+                  {member.data?.identificationNumber || "-"}
+                </p>
+              </div>
+              {member.data?.identificationPicture ? (
+                <AdminModal
+                  title="Identification Document"
+                  trigger={
                     <img
                       alt="Identification document"
-                      className="max-h-[75vh] w-full rounded-[1.5rem] object-contain"
+                      className="h-48 w-full cursor-zoom-in rounded-2xl border border-primary-900/10 object-cover"
                       src={member.data.identificationPicture}
                     />
-                  </AdminModal>
-                ) : (
-                  <div className="flex h-40 items-center justify-center rounded-[1.5rem] border border-dashed border-[var(--primary-900)/16] text-sm text-text-400">
-                    No ID image
-                  </div>
-                )}
-              </div>
+                  }
+                >
+                  <img
+                    alt="Identification document"
+                    className="max-h-[75vh] w-full rounded-2xl object-contain"
+                    src={member.data.identificationPicture}
+                  />
+                </AdminModal>
+              ) : (
+                <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-primary-900/16 text-sm text-text-400">
+                  No ID image
+                </div>
+              )}
             </div>
           </DetailCard>
         </div>
 
-        <div className="space-y-6">
-          <DetailCard title="Account Summary">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-[1.5rem] bg-[rgba(245,240,232,0.8)] p-4">
-                <p className="text-sm text-text-400">Available balance</p>
-                <p className="mt-2 text-2xl font-semibold text-text-900">
-                  {currency.format(member.data?.wallet?.availableBalance ?? 0)}
-                </p>
-              </div>
-              <div className="rounded-[1.5rem] bg-[rgba(245,240,232,0.8)] p-4">
-                <p className="text-sm text-text-400">Pending deductions</p>
-                <p className="mt-2 text-2xl font-semibold text-text-900">
-                  {currency.format(member.data?.wallet?.pendingBalance ?? 0)}
-                </p>
-              </div>
-            </div>
-          </DetailCard>
+        <DetailCard title="Recent Transactions">
+          <DataTable
+            columns={[
+              {
+                key: "type",
+                header: "Type",
+                render: (transaction) => (
+                  <div>
+                    <p className="font-semibold text-text-900 dark:text-text-50">
+                      {transaction.type.replaceAll("_", " ")}
+                    </p>
+                    <p className="text-xs text-text-400">
+                      {transaction.reference || "No reference"}
+                    </p>
+                  </div>
+                ),
+                sortValue: (transaction) => transaction.type,
+              },
+              {
+                key: "amount",
+                header: "Amount",
+                render: (transaction) => currency.format(transaction.amount),
+                sortValue: (transaction) => transaction.amount,
+              },
+              {
+                key: "createdAt",
+                header: "Date",
+                render: (transaction) =>
+                  transaction.createdAt
+                    ? new Date(transaction.createdAt).toLocaleDateString(
+                        "en-NG",
+                      )
+                    : "-",
+                sortValue: (transaction) =>
+                  transaction.createdAt ? new Date(transaction.createdAt) : "",
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (transaction) => (
+                  <StatusBadge
+                    status={transaction.status}
+                    variant={statusVariant(transaction.status) as any}
+                  />
+                ),
+              },
+            ]}
+            data={member.data?.wallet?.transactions ?? []}
+            emptyDescription="No wallet transactions found for this member."
+            getRowKey={(transaction) => transaction.id}
+            searchableText={(transaction) =>
+              `${transaction.type} ${transaction.status} ${transaction.reference ?? ""}`
+            }
+            searchPlaceholder="Search transactions..."
+          />
+        </DetailCard>
 
-          <DetailCard title="Recent Transactions">
+        <div className="grid gap-6 lg:grid-cols-3">
+          <DetailCard title="Loans">
             <div className="space-y-3">
-              {(member.data?.wallet?.transactions ?? [])
-                .slice(0, 8)
-                .map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="rounded-[1.25rem] bg-[rgba(245,240,232,0.76)] p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-text-900">
-                          {transaction.type.replaceAll("_", " ")}
-                        </p>
-                        <p className="mt-1 text-xs text-text-400">
-                          {transaction.reference || "No reference"}
-                        </p>
-                      </div>
-                      <StatusBadge
-                        status={transaction.status}
-                        variant={statusVariant(transaction.status) as any}
-                      />
-                    </div>
-                    <p className="mt-2 text-sm text-text-400">
-                      {currency.format(transaction.amount)}
-                    </p>
-                  </div>
-                ))}
+              {(member.data?.loanApplications ?? []).length ? (
+                member.data?.loanApplications.map((loan) => (
+                  <FinancialRecordCard
+                    amount={`${currency.format(loan.amount)} requested, ${currency.format(loan.remainingBalance)} remaining`}
+                    icon={<Landmark className="h-5 w-5" />}
+                    key={loan.id}
+                    status={
+                      loan.status === "COMPLETED" || loan.remainingBalance <= 0
+                        ? "COMPLETED"
+                        : loan.disbursedAt
+                          ? loan.status === "DISBURSED"
+                            ? "DISBURSED"
+                            : loan.status
+                          : loan.status
+                    }
+                    subtitle={`Submitted ${formatShortDate(loan.submittedAt ?? loan.createdAt ?? loan.disbursedAt)}`}
+                    title={loan.purpose || "Loan application"}
+                    tone={
+                      loan.status === "REJECTED"
+                        ? "red"
+                        : loan.status === "PENDING"
+                          ? "amber"
+                          : "green"
+                    }
+                  />
+                ))
+              ) : (
+                <p className="rounded-2xl border border-dashed border-primary-900/12 p-5 text-sm text-text-400">
+                  No loans found for this member.
+                </p>
+              )}
             </div>
           </DetailCard>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <DetailCard title="Loans">
-              <div className="space-y-3">
-                {(member.data?.loanApplications ?? []).map((loan) => (
-                  <div
-                    key={loan.id}
-                    className="rounded-[1.25rem] bg-[rgba(245,240,232,0.76)] p-4"
-                  >
-                    <p className="font-semibold text-text-900">
-                      {currency.format(loan.amount)}
-                    </p>
-                    <p className="mt-1 text-sm">{loan.purpose}</p>
-                    <p className="mt-1 text-xs text-text-400">
-                      Remaining: {currency.format(loan.remainingBalance)}
-                    </p>
-                    <p className="mt-1 text-xs text-text-400">
-                      Guarantors: {loan.guarantorOne?.fullName || "None"} /{" "}
-                      {loan.guarantorTwo?.fullName || "None"}
-                    </p>
-                    <div className="mt-2">
-                      <StatusBadge
-                        status={loan.disbursedAt ? "DISBURSED" : loan.status}
-                        variant={
-                          statusVariant(
-                            loan.disbursedAt ? "APPROVED" : loan.status,
-                          ) as any
-                        }
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Investments">
-              <div className="space-y-3">
-                {(member.data?.investments ?? []).map((investment) => (
-                  <div
+          <DetailCard title="Investments">
+            <div className="space-y-3">
+              {(member.data?.investments ?? []).length ? (
+                member.data?.investments.map((investment) => (
+                  <FinancialRecordCard
+                    amount={currency.format(investment.principal)}
+                    icon={<TrendingUp className="h-5 w-5" />}
                     key={investment.id}
-                    className="rounded-[1.25rem] bg-[rgba(245,240,232,0.76)] p-4"
-                  >
-                    <p className="font-semibold text-text-900">
-                      {investment.product.name}
-                    </p>
-                    <p className="mt-1 text-sm">
-                      {currency.format(investment.principal)}
-                    </p>
-                    <div className="mt-2">
-                      <StatusBadge status={investment.status} variant="info" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </DetailCard>
-          </div>
+                    status={investment.status}
+                    subtitle={`Created ${formatShortDate(investment.createdAt ?? investment.maturityDate)}`}
+                    title={investment.product.name}
+                    tone={
+                      investment.status === "REJECTED"
+                        ? "red"
+                        : investment.status === "PENDING"
+                          ? "amber"
+                          : "blue"
+                    }
+                  />
+                ))
+              ) : (
+                <p className="rounded-2xl border border-dashed border-primary-900/12 p-5 text-sm text-text-400">
+                  No investments found for this member.
+                </p>
+              )}
+            </div>
+          </DetailCard>
+
+          <DetailCard title="Packages">
+            <div className="space-y-3">
+              {(member.data?.packageSubscriptions ?? []).length ? (
+                member.data?.packageSubscriptions?.map((subscription) => (
+                  <FinancialRecordCard
+                    amount={`${currency.format(subscription.amountPaid)} paid, ${currency.format(subscription.amountRemaining)} remaining`}
+                    icon={<CreditCard className="h-5 w-5" />}
+                    key={subscription.id}
+                    status={
+                      subscription.status === "COMPLETED" ||
+                      subscription.amountRemaining <= 0
+                        ? "COMPLETED"
+                        : subscription.status
+                    }
+                    subtitle={`Created ${formatShortDate(subscription.createdAt ?? subscription.completedAt)}`}
+                    title={subscription.package.name}
+                    tone={
+                      subscription.status === "REJECTED"
+                        ? "red"
+                        : subscription.status === "PENDING"
+                          ? "amber"
+                          : "green"
+                    }
+                  />
+                ))
+              ) : (
+                <p className="rounded-2xl border border-dashed border-primary-900/12 p-5 text-sm text-text-400">
+                  No packages found for this member.
+                </p>
+              )}
+            </div>
+          </DetailCard>
         </div>
       </div>
     </div>

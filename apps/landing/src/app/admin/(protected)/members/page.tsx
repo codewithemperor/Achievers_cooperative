@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { Autocomplete, ListBox } from "@heroui/react";
@@ -12,6 +12,8 @@ import { SelectInput, TextInput } from "@/components/ui/form-input";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
+import { CheckCircle2, Clock3, Users, Wallet } from "lucide-react";
+import { DashboardMetricCard } from "@/components/admin/dashboard-card";
 
 interface MembersResponse {
   items: Array<{
@@ -65,14 +67,6 @@ const currency = new Intl.NumberFormat("en-NG", {
   maximumFractionDigits: 0,
 });
 
-const statusOptions = [
-  { id: "ALL", label: "All" },
-  { id: "ACTIVE", label: "Active" },
-  { id: "INACTIVE", label: "Inactive" },
-  { id: "SUSPENDED", label: "Suspended" },
-  { id: "WITHDRAWN", label: "Withdrawn" },
-];
-
 const maritalStatusOptions = [
   { id: "SINGLE", label: "Single" },
   { id: "MARRIED", label: "Married" },
@@ -94,15 +88,16 @@ function statusVariant(status: string) {
 }
 
 export default function MembersPage() {
-  const [statusFilter, setStatusFilter] = useState("ALL");
   const [submitting, setSubmitting] = useState(false);
-  const membersUrl = useMemo(
-    () =>
-      statusFilter === "ALL" ? "/members" : `/members?status=${statusFilter}`,
-    [statusFilter],
-  );
-  const members = useApi<MembersResponse>(membersUrl);
+  const members = useApi<MembersResponse>("/members");
   const memberSearch = useApi<MemberSearchResponse>("/members/search");
+  const memberRows = members.data?.items ?? [];
+  const activeMembers = memberRows.filter((item) => item.status === "ACTIVE");
+  const pendingMembers = memberRows.filter((item) => item.status === "PENDING");
+  const totalWalletBalance = memberRows.reduce(
+    (sum, item) => sum + Number(item.wallet?.availableBalance ?? 0),
+    0,
+  );
   const { control, handleSubmit, reset, setValue, watch } =
     useForm<MemberFormValues>({
       defaultValues: {
@@ -165,7 +160,6 @@ export default function MembersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Members"
-        subtitle="Manage registration, status, identity details, and direct access to each member record."
         actions={
           <AdminModal
             description="Create a member account. Their initial password will be set to their 11-digit phone number."
@@ -352,21 +346,37 @@ export default function MembersPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        {statusOptions.map((option) => (
-          <button
-            key={option.id}
-            className={
-              statusFilter === option.id
-                ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
-                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
-            }
-            onClick={() => setStatusFilter(String(option.id))}
-            type="button"
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard
+          description="All registered cooperative members."
+          href="/admin/members"
+          icon={<Users className="h-5 w-5" />}
+          title="Total Members"
+          tone="green"
+          value={memberRows.length}
+        />
+        <DashboardMetricCard
+          description="Members currently active in the cooperative."
+          href="/admin/members"
+          icon={<CheckCircle2 className="h-5 w-5" />}
+          title="Active Members"
+          value={activeMembers.length}
+        />
+        <DashboardMetricCard
+          description="Member records waiting for attention."
+          href="/admin/members"
+          icon={<Clock3 className="h-5 w-5" />}
+          title="Pending Members"
+          tone={pendingMembers.length ? "amber" : "neutral"}
+          value={pendingMembers.length}
+        />
+        <DashboardMetricCard
+          description="Total balance held in member wallets."
+          href="/admin/members"
+          icon={<Wallet className="h-5 w-5" />}
+          title="Wallet Holdings"
+          value={currency.format(totalWalletBalance)}
+        />
       </div>
 
       <DataTable
@@ -432,7 +442,7 @@ export default function MembersPage() {
             ),
           },
         ]}
-        data={members.data?.items ?? []}
+        data={memberRows}
         emptyDescription={members.error || "No members found yet."}
         loading={members.loading}
       />

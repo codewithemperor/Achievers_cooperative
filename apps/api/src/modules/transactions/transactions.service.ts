@@ -2,6 +2,13 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
 import { UpdateTransactionDto, QueryTransactionsDto } from './dto/index';
+import { normalizePagination } from '../../common/pagination';
+
+function isCreditTransaction(type: string) {
+  return ['FUNDING', 'CREDIT', 'REFUND', 'RETURN', 'LOAN_DISBURSEMENT', 'WALLET_FUNDING'].some((key) =>
+    type.toUpperCase().includes(key),
+  );
+}
 
 @Injectable()
 export class TransactionsService {
@@ -11,14 +18,14 @@ export class TransactionsService {
   ) {}
 
   async findAll(query: QueryTransactionsDto) {
-    const { status, type, page = 1, limit = 20 } = query;
-    const skip = (page - 1) * limit;
+    const { status, type } = query;
+    const { page, limit, skip } = normalizePagination(query);
 
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (type) where.type = type;
 
-    const [items, total] = await Promise.all([
+    const [items, total, pending, summaryRows] = await Promise.all([
       this.prisma.transaction.findMany({
         where,
         skip,
@@ -37,7 +44,22 @@ export class TransactionsService {
         },
       }),
       this.prisma.transaction.count({ where }),
+      this.prisma.transaction.count({ where: { ...where, status: 'PENDING' } }),
+      this.prisma.transaction.groupBy({
+        by: ['type', 'status'],
+        where,
+        _count: { _all: true },
+        _sum: { amount: true },
+      }),
     ]);
+
+    const approvedRows = summaryRows.filter((item) => item.status === 'APPROVED');
+    const approvedCredits = approvedRows
+      .filter((item) => isCreditTransaction(item.type))
+      .reduce((sum, item) => sum + Number(item._sum.amount ?? 0), 0);
+    const approvedDebits = approvedRows
+      .filter((item) => !isCreditTransaction(item.type))
+      .reduce((sum, item) => sum + Number(item._sum.amount ?? 0), 0);
 
     return {
       items: items.map((t) => ({
@@ -47,6 +69,12 @@ export class TransactionsService {
       total,
       page,
       limit,
+      summary: {
+        total,
+        pending,
+        approvedCredits,
+        approvedDebits,
+      },
     };
   }
 

@@ -10,6 +10,7 @@ import { NotificationService } from '../../common/services/notification.service'
 import { AuditService } from '../../common/services/audit.service';
 import { ApplyLoanDto, QueryLoansDto, RepayLoanDto } from './dto/index';
 import type { LoanStatus, LoanTenorUnit } from '../../common/prisma-types';
+import { normalizePagination } from '../../common/pagination';
 
 type LoanLike = {
   amount: any;
@@ -114,8 +115,8 @@ export class LoansService {
 
   // ─── List loans ────────────────────────────────────────────────────
   async findAll(userId: string, query: QueryLoansDto) {
-    const { status, page = 1, limit = 20 } = query;
-    const skip = (page - 1) * limit;
+    const { status } = query;
+    const { page, limit, skip } = normalizePagination(query);
 
     let memberId: string | undefined;
     const user = await this.prisma.user.findUnique({ where: { id: userId } });

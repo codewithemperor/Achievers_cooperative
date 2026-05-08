@@ -1,10 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Lock, Pencil } from "lucide-react";
+import {
+  CalendarDays,
+  CreditCard,
+  Lock,
+  Pencil,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { Skeleton } from "@heroui/react";
 import { useForm } from "react-hook-form";
 import { AdminModal } from "@/components/ui/admin-modal";
+import { AdminTabs } from "@/components/ui/admin-tabs";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import {
@@ -13,11 +21,22 @@ import {
   TextareaInput,
 } from "@/components/ui/form-input";
 import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  DashboardMetricCard,
+  DashboardPanel,
+} from "@/components/admin/dashboard-card";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 interface MemberTransactionsResponse {
+  total?: number;
+  summary?: {
+    total: number;
+    pending: number;
+    approvedCredits: number;
+    approvedDebits: number;
+  };
   items: Array<{
     id: string;
     type: string;
@@ -82,6 +101,24 @@ function variantForStatus(status: string) {
   if (status === "APPROVED") return "success";
   if (status === "REJECTED") return "danger";
   return "warning";
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("en-NG", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function isCreditTransaction(type: string) {
+  return ["FUNDING", "CREDIT", "REFUND", "INVESTMENT_MATURITY"].some((key) =>
+    type.toUpperCase().includes(key),
+  );
 }
 
 function TransactionEditForm({
@@ -154,6 +191,9 @@ function TransactionEditForm({
 
 export default function TransactionsPage() {
   const [tab, setTab] = useState<"member" | "treasury">("treasury");
+  const [selectedTransaction, setSelectedTransaction] = useState<
+    MemberTransactionsResponse["items"][number] | null
+  >(null);
   const memberTransactions =
     useApi<MemberTransactionsResponse>("/transactions");
   const wallet = useApi<TreasurySummary>("/wallet/cooperative");
@@ -176,6 +216,39 @@ export default function TransactionsPage() {
     () => treasuryEntries.data?.items ?? [],
     [treasuryEntries.data],
   );
+  const transactionRows = useMemo(
+    () => memberTransactions.data?.items ?? [],
+    [memberTransactions.data],
+  );
+
+  const memberSummary = useMemo(() => {
+    if (memberTransactions.data?.summary) {
+      return {
+        total: memberTransactions.data.summary.total,
+        pending: memberTransactions.data.summary.pending,
+        totalCredits: memberTransactions.data.summary.approvedCredits,
+        totalDebits: memberTransactions.data.summary.approvedDebits,
+      };
+    }
+
+    const approvedRows = transactionRows.filter(
+      (item) => item.status === "APPROVED",
+    );
+    const totalCredits = approvedRows
+      .filter((item) => isCreditTransaction(item.type))
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const totalDebits = approvedRows
+      .filter((item) => !isCreditTransaction(item.type))
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+
+    return {
+      total: transactionRows.length,
+      pending: transactionRows.filter((item) => item.status === "PENDING")
+        .length,
+      totalCredits,
+      totalDebits,
+    };
+  }, [memberTransactions.data?.summary, transactionRows]);
 
   async function updateTransaction(id: string, values: EditTransactionValues) {
     try {
@@ -214,45 +287,91 @@ export default function TransactionsPage() {
       }
     });
 
-  const summaryCards = (
-    <div className="grid gap-4 md:grid-cols-4">
+  const summaryCards =
+    tab === "member" ? (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard
+          description="Member wallet transactions currently loaded."
+          href="/admin/transactions"
+          icon={<CreditCard className="h-5 w-5" />}
+          title="Member Transactions"
+          tone="green"
+          value={memberSummary.total}
+        />
+        <DashboardMetricCard
+          description="Transactions still waiting for settlement or review."
+          href="/admin/transactions"
+          icon={<CalendarDays className="h-5 w-5" />}
+          title="Pending"
+          tone={memberSummary.pending ? "amber" : "neutral"}
+          value={memberSummary.pending}
+        />
+        <DashboardMetricCard
+          description="Approved wallet credits in the current result set."
+          href="/admin/transactions"
+          icon={<TrendingUp className="h-5 w-5" />}
+          title="Approved Credits"
+          value={currency.format(memberSummary.totalCredits)}
+        />
+        <DashboardMetricCard
+          description="Approved wallet debits in the current result set."
+          href="/admin/transactions"
+          icon={<TrendingDown className="h-5 w-5" />}
+          title="Approved Debits"
+          value={currency.format(memberSummary.totalDebits)}
+        />
+      </div>
+    ) : (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {wallet.loading ? (
         Array.from({ length: 4 }).map((_, index) => (
           <Skeleton key={index} className="h-32 rounded-[2rem]" />
         ))
       ) : (
         <>
-          <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
-            <p className="text-sm text-text-400">Treasury Cash</p>
-            <p className="mt-2 text-3xl font-semibold text-text-900">
-              {currency.format(wallet.data?.balance ?? 0)}
-            </p>
-          </div>
-          <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
-            <p className="text-sm text-text-400">Member Wallet Holdings</p>
-            <p className="mt-2 text-3xl font-semibold text-text-900">
-              {currency.format(wallet.data?.memberWalletHoldings ?? 0)}
-            </p>
-          </div>
-          <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
-            <p className="text-sm text-text-400">Money At Hand</p>
-            <p className="mt-2 text-3xl font-semibold text-text-900">
-              {currency.format(wallet.data?.combinedHoldings ?? 0)}
-            </p>
-          </div>
-          <div className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
-            <p className="text-sm text-text-400">Net Treasury Flow</p>
-            <p className="mt-2 text-3xl font-semibold text-text-900">
-              {currency.format(
-                (wallet.data?.totalIncome ?? 0) -
-                  (wallet.data?.totalExpense ?? 0),
-              )}
-            </p>
-          </div>
+          <DashboardMetricCard
+            description="Current cooperative treasury wallet balance."
+            href="/admin/transactions"
+            icon={<CreditCard className="h-5 w-5" />}
+            title="Treasury Cash"
+            tone="green"
+            value={currency.format(wallet.data?.balance ?? 0)}
+          />
+          <DashboardMetricCard
+            description="Total balances held inside member wallets."
+            href="/admin/transactions"
+            icon={<CreditCard className="h-5 w-5" />}
+            title="Member Wallet Holdings"
+            value={currency.format(wallet.data?.memberWalletHoldings ?? 0)}
+          />
+          <DashboardMetricCard
+            description="Treasury cash plus member wallet holdings."
+            href="/admin/transactions"
+            icon={<TrendingUp className="h-5 w-5" />}
+            title="Money At Hand"
+            value={currency.format(wallet.data?.combinedHoldings ?? 0)}
+          />
+          <DashboardMetricCard
+            description="Total treasury income minus total treasury expense."
+            href="/admin/transactions"
+            icon={<TrendingDown className="h-5 w-5" />}
+            title="Net Treasury Flow"
+            tone={
+              (wallet.data?.totalIncome ?? 0) -
+                (wallet.data?.totalExpense ?? 0) <
+              0
+                ? "red"
+                : "neutral"
+            }
+            value={currency.format(
+              (wallet.data?.totalIncome ?? 0) -
+                (wallet.data?.totalExpense ?? 0),
+            )}
+          />
         </>
       )}
     </div>
-  );
+    );
 
   return (
     <div className="space-y-6">
@@ -334,32 +453,81 @@ export default function TransactionsPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          className={
-            tab === "member"
-              ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
-              : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
-          }
-          onClick={() => setTab("member")}
-          type="button"
-        >
-          Member Transactions
-        </button>
-        <button
-          className={
-            tab === "treasury"
-              ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
-              : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
-          }
-          onClick={() => setTab("treasury")}
-          type="button"
-        >
-          Treasury Ledger
-        </button>
-      </div>
+      <AdminTabs
+        items={[
+          { id: "treasury", label: "Treasury Ledger" },
+          { id: "member", label: "Member Transactions" },
+        ]}
+        onChange={setTab}
+        value={tab}
+      />
 
       {summaryCards}
+
+      <DashboardPanel
+        title={tab === "treasury" ? "How Treasury Stats Are Calculated" : "How Member Transaction Stats Are Calculated"}
+        subtitle={
+          tab === "treasury"
+            ? "These cards come from the cooperative wallet summary endpoint, not from the visible ledger rows alone."
+            : "These cards come from the transaction API summary for the currently requested result set."
+        }
+      >
+        {tab === "treasury" ? (
+          <div className="grid gap-3 text-sm text-text-500 dark:text-text-300 md:grid-cols-2">
+            <p>
+              <span className="font-semibold text-text-900 dark:text-text-50">
+                Treasury Cash:
+              </span>{" "}
+              the cooperative wallet balance stored on the backend.
+            </p>
+            <p>
+              <span className="font-semibold text-text-900 dark:text-text-50">
+                Member Wallet Holdings:
+              </span>{" "}
+              the sum of all member wallet available and pending balances.
+            </p>
+            <p>
+              <span className="font-semibold text-text-900 dark:text-text-50">
+                Money At Hand:
+              </span>{" "}
+              treasury cash plus member wallet holdings.
+            </p>
+            <p>
+              <span className="font-semibold text-text-900 dark:text-text-50">
+                Net Treasury Flow:
+              </span>{" "}
+              total treasury income minus total treasury expense.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 text-sm text-text-500 dark:text-text-300 md:grid-cols-2">
+            <p>
+              <span className="font-semibold text-text-900 dark:text-text-50">
+                Member Transactions:
+              </span>{" "}
+              total transaction records returned by the API summary.
+            </p>
+            <p>
+              <span className="font-semibold text-text-900 dark:text-text-50">
+                Pending:
+              </span>{" "}
+              transactions still waiting for approval, settlement, or review.
+            </p>
+            <p>
+              <span className="font-semibold text-text-900 dark:text-text-50">
+                Approved Credits:
+              </span>{" "}
+              approved funding, credit, refund, and maturity transactions.
+            </p>
+            <p>
+              <span className="font-semibold text-text-900 dark:text-text-50">
+                Approved Debits:
+              </span>{" "}
+              approved deductions, withdrawals, and other debit transactions.
+            </p>
+          </div>
+        )}
+      </DashboardPanel>
 
       {tab === "member" ? (
         <DataTable
@@ -398,6 +566,12 @@ export default function TransactionsPage() {
               render: (item) => currency.format(item.amount),
             },
             {
+              key: "createdAt",
+              header: "Date",
+              render: (item) => formatDateTime(item.createdAt),
+              sortValue: (item) => new Date(item.createdAt),
+            },
+            {
               key: "status",
               header: "Status",
               render: (item) => (
@@ -409,32 +583,36 @@ export default function TransactionsPage() {
             },
             {
               key: "edit",
-              header: "Edit",
+              header: "Actions",
+              align: "right",
+              isAction: true,
               render: (item) =>
                 item.editable ? (
-                  <AdminModal
-                    description="Only manual/admin-created transactions can be edited. Changes are written to the audit trail."
-                    title="Edit Transaction"
-                    trigger={
-                      <button
-                        className="inline-flex items-center gap-2 font-semibold text-[var(--primary-700)]"
-                        type="button"
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Edit
-                      </button>
-                    }
-                  >
-                    {({ close }) => (
-                      <TransactionEditForm
-                        item={item}
-                        onSubmit={(values) =>
-                          updateTransaction(item.id, values)
-                        }
-                        onSuccess={close}
-                      />
-                    )}
-                  </AdminModal>
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <AdminModal
+                      description="Only manual/admin-created transactions can be edited. Changes are written to the audit trail."
+                      title="Edit Transaction"
+                      trigger={
+                        <button
+                          className="inline-flex items-center gap-2 font-semibold text-[var(--primary-700)]"
+                          type="button"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </button>
+                      }
+                    >
+                      {({ close }) => (
+                        <TransactionEditForm
+                          item={item}
+                          onSubmit={(values) =>
+                            updateTransaction(item.id, values)
+                          }
+                          onSuccess={close}
+                        />
+                      )}
+                    </AdminModal>
+                  </div>
                 ) : (
                   <div
                     className="inline-flex items-center gap-2 text-sm text-text-400"
@@ -453,6 +631,11 @@ export default function TransactionsPage() {
             memberTransactions.error || "No member transactions found."
           }
           loading={memberTransactions.loading}
+          onRowClick={(item) => setSelectedTransaction(item)}
+          searchableText={(item) =>
+            `${item.wallet.member.fullName} ${item.wallet.member.membershipNumber} ${item.type} ${item.status} ${item.reference ?? ""} ${item.createdAt}`
+          }
+          searchPlaceholder="Search member transactions..."
         />
       ) : (
         <>
@@ -507,6 +690,74 @@ export default function TransactionsPage() {
           />
         </>
       )}
+      {selectedTransaction ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(0,0,0,0.45)] p-4 backdrop-blur-sm">
+          <button
+            aria-label="Close transaction details"
+            className="absolute inset-0"
+            onClick={() => setSelectedTransaction(null)}
+            type="button"
+          />
+          <div
+            aria-modal="true"
+            className="relative z-[101] max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[1.75rem] border border-primary-900/8 bg-white shadow-[0_24px_60px_var(--primary-900)/12] dark:border-[var(--background-700)] dark:bg-[var(--background-900)]"
+            role="dialog"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-primary-900/8 px-5 py-4 sm:px-6 dark:border-[var(--background-700)]">
+              <div>
+                <h2 className="text-2xl font-semibold text-text-900 dark:text-text-50">
+                  Transaction Details
+                </h2>
+                <p className="mt-2 text-sm text-text-400">
+                  {selectedTransaction.wallet.member.fullName} -{" "}
+                  {formatDateTime(selectedTransaction.createdAt)}
+                </p>
+              </div>
+              <button
+                className="rounded-full border border-primary-900/12 px-3 py-1 text-sm text-text-900 dark:border-[var(--background-700)] dark:text-text-100"
+                onClick={() => setSelectedTransaction(null)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 sm:px-6 sm:py-5">
+              {[
+                ["Member", selectedTransaction.wallet.member.fullName],
+                [
+                  "Membership No.",
+                  selectedTransaction.wallet.member.membershipNumber,
+                ],
+                ["Type", selectedTransaction.type.replaceAll("_", " ")],
+                ["Amount", currency.format(selectedTransaction.amount)],
+                ["Status", selectedTransaction.status.replaceAll("_", " ")],
+                ["Date", formatDateTime(selectedTransaction.createdAt)],
+                ["Reference", selectedTransaction.reference || "-"],
+                ["Category", selectedTransaction.category || "-"],
+                ["Description", selectedTransaction.description || "-"],
+                [
+                  "Edit State",
+                  selectedTransaction.editable
+                    ? "Editable"
+                    : selectedTransaction.lockReason || "Locked",
+                ],
+              ].map(([label, value]) => (
+                <div
+                  className="rounded-2xl bg-background-50 p-4 dark:bg-[var(--background-800)]"
+                  key={label}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-400">
+                    {label}
+                  </p>
+                  <p className="mt-2 break-words text-sm font-semibold text-text-900 dark:text-text-50">
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

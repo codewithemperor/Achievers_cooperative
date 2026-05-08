@@ -2,11 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { Tabs } from "@heroui/react";
+import { useForm, useWatch } from "react-hook-form";
+import { parseDate } from "@internationalized/date";
 import { TransactionCard } from "@/components/transaction-card";
+import { DateRangePicker } from "@/components/form-input";
+import type { DateRange } from "@/components/form-input";
+import {
+  TransactionDetailModal,
+  type TransactionDetailItem,
+} from "@/components/transaction-detail-modal";
 import { useMemberData } from "@/hooks/use-member-data";
 
 interface TransactionsPayload {
-  items: Array<{
+  items: Array<TransactionDetailItem & {
     id: string;
     source: string;
     type: string;
@@ -20,6 +28,31 @@ interface TransactionsPayload {
 
 const fallback: TransactionsPayload = { items: [] };
 
+interface TransactionFiltersForm {
+  transactionDateRange: DateRange;
+}
+
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getCurrentMonthRange() {
+  const now = new Date();
+  return {
+    from: formatDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: formatDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
+}
+
+function toIsoBoundary(value: string, position: "start" | "end") {
+  return new Date(
+    `${value}T${position === "start" ? "00:00:00.000" : "23:59:59.999"}`,
+  ).toISOString();
+}
+
 const filters = [
   { key: "ALL", label: "All" },
   { key: "WALLET", label: "Wallet" },
@@ -31,29 +64,60 @@ const filters = [
 
 export default function TransactionsPage() {
   const [filter, setFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
+  const [selectedTransaction, setSelectedTransaction] =
+    useState<TransactionDetailItem | null>(null);
+  const currentMonthRange = useMemo(() => getCurrentMonthRange(), []);
+  const { control } = useForm<TransactionFiltersForm>({
+    defaultValues: {
+      transactionDateRange: {
+        start: parseDate(currentMonthRange.from),
+        end: parseDate(currentMonthRange.to),
+      },
+    },
+  });
+  const selectedDateRange = useWatch({
+    control,
+    name: "transactionDateRange",
+  });
+  const startDate = selectedDateRange?.start?.toString() ?? currentMonthRange.from;
+  const endDate = selectedDateRange?.end?.toString() ?? currentMonthRange.to;
+  const transactionsPath = `/wallet/transactions?type=ALL&limit=100&from=${encodeURIComponent(toIsoBoundary(startDate, "start"))}&to=${encodeURIComponent(toIsoBoundary(endDate, "end"))}`;
   const { data, loading } = useMemberData<TransactionsPayload>(
-    "/wallet/transactions?limit=50",
+    transactionsPath,
     fallback,
   );
 
   const filteredItems = useMemo(() => {
-    if (filter === "ALL") return data.items;
-
+    const normalizedSearch = search.trim().toLowerCase();
     return data.items.filter((item) => {
       const type = item.type.toUpperCase();
-      if (filter === "WALLET")
-        return (
-          type.includes("WALLET") ||
-          type.includes("FUNDING") ||
-          type.includes("MEMBERSHIP_CHARGE")
-        );
-      if (filter === "SAVINGS") return type.includes("SAVING");
-      if (filter === "LOANS") return type.includes("LOAN");
-      if (filter === "PACKAGE") return type.includes("PACKAGE");
-      if (filter === "INVESTMENT") return type.includes("INVEST");
-      return true;
+      const categoryMatches =
+        filter === "ALL" ||
+        (filter === "WALLET" &&
+          (type.includes("WALLET") ||
+            type.includes("FUNDING") ||
+            type.includes("MEMBERSHIP_CHARGE"))) ||
+        (filter === "SAVINGS" && type.includes("SAVING")) ||
+        (filter === "LOANS" && type.includes("LOAN")) ||
+        (filter === "PACKAGE" && type.includes("PACKAGE")) ||
+        (filter === "INVESTMENT" && type.includes("INVEST"));
+
+      if (!categoryMatches) return false;
+      if (!normalizedSearch) return true;
+
+      return [
+        item.type,
+        item.status,
+        item.source,
+        item.reference,
+        item.description,
+        item.amount?.toString(),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedSearch));
     });
-  }, [data.items, filter]);
+  }, [data.items, filter, search]);
 
   return (
     <div className="space-y-5">
@@ -64,6 +128,27 @@ export default function TransactionsPage() {
         <p className="mt-1 text-sm text-text-400">
           Review every wallet posting, repayment, and contribution in one place.
         </p>
+      </section>
+
+      <section className="grid gap-3 rounded-[24px] border border-background-200 bg-white/92 p-4 dark:border-white/10 dark:bg-background-100 md:grid-cols-[minmax(0,1fr)_auto]">
+        <label className="grid gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-text-400">
+            Search transactions
+          </span>
+          <input
+            className="min-h-12 rounded-2xl border border-background-200 bg-background-50 px-4 text-sm text-text-900 outline-none transition-colors focus:border-primary-400 dark:border-background-700 dark:bg-background-900 dark:text-text-50"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by reference, status, type, or note"
+            type="search"
+            value={search}
+          />
+        </label>
+        <DateRangePicker
+          className="bg-background-50 dark:bg-background-900"
+          control={control}
+          label="Date range"
+          name="transactionDateRange"
+        />
       </section>
 
       <Tabs
@@ -101,7 +186,7 @@ export default function TransactionsPage() {
               ) : filteredItems.length ? (
                 filteredItems.map((txn) => (
                   <TransactionCard
-                    key={txn.id}
+                    key={`${txn.source}-${txn.id}`}
                     type={txn.type}
                     title={txn.description || undefined}
                     subtitle={
@@ -110,6 +195,7 @@ export default function TransactionsPage() {
                     amount={txn.amount}
                     status={txn.status}
                     timestamp={txn.createdAt}
+                    onClick={() => setSelectedTransaction(txn)}
                   />
                 ))
               ) : (
@@ -121,6 +207,10 @@ export default function TransactionsPage() {
           </Tabs.Panel>
         ))}
       </Tabs>
+      <TransactionDetailModal
+        transaction={selectedTransaction}
+        onClose={() => setSelectedTransaction(null)}
+      />
     </div>
   );
 }

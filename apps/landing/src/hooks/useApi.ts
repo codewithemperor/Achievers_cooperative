@@ -11,6 +11,14 @@ interface UseApiState<T> {
   refetch: () => Promise<void>;
 }
 
+function withDefaultLimit(url: string) {
+  if (/[?&](limit|take|pageSize)=/i.test(url)) {
+    return url;
+  }
+
+  return `${url}${url.includes("?") ? "&" : "?"}limit=1000`;
+}
+
 export function useApi<T>(url: string): UseApiState<T> {
   const getCached = useAdminDataStore((state) => state.getCached);
   const setCached = useAdminDataStore((state) => state.setCached);
@@ -34,7 +42,7 @@ export function useApi<T>(url: string): UseApiState<T> {
       setLoading(true);
       setError(null);
       beginRequest();
-      const response = await api.get<T>(url);
+      const response = await api.get<T>(withDefaultLimit(url));
       setData(response.data);
       setCached(url, response.data);
     } catch (err: any) {

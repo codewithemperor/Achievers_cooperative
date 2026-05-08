@@ -64,12 +64,35 @@ export class PackagesService {
     }
 
     const subscriptions = (item as any).subscriptions.map((subscription: any) => this.serializeSubscription(subscription));
+    const subscriptionIds = subscriptions.map((subscription: any) => subscription.id);
+    const transactions = subscriptionIds.length
+      ? await this.prisma.transaction.findMany({
+          where: {
+            type: { in: ['PACKAGE_SUBSCRIPTION', 'PACKAGE_PENALTY'] as any },
+            OR: subscriptionIds.map((subscriptionId: string) => ({
+              metadata: { path: ['subscriptionId'], equals: subscriptionId },
+            })),
+          },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            wallet: {
+              include: {
+                member: { select: { id: true, fullName: true, membershipNumber: true } },
+              },
+            },
+          },
+        })
+      : [];
 
     return {
       ...item,
       totalAmount: Number(item.totalAmount),
       penaltyValue: Number(item.penaltyValue),
       subscriptions,
+      transactions: transactions.map((transaction) => ({
+        ...transaction,
+        amount: Number(transaction.amount),
+      })),
       defaulters: subscriptions.filter(
         (subscription: any) =>
           subscription.penaltyAccrued > 0 ||
@@ -242,8 +265,7 @@ export class PackagesService {
             walletId: (subscription as any).member.wallet.id,
             OR: [
               { metadata: { path: ['subscriptionId'], equals: subscription.id } },
-              { type: 'PACKAGE_SUBSCRIPTION' },
-              { type: 'PACKAGE_PENALTY' },
+              { reference: `PACKAGE-SUB-${subscription.id}` },
             ],
           },
           orderBy: { createdAt: 'asc' },
@@ -265,6 +287,7 @@ export class PackagesService {
     const amountPaid = Number(subscription.amountPaid);
     const progress = totalAmount > 0 ? Math.min((amountPaid / totalAmount) * 100, 100) : 0;
     const timeline = this.buildTimeline(subscription, relatedTransactions);
+    const paymentSchedule = this.buildPaymentSchedule(subscription, totalAmount, amountPaid);
 
     return {
       ...this.serializeSubscription(subscription),
@@ -280,6 +303,7 @@ export class PackagesService {
           : null,
       },
       timeline,
+      paymentSchedule,
       relatedTransactions: relatedTransactions.map((item) => ({
         ...item,
         amount: Number(item.amount),
@@ -660,12 +684,42 @@ export class PackagesService {
     const payments = relatedTransactions.map((item) => ({
       label: item.type === 'PACKAGE_PENALTY' ? 'Penalty paid' : 'Package payment posted',
       date: item.createdAt,
-      status: item.status,
+      status: item.status === 'APPROVED' ? 'SUCCESSFUL' : item.status,
       amount: Number(item.amount),
       reference: item.reference,
     }));
 
     return [...timeline, ...payments];
+  }
+
+  private buildPaymentSchedule(subscription: any, totalAmount: number, amountPaid: number) {
+    const durationMonths = Math.max(Number(subscription.package?.durationMonths ?? 1), 1);
+    const repaymentFrequency = String(subscription.package?.repaymentFrequency ?? 'WEEKLY').toUpperCase();
+    const installmentCount = repaymentFrequency === 'MONTHLY' ? durationMonths : Math.max(durationMonths * 4, 1);
+    const installmentAmount = totalAmount / installmentCount;
+    const anchor = this.getPackageScheduleAnchor(subscription) ?? subscription.createdAt ?? new Date();
+    let remainingPaid = amountPaid;
+
+    return Array.from({ length: installmentCount }).map((_, index) => {
+      const dueDate = new Date(anchor);
+      if (repaymentFrequency === 'MONTHLY') {
+        dueDate.setMonth(dueDate.getMonth() + index + 1);
+      } else {
+        dueDate.setDate(dueDate.getDate() + (index + 1) * 7);
+      }
+
+      const paidForInstallment = remainingPaid >= installmentAmount;
+      if (paidForInstallment) {
+        remainingPaid -= installmentAmount;
+      }
+
+      return {
+        installment: index + 1,
+        dueDate,
+        amount: installmentAmount,
+        status: paidForInstallment ? 'SUCCESSFUL' : 'PENDING',
+      };
+    });
   }
 
   private getPackageScheduleAnchor(subscriptionOrPackage: {

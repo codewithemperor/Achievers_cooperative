@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Spinner } from "@heroui/react";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 
 type ActionTone = "success" | "danger" | "neutral";
@@ -57,14 +56,7 @@ export function ConfirmActionButton({
         onClick={() => setOpen(true)}
         type="button"
       >
-        {pending ? (
-          <>
-            <Spinner color="current" size="sm" />
-            {pendingLabel}
-          </>
-        ) : (
-          label
-        )}
+        {pending ? pendingLabel : label}
       </button>
       <ConfirmModal
         confirmLabel={pending ? pendingLabel : "Confirm"}

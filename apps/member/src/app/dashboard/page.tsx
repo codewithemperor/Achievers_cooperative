@@ -6,6 +6,7 @@ import {
   ArrowRightLeft,
   BellRing,
   BriefcaseBusiness,
+  Copy,
   Landmark,
   PiggyBank,
   TrendingUp,
@@ -19,6 +20,7 @@ import {
   TransactionDetailModal,
   type TransactionDetailItem,
 } from "@/components/transaction-detail-modal";
+import { MemberModal } from "@/components/member-modal";
 import { useMemberData } from "@/hooks/use-member-data";
 import { useProfileData } from "@/hooks/use-profile-data";
 import { formatMoney, initialsFromName } from "@/lib/member-format";
@@ -63,6 +65,16 @@ interface DashboardPayload {
     description?: string | null;
     reference?: string | null;
   }>;
+  cooperativeAccount?: {
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+  };
+  cooperativeAccounts?: Array<{
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+  }>;
 }
 
 const fallbackData: DashboardPayload = {
@@ -87,6 +99,7 @@ const fallbackData: DashboardPayload = {
     activePackage: null,
   },
   recentTransactions: [],
+  cooperativeAccounts: [],
 };
 
 const fallbackProfile = {
@@ -178,6 +191,13 @@ export default function DashboardPage() {
   const displayName = member?.fullName || data.profile.fullName || "Member";
   const [selectedTransaction, setSelectedTransaction] =
     useState<TransactionDetailItem | null>(null);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [copyToast, setCopyToast] = useState("");
+  const cooperativeAccounts = data.cooperativeAccounts?.length
+    ? data.cooperativeAccounts
+    : data.cooperativeAccount
+      ? [data.cooperativeAccount]
+      : [];
 
   const cardValues = {
     wallet: formatMoney(data.wallet.availableBalance),
@@ -186,6 +206,12 @@ export default function DashboardPage() {
     packages: formatMoney(data.summary.activePackage?.amountRemaining ?? 0),
     loans: formatMoney(data.summary.activeLoan?.remainingBalance ?? 0),
   };
+
+  async function copyAccountDetail(value: string) {
+    await navigator.clipboard?.writeText(value);
+    setCopyToast("Copied successfully");
+    window.setTimeout(() => setCopyToast(""), 1800);
+  }
 
   return (
     <PullToRefresh
@@ -299,11 +325,40 @@ export default function DashboardPage() {
         </ScrollShadow>
       </section>
 
-      {/* Recent Transactions — sits on background-50 */}
+      {/* Association Account */}
+      {cooperativeAccounts.length ? (
+        <section className="px-5">
+          <div className="rounded-[26px] border border-background-200 bg-white/92 p-4 dark:border-white/10 dark:bg-background-100">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-400">
+                  Association account
+                </p>
+                <h2 className="mt-1 truncate font-display text-lg font-semibold text-text-900 dark:text-text-50">
+                  {cooperativeAccounts[0].bankName || "Bank details"}
+                </h2>
+                <p className="mt-1 text-sm text-text-500 dark:text-text-300">
+                  {cooperativeAccounts[0].accountName || "Account name"} -{" "}
+                  {cooperativeAccounts[0].accountNumber || "Account number"}
+                </p>
+              </div>
+              <button
+                className="shrink-0 rounded-2xl border border-background-200 bg-background-50 px-4 py-2 text-xs font-semibold text-text-700 transition-colors hover:bg-background-100 dark:border-white/10 dark:bg-background-900 dark:text-text-200"
+                onClick={() => setIsAccountModalOpen(true)}
+                type="button"
+              >
+                View details
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Recent Transactions */}
       <section className="rounded-t-[28px] bg-background-50 px-5 pb-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold font-display tracking-tight text-text-900">
+            <h2 className="text-xl font-semibold font-display tracking-tight text-text-900 dark:text-text-50">
               Recent transactions
             </h2>
             <p className="text-xs text-text-500">
@@ -346,6 +401,56 @@ export default function DashboardPage() {
         transaction={selectedTransaction}
         onClose={() => setSelectedTransaction(null)}
       />
+      <MemberModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        title="Association account details"
+        description="Use these details when making cooperative payments."
+      >
+        <div className="grid gap-3">
+          {cooperativeAccounts.map((account, index) => (
+            <div
+              className="rounded-2xl border border-background-200 bg-background-50 p-4 dark:border-background-700 dark:bg-background-900"
+              key={`${account.bankName}-${account.accountNumber}-${index}`}
+            >
+              {[
+                ["Bank name", account.bankName],
+                ["Account number", account.accountNumber],
+                ["Account name", account.accountName],
+              ].map(([label, value]) => (
+                <div
+                  className="flex items-center justify-between gap-3 border-b border-background-200 py-3 first:pt-0 last:border-0 last:pb-0 dark:border-background-700"
+                  key={label}
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-400">
+                      {label}
+                    </p>
+                    <p className="mt-1 break-words text-sm font-semibold text-text-900 dark:text-text-50">
+                      {value || "-"}
+                    </p>
+                  </div>
+                  {value ? (
+                    <button
+                      aria-label={`Copy ${label}`}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-background-200 bg-white text-text-700 transition-colors hover:bg-background-100 dark:border-background-700 dark:bg-background-800 dark:text-text-200"
+                      onClick={() => void copyAccountDetail(value)}
+                      type="button"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </MemberModal>
+      {copyToast ? (
+        <div className="fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-text-900 px-4 py-2 text-sm font-semibold text-white shadow-lg dark:bg-white dark:text-text-900">
+          {copyToast}
+        </div>
+      ) : null}
     </PullToRefresh>
   );
 }

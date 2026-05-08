@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { AutocompleteInput } from "@/components/form-input";
 import type { AutocompleteOption } from "@/components/form-input";
 import { MemberModal } from "@/components/member-modal";
@@ -22,6 +23,16 @@ interface NigerianBank {
   code: string;
 }
 
+type BankOption = AutocompleteOption & {
+  bankCode: string;
+  bankName: string;
+};
+
+function errorMessage(error: any, fallback: string) {
+  const message = error?.response?.data?.message || error?.message || fallback;
+  return Array.isArray(message) ? message.join("\n") : String(message);
+}
+
 function maskAccountNumber(num: string) {
   if (!num || num.length < 4) return num;
   return `**** ${num.slice(-4)}`;
@@ -32,17 +43,47 @@ export default function AccountBankAccountPage() {
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [banks, setBanks] = useState<NigerianBank[]>([]);
   const [bankForm, setBankForm] = useState({
+    bankKey: "",
     bankCode: "",
     accountNumber: "",
     accountName: "",
   });
+  const [banksLoading, setBanksLoading] = useState(false);
   const [bankVerifying, setBankVerifying] = useState(false);
+  const bankOptions = useMemo<BankOption[]>(
+    () =>
+      banks.map((bank, index) => ({
+        id: `${bank.code}-${bank.name}-${index}`,
+        bankCode: bank.code,
+        bankName: bank.name,
+        label: bank.name,
+        sub: bank.code,
+      })),
+    [banks],
+  );
 
   async function openBankModal() {
-    setBankForm({ bankCode: "", accountNumber: "", accountName: "" });
+    setBankForm({
+      bankKey: "",
+      bankCode: "",
+      accountNumber: "",
+      accountName: "",
+    });
     setIsBankModalOpen(true);
-    const data = await fetchMemberApi<NigerianBank[]>("/bank-accounts/banks");
-    setBanks(data);
+    setBanksLoading(true);
+    try {
+      const data = await fetchMemberApi<NigerianBank[]>("/bank-accounts/banks");
+      setBanks(data);
+    } catch (error: any) {
+      await MySwal.fire({
+        title: "Unable to load banks",
+        text: errorMessage(error, "Please try loading the bank list again."),
+        icon: "error",
+        confirmButtonText: "Okay",
+      });
+    } finally {
+      setBanksLoading(false);
+    }
   }
 
   async function verifyBankAccount() {
@@ -57,13 +98,23 @@ export default function AccountBankAccountPage() {
         },
       );
       setBankForm((prev) => ({ ...prev, accountName: data.accountName }));
+    } catch (error: any) {
+      await MySwal.fire({
+        title: "Unable to verify account",
+        text: errorMessage(
+          error,
+          "Please confirm the bank and account number, then try again.",
+        ),
+        icon: "error",
+        confirmButtonText: "Okay",
+      });
     } finally {
       setBankVerifying(false);
     }
   }
 
   async function saveBankAccount() {
-    const selectedBank = banks.find((b) => b.code === bankForm.bankCode);
+    const selectedBank = bankOptions.find((b) => b.id === bankForm.bankKey);
     if (!selectedBank || !bankForm.accountName) return;
 
     const result = await apiCallWithAlert({
@@ -71,14 +122,14 @@ export default function AccountBankAccountPage() {
       loadingText: "Saving bank account...",
       apiCall: () =>
         api.post("/bank-accounts", {
-          bankName: selectedBank.name,
+          bankName: selectedBank.bankName,
           bankCode: bankForm.bankCode,
           accountNumber: bankForm.accountNumber,
           accountName: bankForm.accountName,
           isDefault: bankAccounts.data.length === 0,
         }),
       successTitle: "Bank Account Added",
-      successText: `${selectedBank.name} (${maskAccountNumber(bankForm.accountNumber)}) has been saved.`,
+      successText: `${selectedBank.bankName} (${maskAccountNumber(bankForm.accountNumber)}) has been saved.`,
     });
 
     if (result) {
@@ -199,21 +250,38 @@ export default function AccountBankAccountPage() {
         <div className="grid gap-4">
           <AutocompleteInput
             label="Bank name"
-            placeholder="Search for your bank..."
-            options={banks.map((b) => ({
-              id: b.code as unknown as AutocompleteOption["id"],
-              label: b.name,
-            }))}
-            selectedKey={bankForm.bankCode || null}
-            onSelectionChange={(key) =>
+            placeholder={
+              banksLoading ? "Loading banks..." : "Search for your bank..."
+            }
+            options={bankOptions}
+            selectedKey={bankForm.bankKey || null}
+            onSelectionChange={(key) => {
+              const selectedBank = bankOptions.find(
+                (bank) => String(bank.id) === String(key),
+              );
               setBankForm((prev) => ({
                 ...prev,
-                bankCode: key ? String(key) : "",
+                bankKey: key ? String(key) : "",
+                bankCode: selectedBank?.bankCode ?? "",
                 accountName: "",
-              }))
-            }
+              }));
+            }}
+            isDisabled={banksLoading}
             isRequired
+            description={
+              banksLoading
+                ? "Loading the latest bank list..."
+                : banks.length
+                  ? `${banks.length} banks, fintechs, and microfinance institutions loaded.`
+                  : "Open the list to load available banks."
+            }
           />
+          {banksLoading ? (
+            <div className="flex items-center gap-2 rounded-2xl border border-background-200 bg-background-50 px-4 py-3 text-sm text-text-500 dark:border-background-700 dark:bg-background-900 dark:text-text-300">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Fetching all banks. This may take a moment.
+            </div>
+          ) : null}
           <div className="grid gap-2">
             <label
               className="text-sm font-medium text-text-700 dark:text-text-200"

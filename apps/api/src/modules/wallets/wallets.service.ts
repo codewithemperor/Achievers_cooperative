@@ -137,24 +137,62 @@ export class WalletsService {
     };
   }
 
-  async getTransactions(userId: string, options?: { limit?: number; offset?: number; type?: string }) {
+  async getTransactions(userId: string, options?: { limit?: number; offset?: number; type?: string; from?: string; to?: string }) {
     const member = await this.prisma.member.findUnique({
       where: { userId },
       include: { wallet: true },
     });
     if (!member || !member.wallet) throw new NotFoundException('Wallet not found');
 
-    const { limit = 50, offset = 0, type } = options ?? {};
+    const { limit = 50, offset = 0, type, from, to } = options ?? {};
+    const dateFilter =
+      from || to
+        ? {
+            createdAt: {
+              ...(from ? { gte: new Date(from) } : {}),
+              ...(to ? { lte: new Date(to) } : {}),
+            },
+          }
+        : {};
 
-    const effectiveType = type ?? 'WALLET_FUNDING';
+    const effectiveType = (type ?? 'WALLET_FUNDING').toUpperCase();
+    const allTypes = effectiveType === 'ALL';
     const fundingOnly = effectiveType === 'WALLET_FUNDING' || effectiveType === 'WALLET_FUNDING_REQUEST';
-    const includePaymentRequests = effectiveType === 'WALLET_FUNDING_REQUEST' || effectiveType === 'WALLET_FUNDING';
+    const includePaymentRequests = allTypes || fundingOnly;
+    const includeWalletWithdrawals = allTypes || effectiveType === 'WALLET_WITHDRAWAL';
+    const includeSavingsWithdrawals = allTypes || effectiveType === 'SAVINGS' || effectiveType === 'SAVINGS_WITHDRAWAL';
+    const includeInvestmentCancellations =
+      allTypes || effectiveType === 'INVESTMENT' || effectiveType === 'INVESTMENT_CANCELLATION_REFUND';
+    const transactionTypeFilter = allTypes
+      ? {
+          NOT: [
+            { type: 'WALLET_FUNDING' as any, reference: { startsWith: 'PAY-' } },
+            { type: { in: ['WALLET_WITHDRAWAL', 'INVESTMENT_CANCELLATION_REFUND'] as any } },
+          ],
+        }
+      : effectiveType === 'WALLET_WITHDRAWAL' || effectiveType === 'INVESTMENT_CANCELLATION_REFUND'
+        ? { id: '__request_backed_activity__' }
+      : fundingOnly
+        ? { type: 'WALLET_FUNDING' as any, reference: { not: { startsWith: 'PAY-' } } }
+        : { type: effectiveType as any };
 
-    const [items, payments, total, totalPayments] = await Promise.all([
+    const [
+      items,
+      payments,
+      walletWithdrawals,
+      savingsWithdrawals,
+      investmentCancellations,
+      total,
+      totalPayments,
+      totalWalletWithdrawals,
+      totalSavingsWithdrawals,
+      totalInvestmentCancellations,
+    ] = await Promise.all([
       this.prisma.transaction.findMany({
         where: {
           walletId: member.wallet.id,
-          ...(fundingOnly ? { type: 'WALLET_FUNDING' as any } : { type: effectiveType as any }),
+          ...transactionTypeFilter,
+          ...dateFilter,
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -162,19 +200,54 @@ export class WalletsService {
       }),
       includePaymentRequests
         ? this.prisma.payment.findMany({
-            where: { memberId: member.id },
+            where: { memberId: member.id, ...dateFilter },
             orderBy: { createdAt: 'desc' },
             take: limit,
             skip: offset,
           })
         : Promise.resolve([]),
+      includeWalletWithdrawals
+        ? (this.prisma as any).walletWithdrawalRequest.findMany({
+            where: { memberId: member.id, ...dateFilter },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+          })
+        : Promise.resolve([]),
+      includeSavingsWithdrawals
+        ? (this.prisma as any).savingsWithdrawalRequest.findMany({
+            where: { memberId: member.id, ...dateFilter },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+          })
+        : Promise.resolve([]),
+      includeInvestmentCancellations
+        ? (this.prisma as any).investmentCancellationRequest.findMany({
+            where: { memberId: member.id, ...dateFilter },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+            include: { investment: { include: { product: true } } },
+          })
+        : Promise.resolve([]),
       this.prisma.transaction.count({
         where: {
           walletId: member.wallet.id,
-          ...(fundingOnly ? { type: 'WALLET_FUNDING' as any } : { type: effectiveType as any }),
+          ...transactionTypeFilter,
+          ...dateFilter,
         },
       }),
-      includePaymentRequests ? this.prisma.payment.count({ where: { memberId: member.id } }) : Promise.resolve(0),
+      includePaymentRequests ? this.prisma.payment.count({ where: { memberId: member.id, ...dateFilter } }) : Promise.resolve(0),
+      includeWalletWithdrawals
+        ? (this.prisma as any).walletWithdrawalRequest.count({ where: { memberId: member.id, ...dateFilter } })
+        : Promise.resolve(0),
+      includeSavingsWithdrawals
+        ? (this.prisma as any).savingsWithdrawalRequest.count({ where: { memberId: member.id, ...dateFilter } })
+        : Promise.resolve(0),
+      includeInvestmentCancellations
+        ? (this.prisma as any).investmentCancellationRequest.count({ where: { memberId: member.id, ...dateFilter } })
+        : Promise.resolve(0),
     ]);
 
     const mergedItems = [
@@ -203,13 +276,59 @@ export class WalletsService {
               : payment.rejectionReason || 'Wallet funding request rejected',
         createdAt: payment.createdAt,
       })),
+      ...walletWithdrawals.map((request: any) => ({
+        id: `wallet-withdrawal-${request.id}`,
+        source: 'WALLET_WITHDRAWAL_REQUEST',
+        type: 'WALLET_WITHDRAWAL',
+        amount: Number(request.amount),
+        status: request.status,
+        reference: null,
+        description:
+          request.status === 'DISBURSED'
+            ? `Wallet withdrawal disbursed to ${request.bankName} - ${request.accountNumber}`
+            : request.status === 'REJECTED'
+              ? request.rejectionReason || 'Wallet withdrawal request rejected'
+              : `Wallet withdrawal request to ${request.bankName} - ${request.accountNumber}`,
+        createdAt: request.createdAt,
+      })),
+      ...savingsWithdrawals.map((request: any) => ({
+        id: `savings-withdrawal-${request.id}`,
+        source: 'SAVINGS_WITHDRAWAL_REQUEST',
+        type: 'SAVINGS_WITHDRAWAL',
+        amount: Number(request.amount),
+        status: request.status,
+        reference: null,
+        description:
+          request.status === 'REJECTED'
+            ? request.rejectionReason || 'Savings withdrawal request rejected'
+            : `Savings withdrawal request to ${request.bankName} - ${request.accountNumber}`,
+        createdAt: request.createdAt,
+      })),
+      ...investmentCancellations.map((request: any) => ({
+        id: `investment-cancellation-${request.id}`,
+        source: 'INVESTMENT_CANCELLATION_REQUEST',
+        type: 'INVESTMENT_CANCELLATION',
+        amount: Number(request.investment?.principal ?? 0),
+        status: request.status,
+        reference: null,
+        description:
+          request.status === 'REJECTED'
+            ? request.rejectionReason || 'Investment cancellation request rejected'
+            : `Investment cancellation request${request.investment?.product?.name ? ` for ${request.investment.product.name}` : ''}`,
+        createdAt: request.createdAt,
+      })),
     ]
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, limit);
 
     return {
       items: mergedItems,
-      total: total + totalPayments,
+      total:
+        total +
+        totalPayments +
+        totalWalletWithdrawals +
+        totalSavingsWithdrawals +
+        totalInvestmentCancellations,
       limit,
       offset,
     };

@@ -7,11 +7,13 @@ import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
   Banknote,
+  Bell,
   LayoutDashboard,
   Menu,
   Package,
   PiggyBank,
   Receipt,
+  Search,
   Settings,
   TrendingUp,
   Users,
@@ -20,6 +22,17 @@ import {
 import clsx from "clsx";
 import { clearSession } from "@/lib/session";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useApi } from "@/hooks/useApi";
+
+interface DashboardNoticeResponse {
+  summary: {
+    loans: { pending: number };
+    investments: { pendingCancellations: number };
+    packages: { pending: number };
+  };
+  pendingPayments: Array<unknown>;
+  pendingWalletWithdrawals: Array<unknown>;
+}
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -111,6 +124,13 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 export function AdminShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const notices = useApi<DashboardNoticeResponse>("/reports/dashboard");
+  const missedRequests =
+    (notices.data?.pendingPayments.length ?? 0) +
+    (notices.data?.pendingWalletWithdrawals.length ?? 0) +
+    (notices.data?.summary.loans.pending ?? 0) +
+    (notices.data?.summary.investments.pendingCancellations ?? 0) +
+    (notices.data?.summary.packages.pending ?? 0);
 
   const breadcrumb =
     pathname === "/admin"
@@ -118,23 +138,23 @@ export function AdminShell({ children }: PropsWithChildren) {
       : pathname.replace("/admin/", "").replaceAll("/", " / ");
 
   return (
-    <div className="min-h-screen bg-[var(--background-50)] text-text-800 dark:bg-[var(--background-950)] dark:text-[var(--text-200)]">
-      <div className="mx-auto flex min-h-screen max-w-400">
+    <div className="min-h-screen overflow-x-clip bg-[var(--background-50)] text-text-800 dark:bg-[var(--background-950)] dark:text-[var(--text-200)]">
+      <div className="min-h-screen w-full overflow-x-clip">
         {/* Desktop sidebar — dark green */}
         <aside
           className={clsx(
-            "sticky top-0 hidden h-screen max-h-screen shrink-0 flex-col xl:flex xl:w-[260px]",
+            "fixed left-0 top-0 z-40 hidden h-screen max-h-screen shrink-0 flex-col xl:flex xl:w-[260px]",
             "bg-[linear-gradient(180deg,var(--primary-950),var(--primary-900),var(--primary-800))] border-r border-white/10",
           )}
         >
           <SidebarContent />
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col overflow-x-clip xl:pl-[260px]">
           {/* Header bar */}
           <header className="sticky top-0 z-30 border-b border-[var(--background-200)] bg-white/90 px-5 py-3 backdrop-blur-lg dark:border-[var(--background-800)] dark:bg-[var(--background-900)]/90">
             <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
                 <button
                   className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary-600)] text-white xl:hidden"
                   aria-label="Open menu"
@@ -144,14 +164,32 @@ export function AdminShell({ children }: PropsWithChildren) {
                   <Menu className="h-5 w-5" />
                 </button>
 
-                <div>
-                  <p className="text-sm font-medium capitalize text-text-400">
-                    {breadcrumb}
-                  </p>
+                <div className="hidden min-h-12 w-full max-w-md items-center gap-3 rounded-2xl bg-background-50 px-4 md:flex">
+                  <Search className="h-4 w-4 shrink-0 text-text-400" />
+                  <input
+                    className="w-full bg-transparent text-sm text-text-900 outline-none placeholder:text-text-400"
+                    placeholder="Search admin workspace"
+                    type="search"
+                  />
                 </div>
+                <p className="truncate text-sm font-medium capitalize text-text-400 md:hidden">
+                  {breadcrumb}
+                </p>
               </div>
 
               <div className="flex items-center gap-2">
+                <Link
+                  aria-label={`${missedRequests} pending requests`}
+                  className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-background-50 text-text-900 transition hover:bg-background-100"
+                  href="/admin/notifications"
+                >
+                  <Bell className="h-5 w-5" />
+                  {missedRequests > 0 ? (
+                    <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-[#b42318] px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
+                      {missedRequests > 99 ? "99+" : missedRequests}
+                    </span>
+                  ) : null}
+                </Link>
                 <ThemeToggle />
                 <span className="hidden rounded-full border border-[var(--background-200)] bg-white px-3 py-1.5 text-xs font-medium text-text-400 sm:inline-block dark:border-[var(--background-700)] dark:bg-[var(--background-800)]">
                   Admin Panel

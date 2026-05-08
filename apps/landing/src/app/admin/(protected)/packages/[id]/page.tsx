@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Clock3, Layers3 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { StatCard } from "@/components/ui/stat-card";
+import { DataTable } from "@/components/ui/data-table";
+import { AdminTabs } from "@/components/ui/admin-tabs";
+import { ActionMenu } from "@/components/ui/action-menu";
+import { DashboardMetricCard } from "@/components/admin/dashboard-card";
+import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
@@ -33,6 +36,19 @@ interface PackageDetail {
     nextDueAt?: string | null;
     member: { id: string; fullName: string; membershipNumber: string };
   }>;
+  transactions?: Array<{
+    id: string;
+    type: string;
+    amount: number;
+    status: string;
+    reference?: string | null;
+    category?: string | null;
+    description?: string | null;
+    createdAt: string;
+    wallet?: {
+      member?: { id: string; fullName: string; membershipNumber: string };
+    };
+  }>;
 }
 
 function getStatusVariant(status: string) {
@@ -53,12 +69,16 @@ const currency = new Intl.NumberFormat("en-NG", {
 const tabs = [
   { id: "ALL", label: "All" },
   { id: "DEFAULTING", label: "Defaulting" },
+  { id: "TRANSACTIONS", label: "Transactions" },
 ];
 
 export default function PackageDetailPage() {
   const params = useParams<{ id: string }>();
   const packageDetail = useApi<PackageDetail>(`/packages/${params.id}`);
   const [tab, setTab] = useState("ALL");
+  const [selectedTransaction, setSelectedTransaction] = useState<
+    NonNullable<PackageDetail["transactions"]>[number] | null
+  >(null);
 
   const subscriptions = packageDetail.data?.subscriptions ?? [];
   const filteredSubscriptions = useMemo(() => {
@@ -76,7 +96,10 @@ export default function PackageDetailPage() {
     (sum, item) => sum + item.amountPaid,
     0,
   );
-  const totalOutstanding = subscriptions.reduce(
+  const payableSubscriptions = subscriptions.filter((item) =>
+    ["APPROVED", "DISBURSED", "IN_PROGRESS", "COMPLETED"].includes(item.status),
+  );
+  const totalOutstanding = payableSubscriptions.reduce(
     (sum, item) => sum + item.amountRemaining,
     0,
   );
@@ -124,30 +147,37 @@ export default function PackageDetailPage() {
         }
       />
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <StatCard
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard
+          description="Configured package target amount."
+          href={`/admin/packages/${params.id}`}
+          icon={<Layers3 className="h-5 w-5" />}
           title="Total Amount"
           value={currency.format(packageDetail.data?.totalAmount ?? 0)}
-          icon={<Layers3 className="h-5 w-5" />}
-          accent="green"
+          tone="green"
         />
-        <StatCard
+        <DashboardMetricCard
+          description="Total amount collected from subscribers."
+          href={`/admin/packages/${params.id}`}
+          icon={<CheckCircle2 className="h-5 w-5" />}
           title="Paid So Far"
           value={currency.format(totalPaid)}
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          accent="blue"
         />
-        <StatCard
+        <DashboardMetricCard
+          description="Remaining balance across subscribers."
+          href={`/admin/packages/${params.id}`}
+          icon={<Clock3 className="h-5 w-5" />}
           title="Outstanding"
           value={currency.format(totalOutstanding)}
-          icon={<Clock3 className="h-5 w-5" />}
-          accent="amber"
+          tone="amber"
         />
-        <StatCard
+        <DashboardMetricCard
+          description="Total penalty accrued by subscribers."
+          href={`/admin/packages/${params.id}`}
+          icon={<AlertTriangle className="h-5 w-5" />}
           title="Penalty Accrued"
           value={currency.format(totalPenalty)}
-          icon={<AlertTriangle className="h-5 w-5" />}
-          accent="red"
+          tone={totalPenalty > 0 ? "red" : "neutral"}
         />
       </section>
 
@@ -162,144 +192,241 @@ export default function PackageDetailPage() {
         </section>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            className={
-              tab === item.id
-                ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
-                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
-            }
-            onClick={() => setTab(item.id)}
-            type="button"
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <AdminTabs
+        items={tabs}
+        onChange={setTab}
+        value={tab}
+      />
 
-      <section className="rounded-[2rem] border border-[var(--primary-900)/8] bg-white p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-text-900">Subscribers</h2>
-          <StatusBadge
-            status={packageDetail.data?.isActive ? "ACTIVE" : "INACTIVE"}
-            variant={packageDetail.data?.isActive ? "success" : "warning"}
-          />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-[var(--background-200)] text-text-400">
-              <tr>
-                <th className="px-3 py-3 font-semibold">Subscriber</th>
-                <th className="px-3 py-3 font-semibold">Paid</th>
-                <th className="px-3 py-3 font-semibold">Remaining</th>
-                <th className="px-3 py-3 font-semibold">Penalty</th>
-                <th className="px-3 py-3 font-semibold">Next Due</th>
-                <th className="px-3 py-3 font-semibold">Status</th>
-                <th className="px-3 py-3 font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSubscriptions.map((subscription) => (
-                <tr
-                  key={subscription.id}
-                  className="border-b border-[var(--background-100)]"
-                >
-                  <td className="px-3 py-3">
-                    <p className="font-semibold text-text-900">
-                      {subscription.member.fullName}
-                    </p>
-                    <p className="text-xs text-text-400">
-                      {subscription.member.membershipNumber}
-                    </p>
-                  </td>
-                  <td className="px-3 py-3">
-                    {currency.format(subscription.amountPaid)}
-                  </td>
-                  <td className="px-3 py-3">
-                    {currency.format(subscription.amountRemaining)}
-                  </td>
-                  <td className="px-3 py-3">
-                    {currency.format(subscription.penaltyAccrued)}
-                  </td>
-                  <td className="px-3 py-3">
-                    {subscription.nextDueAt
-                      ? new Date(subscription.nextDueAt).toLocaleDateString(
-                          "en-NG",
-                        )
-                      : "-"}
-                  </td>
-                  <td className="px-3 py-3">
-                    <StatusBadge
-                      status={subscription.status}
-                      variant={getStatusVariant(subscription.status) as any}
-                    />
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        className="font-semibold text-[var(--primary-700)]"
-                        href={`/admin/packages/subscriptions/${subscription.id}`}
-                      >
-                        View detail
-                      </Link>
-                      {subscription.status === "PENDING" ? (
-                        <>
-                          <ConfirmActionButton
-                            confirmTitle="Approve package subscription?"
-                            confirmMessage="This will move the subscription into the approved stage."
-                            label="Accept"
-                            onConfirm={async () => {
-                              try {
-                                await api.post(
-                                  `/packages/subscriptions/${subscription.id}/approve`,
-                                );
-                                showSuccessToast(
-                                  "Package subscription approved.",
-                                );
-                                await packageDetail.refetch();
-                              } catch (error: any) {
-                                showErrorToast(
-                                  error?.response?.data?.message ||
-                                    "Unable to approve subscription.",
-                                );
-                              }
-                            }}
-                            tone="success"
-                          />
-                          <ConfirmActionButton
-                            confirmTitle="Reject package subscription?"
-                            confirmMessage="This subscription will be rejected and removed from the active workflow."
-                            label="Reject"
-                            onConfirm={async () => {
-                              try {
-                                await api.post(
-                                  `/packages/subscriptions/${subscription.id}/reject`,
-                                );
-                                showSuccessToast(
-                                  "Package subscription rejected.",
-                                );
-                                await packageDetail.refetch();
-                              } catch (error: any) {
-                                showErrorToast(
-                                  error?.response?.data?.message ||
-                                    "Unable to reject subscription.",
-                                );
-                              }
-                            }}
-                            tone="danger"
-                          />
-                        </>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {tab === "TRANSACTIONS" ? (
+        <DataTable
+          columns={[
+            {
+              key: "member",
+              header: "Member",
+              render: (transaction) => (
+                <div>
+                  <p className="font-semibold text-text-900 dark:text-text-50">
+                    {transaction.wallet?.member?.fullName || "Member"}
+                  </p>
+                  <p className="text-xs text-text-400">
+                    {transaction.wallet?.member?.membershipNumber || "-"}
+                  </p>
+                </div>
+              ),
+              sortValue: (transaction) =>
+                transaction.wallet?.member?.fullName || "",
+            },
+            {
+              key: "type",
+              header: "Type",
+              render: (transaction) => transaction.type.replaceAll("_", " "),
+              sortValue: (transaction) => transaction.type,
+            },
+            {
+              key: "amount",
+              header: "Amount",
+              render: (transaction) => currency.format(transaction.amount),
+              sortValue: (transaction) => transaction.amount,
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (transaction) => (
+                <StatusBadge
+                  status={transaction.status}
+                  variant={getStatusVariant(transaction.status) as any}
+                />
+              ),
+              sortValue: (transaction) => transaction.status,
+            },
+            {
+              key: "createdAt",
+              header: "Date",
+              render: (transaction) =>
+                new Date(transaction.createdAt).toLocaleDateString("en-NG"),
+              sortValue: (transaction) => new Date(transaction.createdAt),
+            },
+          ]}
+          data={packageDetail.data?.transactions ?? []}
+          emptyDescription="No package transactions found."
+          getRowKey={(transaction) => transaction.id}
+          loading={packageDetail.loading}
+          onRowClick={(transaction) => setSelectedTransaction(transaction)}
+          searchableText={(transaction) =>
+            `${transaction.wallet?.member?.fullName || ""} ${transaction.wallet?.member?.membershipNumber || ""} ${transaction.type} ${transaction.status} ${transaction.description || ""} ${transaction.reference || ""}`
+          }
+          searchPlaceholder="Search package transactions..."
+        />
+      ) : (
+        <DataTable
+          columns={[
+          {
+            key: "subscriber",
+            header: "Subscriber",
+            render: (subscription) => (
+              <div>
+                <p className="font-semibold text-text-900 dark:text-text-50">
+                  {subscription.member.fullName}
+                </p>
+                <p className="text-xs text-text-400">
+                  {subscription.member.membershipNumber}
+                </p>
+              </div>
+            ),
+            sortValue: (subscription) => subscription.member.fullName,
+          },
+          {
+            key: "paid",
+            header: "Paid",
+            render: (subscription) => currency.format(subscription.amountPaid),
+            sortValue: (subscription) => subscription.amountPaid,
+          },
+          {
+            key: "remaining",
+            header: "Remaining",
+            render: (subscription) =>
+              currency.format(subscription.amountRemaining),
+            sortValue: (subscription) => subscription.amountRemaining,
+          },
+          {
+            key: "penalty",
+            header: "Penalty",
+            render: (subscription) =>
+              currency.format(subscription.penaltyAccrued),
+            sortValue: (subscription) => subscription.penaltyAccrued,
+          },
+          {
+            key: "nextDue",
+            header: "Next Due",
+            render: (subscription) =>
+              subscription.nextDueAt
+                ? new Date(subscription.nextDueAt).toLocaleDateString("en-NG")
+                : "-",
+            sortValue: (subscription) =>
+              subscription.nextDueAt ? new Date(subscription.nextDueAt) : "",
+          },
+          {
+            key: "status",
+            header: "Status",
+            render: (subscription) => (
+              <StatusBadge
+                status={subscription.status}
+                variant={getStatusVariant(subscription.status) as any}
+              />
+            ),
+            sortValue: (subscription) => subscription.status,
+          },
+          {
+            key: "actions",
+            header: "Actions",
+            align: "right",
+            isAction: true,
+            render: (subscription) => (
+              <ActionMenu
+                items={[
+                  {
+                    label: "View details",
+                    onSelect: () => {
+                      window.location.href = `/admin/packages/subscriptions/${subscription.id}`;
+                    },
+                  },
+                  {
+                    label: "Accept",
+                    tone: "success",
+                    isDisabled: subscription.status !== "PENDING",
+                    confirmTitle: "Approve package subscription?",
+                    confirmMessage:
+                      "This will move the subscription into the approved stage.",
+                    onSelect: async () => {
+                      try {
+                        await api.post(
+                          `/packages/subscriptions/${subscription.id}/approve`,
+                        );
+                        showSuccessToast("Package subscription approved.");
+                        await packageDetail.refetch();
+                      } catch (error: any) {
+                        showErrorToast(
+                          error?.response?.data?.message ||
+                            "Unable to approve subscription.",
+                        );
+                      }
+                    },
+                  },
+                  {
+                    label: "Reject",
+                    tone: "danger",
+                    isDisabled: subscription.status !== "PENDING",
+                    confirmTitle: "Reject package subscription?",
+                    confirmMessage:
+                      "This subscription will be rejected and removed from the active workflow.",
+                    onSelect: async () => {
+                      try {
+                        await api.post(
+                          `/packages/subscriptions/${subscription.id}/reject`,
+                        );
+                        showSuccessToast("Package subscription rejected.");
+                        await packageDetail.refetch();
+                      } catch (error: any) {
+                        showErrorToast(
+                          error?.response?.data?.message ||
+                            "Unable to reject subscription.",
+                        );
+                      }
+                    },
+                  },
+                ]}
+              />
+            ),
+          },
+        ]}
+          data={filteredSubscriptions}
+          emptyDescription="No subscribers found for this package."
+          getRowKey={(subscription) => subscription.id}
+          loading={packageDetail.loading}
+          searchableText={(subscription) =>
+            `${subscription.member.fullName} ${subscription.member.membershipNumber} ${subscription.status} ${subscription.amountPaid} ${subscription.amountRemaining}`
+          }
+          searchPlaceholder="Search subscribers..."
+        />
+      )}
+      {selectedTransaction ? (
+        <TransactionReceiptModal
+          title="Package Transaction"
+          amount={selectedTransaction.amount}
+          date={selectedTransaction.createdAt}
+          status={selectedTransaction.status}
+          reference={selectedTransaction.reference}
+          fields={[
+            {
+              label: "Member",
+              value: selectedTransaction.wallet?.member?.fullName || "Member",
+            },
+            {
+              label: "Membership No.",
+              value:
+                selectedTransaction.wallet?.member?.membershipNumber || "-",
+            },
+            {
+              label: "Type",
+              value: selectedTransaction.type.replaceAll("_", " "),
+            },
+            { label: "Category", value: selectedTransaction.category || "-" },
+            {
+              label: "Description",
+              value: selectedTransaction.description || "-",
+            },
+          ]}
+          timeline={[
+            {
+              label: "Transaction posted",
+              date: selectedTransaction.createdAt,
+              status: selectedTransaction.status,
+            },
+          ]}
+          onClose={() => setSelectedTransaction(null)}
+        />
+      ) : null}
     </div>
   );
 }

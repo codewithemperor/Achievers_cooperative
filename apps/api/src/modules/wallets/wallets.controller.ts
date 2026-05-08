@@ -42,11 +42,15 @@ export class WalletsController {
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
     @Query('type') type?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     return this.walletsService.getTransactions(req.user.id, {
       limit: limit ? Number(limit) : undefined,
       offset: offset ? Number(offset) : undefined,
       type,
+      from,
+      to,
     });
   }
 

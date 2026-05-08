@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Autocomplete, ListBox } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -16,7 +15,9 @@ import {
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
-import { Plus } from "lucide-react";
+import { Banknote, CheckCircle2, Clock3, Plus, Wallet } from "lucide-react";
+import { DashboardMetricCard } from "@/components/admin/dashboard-card";
+import { ActionMenu } from "@/components/ui/action-menu";
 
 interface BankAccountInfo {
   id: string;
@@ -69,17 +70,6 @@ const currency = new Intl.NumberFormat("en-NG", {
   maximumFractionDigits: 0,
 });
 
-const tabs = [
-  "ALL",
-  "PENDING",
-  "APPROVED",
-  "DISBURSED",
-  "IN_PROGRESS",
-  "COMPLETED",
-  "OVERDUE",
-  "REJECTED",
-];
-
 function variantForLoan(status: string) {
   switch (status) {
     case "PENDING":
@@ -102,12 +92,7 @@ function variantForLoan(status: string) {
 }
 
 export default function LoansPage() {
-  const [activeTab, setActiveTab] = useState("ALL");
-  const loansUrl = useMemo(
-    () => (activeTab === "ALL" ? "/loans" : `/loans?status=${activeTab}`),
-    [activeTab],
-  );
-  const loans = useApi<LoansResponse>(loansUrl);
+  const loans = useApi<LoansResponse>("/loans");
   const members = useApi<MemberSearchResponse>("/members/search");
   const [submitting, setSubmitting] = useState(false);
   const [memberBankAccounts, setMemberBankAccounts] = useState<BankAccountInfo[]>([]);
@@ -136,6 +121,16 @@ export default function LoansPage() {
   const selectedMemberId = watch("memberId");
   const selectedGuarantorOneId = watch("guarantorOneId");
   const selectedGuarantorTwoId = watch("guarantorTwoId");
+  const loanRows = loans.data?.items ?? [];
+  const pendingLoans = loanRows.filter((item) => item.status === "PENDING");
+  const activeLoans = loanRows.filter((item) =>
+    ["APPROVED", "DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(item.status),
+  );
+  const completedLoans = loanRows.filter((item) => item.status === "COMPLETED");
+  const activeAmount = activeLoans.reduce(
+    (sum, item) => sum + Number(item.remainingBalance ?? item.amount ?? 0),
+    0,
+  );
 
   useEffect(() => {
     if (!selectedMemberId) {
@@ -197,7 +192,6 @@ export default function LoansPage() {
     <div className="space-y-6">
       <PageHeader
         title="Loans"
-        subtitle="Filter by status, track repayment balance, and capture optional guarantors during application."
         actions={
           <AdminModal
             description="Create or update a loan request using the same fields and repayment setup available to members."
@@ -357,21 +351,37 @@ export default function LoansPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            className={
-              activeTab === tab
-                ? "rounded-full bg-[var(--text-900)] px-4 py-2 text-sm font-semibold text-white"
-                : "rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
-            }
-            onClick={() => setActiveTab(tab)}
-            type="button"
-          >
-            {tab === "ALL" ? "All" : tab.toLowerCase().replace("_", " ")}
-          </button>
-        ))}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard
+          description="Loan applications waiting for admin review."
+          href="/admin/loans"
+          icon={<Clock3 className="h-5 w-5" />}
+          title="Pending Loans"
+          tone={pendingLoans.length ? "amber" : "neutral"}
+          value={pendingLoans.length}
+        />
+        <DashboardMetricCard
+          description="Loans currently approved, disbursed, active, or overdue."
+          href="/admin/loans"
+          icon={<Banknote className="h-5 w-5" />}
+          title="Active Loans"
+          tone="green"
+          value={activeLoans.length}
+        />
+        <DashboardMetricCard
+          description="Outstanding balance across active loans."
+          href="/admin/loans"
+          icon={<Wallet className="h-5 w-5" />}
+          title="Active Loan Amount"
+          value={currency.format(activeAmount)}
+        />
+        <DashboardMetricCard
+          description="Loans fully completed by members."
+          href="/admin/loans"
+          icon={<CheckCircle2 className="h-5 w-5" />}
+          title="Completed Loans"
+          value={completedLoans.length}
+        />
       </div>
 
       <DataTable
@@ -429,19 +439,23 @@ export default function LoansPage() {
           {
             key: "view",
             header: "Actions",
+            align: "right",
+            isAction: true,
             render: (item) => (
-              <div className="flex items-center gap-3">
-                <Link
-                  className="font-semibold text-[var(--primary-700)]"
-                  href={`/admin/loans/${item.id}`}
-                >
-                  Loan detail
-                </Link>
-              </div>
+              <ActionMenu
+                items={[
+                  {
+                    label: "View details",
+                    onSelect: () => {
+                      window.location.href = `/admin/loans/${item.id}`;
+                    },
+                  },
+                ]}
+              />
             ),
           },
         ]}
-        data={loans.data?.items ?? []}
+        data={loanRows}
         emptyDescription={loans.error || "No loans are available yet."}
         loading={loans.loading}
       />

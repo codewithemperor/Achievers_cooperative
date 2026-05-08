@@ -778,11 +778,13 @@ export function AutocompleteInput({
   description,
 }: AutocompleteInputProps) {
   const { contains } = useFilter({ sensitivity: "base" });
+  const optionsKey = `autocomplete-${options.length}-${String(options[0]?.id ?? "")}-${String(options.at(-1)?.id ?? "")}`;
 
   return (
     <div className={`grid gap-2 ${className ?? ""}`}>
       {label && <Label isRequired={isRequired}>{label}</Label>}
       <Autocomplete
+        key={optionsKey}
         isDisabled={isDisabled}
         placeholder={placeholder}
         selectedKey={selectedKey}
@@ -803,11 +805,16 @@ export function AutocompleteInput({
               </SearchField.Group>
             </SearchField>
             <ListBox
+              key={`listbox-${optionsKey}`}
               className="max-h-64 overflow-auto p-2"
               renderEmptyState={() => <EmptyState>No results found</EmptyState>}
             >
               {options.map((opt) => (
-                <ListBox.Item id={opt.id} key={opt.id} textValue={opt.label}>
+                <ListBox.Item
+                  id={opt.id}
+                  key={opt.id}
+                  textValue={`${opt.label} ${opt.sub ?? ""}`}
+                >
                   <div className="py-1">
                     <p className="font-medium text-text-900 dark:text-text-50">
                       {opt.label}

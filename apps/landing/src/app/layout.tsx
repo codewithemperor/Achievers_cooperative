@@ -1,19 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Glory, Figtree } from "next/font/google";
+import { Questrial, Figtree } from "next/font/google";
 // import "@heroui/react/dist/styles.css";
 import "./globals.css";
 import { siteConfig } from "@/data/content";
 import { Providers } from "@/components/ui/Providers";
 import AppChrome from "@/components/layout/AppChrome";
 
-const displayFont = Glory({
+const displayFont = Figtree({
   subsets: ["latin"],
   variable: "--font-display-family",
+  display: "swap",
 });
 
-const bodyFont = Figtree({
+const bodyFont = Questrial({
   subsets: ["latin"],
   variable: "--font-body-family",
+  weight: "400",
+  display: "swap",
 });
 
 export const viewport: Viewport = {
