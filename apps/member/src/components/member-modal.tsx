@@ -21,15 +21,15 @@ export function MemberModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-text-950/42 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <button
         aria-label="Close modal"
         className="absolute inset-0"
         onClick={onClose}
         type="button"
       />
-      <div className="relative z-10 flex max-h-[75vh] max-sm:-mt-10 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-background-200 bg-white shadow-xl dark:border-background-700 dark:bg-background-800">
-        <div className="flex items-start justify-between gap-4 border-b border-background-200 px-5 py-4 dark:border-background-700">
+      <div className="relative z-10 flex max-h-[75vh] max-sm:-mt-10 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-background-200 bg-white shadow-xl dark:border-background-200 dark:bg-background-100">
+        <div className="flex items-start justify-between gap-4 border-b border-background-200 px-5 py-4 dark:border-background-200">
           <div>
             <h2 className="font-display text-xl font-semibold text-text-900 dark:text-text-50">
               {title}
@@ -39,7 +39,7 @@ export function MemberModal({
             ) : null}
           </div>
           <button
-            className="min-h-11 min-w-[44px] flex items-center justify-center rounded-full border border-background-200 bg-white text-sm font-medium text-text-700 transition-colors hover:bg-background-100 dark:border-background-700 dark:bg-background-800 dark:text-text-300"
+            className="min-h-11 min-w-[44px] flex items-center justify-center rounded-full border border-background-200 bg-white text-sm font-medium text-text-700 transition-colors hover:bg-background-100 dark:border-background-200 dark:bg-background-50 dark:text-text-300"
             onClick={onClose}
             type="button"
           >
@@ -62,7 +62,7 @@ export function MemberModal({
           {children}
         </div>
         {footer ? (
-          <div className="border-t border-background-200 px-5 py-4 dark:border-background-700">
+          <div className="border-t border-background-200 px-5 py-4 dark:border-background-200">
             {footer}
           </div>
         ) : null}

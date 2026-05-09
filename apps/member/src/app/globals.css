@@ -317,3 +317,34 @@ textarea {
   border-radius: 4px;
   background: var(--text-300);
 }
+
+.dark .swal2-popup {
+  background: var(--background-100) !important;
+  color: var(--text-100) !important;
+}
+
+.dark .swal2-title {
+  color: var(--text-50) !important;
+}
+
+.dark .swal2-html-container,
+.dark .swal2-input-label {
+  color: var(--text-300) !important;
+}
+
+.dark .swal2-input,
+.dark .swal2-textarea,
+.dark .swal2-select {
+  background: var(--background-50) !important;
+  border-color: var(--background-300) !important;
+  color: var(--text-50) !important;
+}
+
+.dark .swal2-validation-message {
+  background: var(--background-200) !important;
+  color: var(--text-100) !important;
+}
+
+.dark .swal2-timer-progress-bar {
+  background: var(--primary-500) !important;
+}

@@ -6,6 +6,7 @@ import { AuditService } from './audit.service';
 const DEDUCTION_DAY_KEY = 'COOPERATIVE_DEDUCTION_DAY';
 const DEDUCTION_AMOUNT_KEY = 'COOPERATIVE_DEDUCTION_AMOUNT';
 const LAST_RUN_KEY = 'COOPERATIVE_DEDUCTION_LAST_RUN';
+const DAILY_LAST_RUN_KEY = 'COOPERATIVE_DAILY_DEDUCTION_LAST_RUN';
 const ENABLED_KEY = 'COOPERATIVE_DEDUCTION_ENABLED';
 const LAST_STATUS_KEY = 'COOPERATIVE_DEDUCTION_LAST_STATUS';
 const LAST_ERROR_KEY = 'COOPERATIVE_DEDUCTION_LAST_ERROR';
@@ -55,31 +56,10 @@ export class WeeklyDeductionsService {
 
     await this.ensureDefaults();
     await this.touchLastCheckedAt();
-    const today = new Date();
     const settings = await this.getSettings();
     if (!settings.enabled) {
       await this.recordStatus('DISABLED');
       return { skipped: true, reason: 'disabled' };
-    }
-
-    const expectedDay = settings.day.toUpperCase();
-    const actualDay = DAYS[today.getUTCDay()];
-    const runStamp = startOfIsoDay(today).toISOString();
-    const lastRun = await this.prisma.systemConfig.findUnique({ where: { key: LAST_RUN_KEY } });
-
-    if (!settings.amount || settings.amount <= 0) {
-      await this.recordStatus('SKIPPED_AMOUNT_NOT_CONFIGURED');
-      return { skipped: true, reason: 'amount-not-configured' };
-    }
-
-    if (actualDay !== expectedDay) {
-      await this.recordStatus('WAITING_FOR_SCHEDULED_DAY');
-      return { skipped: true, reason: 'not-scheduled-day' };
-    }
-
-    if (lastRun?.value === runStamp) {
-      await this.recordStatus('ALREADY_RAN_TODAY');
-      return { skipped: true, reason: 'already-ran-today' };
     }
 
     const actor = await this.prisma.user.findFirst({
@@ -94,9 +74,9 @@ export class WeeklyDeductionsService {
 
     this.runInFlight = true;
     try {
-      return await this.run(actor.id, { trigger: 'LAZY' });
+      return await this.runDaily(actor.id, { trigger: 'LAZY' });
     } catch (error: any) {
-      await this.recordStatus('FAILED', error?.message || 'Unknown weekly deduction error');
+      await this.recordStatus('FAILED', error?.message || 'Unknown daily deduction error');
       throw error;
     } finally {
       this.runInFlight = false;
@@ -183,6 +163,77 @@ export class WeeklyDeductionsService {
     };
   }
 
+  async runDaily(actorId: string, options?: { force?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' }) {
+    await this.ensureDefaults();
+    await this.touchLastCheckedAt();
+    const today = new Date();
+    const settings = await this.getSettings();
+    const runStamp = startOfIsoDay(today).toISOString();
+    const expectedDay = settings.day.toUpperCase();
+    const actualDay = DAYS[today.getUTCDay()];
+    const lastDailyRun = await this.prisma.systemConfig.findUnique({ where: { key: DAILY_LAST_RUN_KEY } });
+
+    if (!settings.enabled) {
+      await this.recordStatus('DISABLED');
+      return { skipped: true, reason: 'disabled' };
+    }
+
+    if (!options?.force && lastDailyRun?.value === runStamp) {
+      await this.recordStatus('DAILY_ALREADY_RAN_TODAY');
+      return { alreadyProcessed: true, runStamp };
+    }
+
+    let weekly:
+      | Awaited<ReturnType<WeeklyDeductionsService['run']>>
+      | { skipped: true; reason: string; day?: string; error?: string };
+
+    if (actualDay === expectedDay) {
+      try {
+        weekly = await this.run(actorId, { force: options?.force, trigger: options?.trigger ?? 'CRON' });
+      } catch (error: any) {
+        weekly = {
+          skipped: true,
+          reason: 'weekly-deduction-failed',
+          day: expectedDay,
+          error: error?.message || 'Unknown weekly deduction error',
+        };
+      }
+    } else {
+      weekly = {
+        skipped: true,
+        reason: 'not-weekly-deduction-day',
+        day: expectedDay,
+      };
+    }
+
+    const dueObligations = await this.runDueObligations();
+
+    await this.prisma.systemConfig.upsert({
+      where: { key: DAILY_LAST_RUN_KEY },
+      update: { value: runStamp },
+      create: { key: DAILY_LAST_RUN_KEY, value: runStamp },
+    });
+
+    await this.recordStatus(
+      weekly && 'error' in weekly ? 'DAILY_SUCCESS_WEEKLY_FAILED' : 'DAILY_SUCCESS',
+      weekly && 'error' in weekly ? weekly.error : '',
+    );
+
+    await this.audit.log(actorId, 'RUN_DAILY_DEDUCTIONS', 'SystemConfig', DAILY_LAST_RUN_KEY, {
+      runStamp,
+      trigger: options?.trigger ?? 'ADMIN',
+      weekly,
+      dueObligations,
+    });
+
+    return {
+      alreadyProcessed: false,
+      runStamp,
+      weekly,
+      dueObligations,
+    };
+  }
+
   async runFromCron(force = false) {
     const actor = await this.prisma.user.findFirst({
       where: { role: 'SUPER_ADMIN' },
@@ -195,11 +246,41 @@ export class WeeklyDeductionsService {
     }
 
     try {
-      return await this.run(actor.id, { force, trigger: 'CRON' });
+      return await this.runDaily(actor.id, { force, trigger: 'CRON' });
     } catch (error: any) {
-      await this.recordStatus('FAILED', error?.message || 'Unknown cron deduction error');
+      await this.recordStatus('FAILED', error?.message || 'Unknown daily cron deduction error');
       throw error;
     }
+  }
+
+  private async runDueObligations() {
+    const activeMembers = await this.prisma.member.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true },
+      orderBy: { joinedAt: 'asc' },
+    });
+
+    let processedMembers = 0;
+    let settlementCount = 0;
+    let totalSettled = 0;
+
+    for (const member of activeMembers) {
+      const settlements = await this.walletService.settleOutstandingObligations(member.id);
+      if (!settlements.length) {
+        continue;
+      }
+
+      processedMembers += 1;
+      settlementCount += settlements.length;
+      totalSettled += settlements.reduce((sum, item) => sum + item.amount, 0);
+    }
+
+    return {
+      checkedMembers: activeMembers.length,
+      processedMembers,
+      settlementCount,
+      totalSettled,
+    };
   }
 
   private async ensureDefaults() {
@@ -208,6 +289,7 @@ export class WeeklyDeductionsService {
         [DEDUCTION_DAY_KEY, 'MONDAY'],
         [DEDUCTION_AMOUNT_KEY, '1000'],
         [LAST_RUN_KEY, ''],
+        [DAILY_LAST_RUN_KEY, ''],
         [ENABLED_KEY, 'true'],
         [LAST_STATUS_KEY, 'NEVER_RUN'],
         [LAST_ERROR_KEY, ''],

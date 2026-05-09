@@ -5,6 +5,26 @@ import { WeeklyDeductionsService } from './services/weekly-deductions.service';
 export class CronController {
   constructor(private readonly weeklyDeductions: WeeklyDeductionsService) {}
 
+  @Get('daily-deductions')
+  runDailyDeductionsGet(
+    @Headers('x-cron-secret') headerSecret?: string,
+    @Query('secret') querySecret?: string,
+    @Query('force') force?: string,
+  ) {
+    this.assertCronSecret(headerSecret, querySecret);
+    return this.weeklyDeductions.runFromCron(force === 'true');
+  }
+
+  @Post('daily-deductions')
+  runDailyDeductionsPost(
+    @Headers('x-cron-secret') headerSecret?: string,
+    @Query('secret') querySecret?: string,
+    @Query('force') force?: string,
+  ) {
+    this.assertCronSecret(headerSecret, querySecret);
+    return this.weeklyDeductions.runFromCron(force === 'true');
+  }
+
   @Get('weekly-deductions')
   runWeeklyDeductionsGet(
     @Headers('x-cron-secret') headerSecret?: string,
