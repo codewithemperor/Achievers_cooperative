@@ -49,12 +49,51 @@ export class CooperativeWalletService {
           return sum + (row.direction === 'DEBIT' ? amount : -amount);
         }, 0);
 
-    const physicalTreasuryCash = Number((wallet as any).physicalTreasuryCash ?? wallet.balance);
-    const memberWalletLiability = Number((wallet as any).memberWalletLiability ?? 0);
-    const associationAvailableBalance = Number((wallet as any).associationAvailableBalance ?? wallet.balance);
+    let physicalTreasuryCash = Number((wallet as any).physicalTreasuryCash ?? wallet.balance);
+    let memberWalletLiability = Number((wallet as any).memberWalletLiability ?? 0);
+    let associationAvailableBalance = Number((wallet as any).associationAvailableBalance ?? wallet.balance);
     const ledgerPhysicalTreasuryCash = ledgerAccountTotal('PHYSICAL_TREASURY_CASH');
     const ledgerMemberWalletLiability = -ledgerAccountTotal('MEMBER_WALLET_LIABILITY');
     const ledgerAssociationAvailable = -ledgerAccountTotal('ASSOCIATION_AVAILABLE');
+    const cachedBalancesAreEmpty =
+      Math.abs(physicalTreasuryCash) < 0.01 &&
+      Math.abs(memberWalletLiability) < 0.01 &&
+      Math.abs(associationAvailableBalance) < 0.01;
+
+    if (cachedBalancesAreEmpty) {
+      const walletTotals = await this.prisma.wallet.aggregate({
+        _sum: {
+          availableBalance: true,
+          pendingBalance: true,
+        },
+      });
+      const memberWalletsCurrentBalance =
+        Number(walletTotals._sum.availableBalance ?? 0) +
+        Number(walletTotals._sum.pendingBalance ?? 0);
+
+      memberWalletLiability = Math.max(
+        ledgerMemberWalletLiability,
+        memberWalletsCurrentBalance,
+      );
+      associationAvailableBalance = Math.max(
+        ledgerAssociationAvailable,
+        Number(wallet.balance ?? 0),
+      );
+      physicalTreasuryCash = Math.max(
+        ledgerPhysicalTreasuryCash,
+        memberWalletLiability + associationAvailableBalance,
+      );
+
+      await this.prisma.cooperativeWallet.update({
+        where: { id: wallet.id },
+        data: {
+          physicalTreasuryCash,
+          memberWalletLiability,
+          associationAvailableBalance,
+          balance: associationAvailableBalance,
+        },
+      });
+    }
 
     return {
       id: wallet.id,
@@ -91,8 +130,17 @@ export class CooperativeWalletService {
     };
   }
 
-  async getLedgerEntries() {
+  async getLedgerEntries(query: { from?: string; to?: string } = {}) {
+    const where: Record<string, unknown> = {};
+    if (query.from || query.to) {
+      where.createdAt = {
+        ...(query.from && { gte: new Date(query.from) }),
+        ...(query.to && { lte: new Date(query.to) }),
+      };
+    }
+
     const entries = await this.prisma.financialLedgerEntry.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         actor: { select: { id: true, email: true, role: true } },

@@ -233,7 +233,7 @@ export default function PackageDetailPage() {
           <div className="flex items-center justify-between text-xs text-white/70">
             <span>Repayment progress</span>
             <span className="font-semibold text-white">
-              {item.progress.toFixed(0)}%
+              {item.progress >= 100 ? "100" : item.progress.toFixed(1)}%
             </span>
           </div>
           <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-white/25">

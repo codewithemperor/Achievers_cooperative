@@ -130,7 +130,7 @@ export default function TransactionsPage() {
         </p>
       </section>
 
-      <section className="grid gap-3 rounded-[24px] border border-background-200 bg-white/92 p-4 dark:border-white/10 dark:bg-background-100 md:grid-cols-[minmax(0,1fr)_auto]">
+      <section className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <label className="grid gap-2">
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-text-400">
             Search transactions
@@ -144,9 +144,9 @@ export default function TransactionsPage() {
           />
         </label>
         <DateRangePicker
-          className="bg-background-50 dark:bg-background-900"
+          className="bg-background-50 dark:bg-background-900 md:min-w-[20rem]"
           control={control}
-          label="Date range"
+          label=""
           name="transactionDateRange"
         />
       </section>

@@ -1,15 +1,20 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { parseDate } from "@internationalized/date";
+import { useForm, useWatch } from "react-hook-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
+import { DateRangePicker } from "@/components/ui/form-input";
+import type { DateRange } from "@/components/ui/form-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminTabs } from "@/components/ui/admin-tabs";
 import { DashboardMetricCard } from "@/components/admin/dashboard-card";
 import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
+import { getCurrentMonthRange, isWithinDateRange } from "@/lib/date-range";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { CheckCircle2, Clock3, Receipt, XCircle } from "lucide-react";
@@ -46,6 +51,10 @@ interface MemberTransactionsResponse {
   }>;
 }
 
+interface TransactionFiltersForm {
+  transactionDateRange: DateRange;
+}
+
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
@@ -55,6 +64,22 @@ const currency = new Intl.NumberFormat("en-NG", {
 export default function PaymentsPage() {
   const payments = useApi<PaymentsResponse>("/payments");
   const transactions = useApi<MemberTransactionsResponse>("/transactions");
+  const currentMonthRange = useMemo(() => getCurrentMonthRange(), []);
+  const { control: filtersControl } = useForm<TransactionFiltersForm>({
+    defaultValues: {
+      transactionDateRange: {
+        start: parseDate(currentMonthRange.from),
+        end: parseDate(currentMonthRange.to),
+      },
+    },
+  });
+  const selectedDateRange = useWatch({
+    control: filtersControl,
+    name: "transactionDateRange",
+  });
+  const startDate =
+    selectedDateRange?.start?.toString() ?? currentMonthRange.from;
+  const endDate = selectedDateRange?.end?.toString() ?? currentMonthRange.to;
   const [tab, setTab] = useState<"requests" | "transactions">("requests");
   const [selectedProof, setSelectedProof] =
     useState<PaymentsResponse["items"][number] | null>(null);
@@ -71,11 +96,22 @@ export default function PaymentsPage() {
   const paymentRows = payments.data?.items ?? [];
   const pendingPayments = paymentRows.filter((item) => item.status === "PENDING");
   const processedPayments = paymentRows.filter((item) => item.status !== "PENDING");
+  const visibleProcessedPayments = processedPayments.filter((item) =>
+    isWithinDateRange(item.createdAt, startDate, endDate),
+  );
   const approvedPayments = paymentRows.filter((item) => item.status === "APPROVED");
   const rejectedPayments = paymentRows.filter((item) => item.status === "REJECTED");
   const pendingAmount = pendingPayments.reduce(
     (sum, item) => sum + Number(item.amount ?? 0),
     0,
+  );
+  const dateRangeToolbar = (
+    <DateRangePicker
+      className="w-full"
+      control={filtersControl}
+      label=""
+      name="transactionDateRange"
+    />
   );
 
   async function approve(id: string) {
@@ -307,12 +343,13 @@ export default function PaymentsPage() {
                 sortValue: (item) => new Date(item.createdAt),
               },
             ]}
-            data={processedPayments}
+            data={visibleProcessedPayments}
             emptyDescription={
               transactions.error || "No payment transactions found."
             }
             getRowKey={(item) => item.id}
             loading={payments.loading || transactions.loading}
+            toolbar={dateRangeToolbar}
             onRowClick={(item) =>
               setSelectedReceipt({
                 title: "Payment Transaction",

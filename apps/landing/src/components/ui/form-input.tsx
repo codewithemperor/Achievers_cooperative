@@ -147,7 +147,7 @@ export function PasswordInput<T extends FieldValues>({
           isRequired={isRequired}
           isInvalid={!!error}
         >
-          <Label>{label}</Label>
+          {label ? <Label>{label}</Label> : null}
           <InputGroup>
             {startContent && (
               <InputGroup.Prefix>{startContent}</InputGroup.Prefix>

@@ -244,7 +244,7 @@ export class MembersService {
       this.prisma.transaction.findMany({
         where: { walletId: member.wallet.id },
         orderBy: { createdAt: 'desc' },
-        take: 10,
+        take: 5,
       }),
       this.prisma.payment.findMany({
         where: {
@@ -308,7 +308,7 @@ export class MembersService {
       })),
     ]
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, 10);
+      .slice(0, 5);
 
     return {
       profile: {

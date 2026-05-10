@@ -14,6 +14,14 @@ export class QueryTransactionsDto {
 
   @IsOptional()
   limit?: number = 20;
+
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @IsOptional()
+  @IsString()
+  to?: string;
 }
 
 export class UpdateTransactionDto {

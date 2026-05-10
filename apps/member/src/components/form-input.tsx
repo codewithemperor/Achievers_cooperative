@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Controller, Control, FieldValues, Path } from "react-hook-form";
 import type { DateValue, TimeValue } from "@heroui/react";
 import {
@@ -244,6 +244,8 @@ export function NumberInput<T extends FieldValues>({
   className,
   description,
 }: NumberInputProps<T>) {
+  const [draftValue, setDraftValue] = useState<string | null>(null);
+
   return (
     <Controller
       control={control}
@@ -259,13 +261,16 @@ export function NumberInput<T extends FieldValues>({
           step={step}
           formatOptions={formatOptions}
           value={
-            field.value === undefined ||
-            field.value === null ||
-            Number.isNaN(field.value)
+            draftValue !== null
               ? undefined
-              : field.value
+              : field.value === undefined ||
+                  field.value === null ||
+                  Number.isNaN(field.value)
+                ? undefined
+                : field.value
           }
           onChange={(val) => {
+            if (draftValue !== null) return;
             field.onChange(Number.isNaN(val) ? undefined : val);
           }}
         >
@@ -275,6 +280,24 @@ export function NumberInput<T extends FieldValues>({
             <NumberField.Input
               placeholder={placeholder}
               className="h-full flex-1 bg-transparent px-0 focus:outline-none"
+              value={
+                draftValue ??
+                (field.value === undefined ||
+                field.value === null ||
+                Number.isNaN(field.value)
+                  ? ""
+                  : String(field.value))
+              }
+              onChange={(event) => {
+                const value = event.target.value;
+                setDraftValue(value);
+                const numeric = Number(value.replace(/,/g, ""));
+                field.onChange(value === "" || Number.isNaN(numeric) ? undefined : numeric);
+              }}
+              onBlur={() => {
+                setDraftValue(null);
+                field.onBlur();
+              }}
             />
             <NumberField.IncrementButton className="h-full px-2" />
           </NumberField.Group>
@@ -381,11 +404,7 @@ export function DatePickerInput<T extends FieldValues>({
       control={control}
       name={name}
       render={({ field, fieldState: { error } }) => (
-        <div
-          className={`${fieldShellClass} ${
-            className ?? ""
-          }`}
-        >
+        <div className={`${fieldShellClass} ${className ?? ""}`}>
           <DatePicker
             className="w-full"
             isDisabled={isDisabled}
@@ -397,7 +416,9 @@ export function DatePickerInput<T extends FieldValues>({
             value={(field.value as DateValue | null | undefined) ?? null}
             onChange={(val) => field.onChange(val)}
           >
-            <Label className="block text-sm font-medium">{label}</Label>
+            {label ? (
+              <Label className="block text-sm font-medium">{label}</Label>
+            ) : null}
             <DateField.Group fullWidth>
               <DateField.Input className="flex min-h-12 w-full items-center">
                 {(segment) => (
@@ -478,11 +499,7 @@ export function DateRangePickerInput<T extends FieldValues>({
       control={control}
       name={name}
       render={({ field, fieldState: { error } }) => (
-        <div
-          className={`${fieldShellClass} ${
-            className ?? ""
-          }`}
-        >
+        <div className={`${className ?? ""}`}>
           <DateRangePicker
             className="w-full"
             isDisabled={isDisabled}
@@ -593,11 +610,7 @@ export function TimeFieldInput<T extends FieldValues>({
       control={control}
       name={name}
       render={({ field, fieldState: { error } }) => (
-        <div
-          className={`${fieldShellClass} ${
-            className ?? ""
-          }`}
-        >
+        <div className={`${fieldShellClass} ${className ?? ""}`}>
           <TimeField
             className="w-full"
             isDisabled={isDisabled}

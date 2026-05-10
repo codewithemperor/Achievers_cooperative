@@ -327,8 +327,8 @@ export default function DashboardPage() {
 
       {/* Association Account */}
       {cooperativeAccounts.length ? (
-        <section className="px-5">
-          <div className="rounded-[26px] border border-background-200 bg-white/92 p-4 dark:border-white/10 dark:bg-background-100">
+        <section className="px-2 -mt-4">
+          <div className="">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-400">

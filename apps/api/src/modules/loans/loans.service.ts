@@ -117,7 +117,7 @@ export class LoansService {
 
   // ─── List loans ────────────────────────────────────────────────────
   async findAll(userId: string, query: QueryLoansDto) {
-    const { status } = query;
+    const { status, from, to } = query;
     const { page, limit, skip } = normalizePagination(query);
 
     let memberId: string | undefined;
@@ -130,6 +130,12 @@ export class LoansService {
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (memberId) where.memberId = memberId;
+    if (from || to) {
+      where.submittedAt = {
+        ...(from && { gte: new Date(from) }),
+        ...(to && { lte: new Date(to) }),
+      };
+    }
 
     // Check for overdue loans and update statuses
     await this.updateOverdueLoans();
@@ -163,15 +169,7 @@ export class LoansService {
         amountPaidSoFar: this.shouldExposeRemainingBalance(l.status)
           ? Math.max(Number(l.amount) - Number(l.remainingBalance), 0)
           : 0,
-        repaymentProgress:
-          Number(l.amount) > 0 && this.shouldExposeRemainingBalance(l.status)
-            ? Math.min(
-                (Math.max(Number(l.amount) - Number(l.remainingBalance), 0) / Number(l.amount)) * 100,
-                100,
-              )
-            : l.status === 'COMPLETED'
-              ? 100
-              : 0,
+        repaymentProgress: this.calculateRepaymentProgress(l),
         canEdit: l.status === 'PENDING',
         canDelete: l.status === 'PENDING',
       })),
@@ -214,7 +212,7 @@ export class LoansService {
     const amount = Number(loan.amount);
     const remainingBalance = this.shouldExposeRemainingBalance(loan.status) ? Number(loan.remainingBalance) : 0;
     const amountPaidSoFar = this.shouldExposeRemainingBalance(loan.status) ? Math.max(amount - Number(loan.remainingBalance), 0) : 0;
-    const repaymentProgress = amount > 0 ? Math.min((amountPaidSoFar / amount) * 100, 100) : 0;
+    const repaymentProgress = this.calculateRepaymentProgress(loan);
     const installmentAmount = loan.tenorMonths > 0 ? amount / loan.tenorMonths : amount;
     const paymentSchedule = Array.from({ length: Math.max(loan.tenorMonths, 1) }).map((_, index) => {
       const anchorDate = loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt;
@@ -278,6 +276,7 @@ export class LoansService {
     });
     if (!loan) throw new NotFoundException('Loan application not found');
     if (loan.status !== 'PENDING') throw new BadRequestException('Only pending loan applications can be approved.');
+    await this.assertAssociationCanFundLoan(Number(loan.amount), 'approve');
 
     const updated = await this.prisma.loanApplication.update({
       where: { id },
@@ -346,6 +345,7 @@ export class LoansService {
     });
     if (!loan) throw new NotFoundException('Loan application not found');
     if (loan.status !== 'APPROVED') throw new BadRequestException('Loan must be approved before it can be disbursed.');
+    await this.assertAssociationCanFundLoan(Number(loan.amount), 'disburse');
 
     // Compute dueDate: approvedAt + tenorMonths
     const dueDate = this.addTenorStep(new Date(), ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, loan.tenorMonths);
@@ -465,14 +465,13 @@ export class LoansService {
     const updated = await this.prisma.loanApplication.update({
       where: { id },
       data: {
-        guarantorOneId: dto.guarantorOneId || null,
-        guarantorTwoId: dto.guarantorTwoId || null,
-        amount: dto.amount,
-        tenorMonths: dto.tenorMonths,
+        ...(dto.guarantorOneId !== undefined && { guarantorOneId: dto.guarantorOneId || null }),
+        ...(dto.guarantorTwoId !== undefined && { guarantorTwoId: dto.guarantorTwoId || null }),
+        ...(dto.amount !== undefined && { amount: dto.amount, remainingBalance: dto.amount }),
+        ...(dto.tenorMonths !== undefined && { tenorMonths: dto.tenorMonths }),
         tenorUnit: dto.tenorUnit ?? (loan as any).tenorUnit ?? 'MONTHS',
-        purpose: dto.purpose,
-        remainingBalance: dto.amount,
-        bankAccountId: dto.bankAccountId || null,
+        ...(dto.purpose !== undefined && { purpose: dto.purpose }),
+        ...(dto.bankAccountId !== undefined && { bankAccountId: dto.bankAccountId || null }),
       } as any,
     });
 
@@ -616,6 +615,26 @@ export class LoansService {
     return ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(status);
   }
 
+  private calculateRepaymentProgress(loan: Pick<LoanLike, 'amount' | 'remainingBalance' | 'status'>) {
+    const amount = Number(loan.amount);
+    const remaining = Number(loan.remainingBalance);
+    if (amount <= 0 || !this.shouldExposeRemainingBalance(loan.status)) return 0;
+    if (loan.status === 'COMPLETED' || remaining <= 0) return 100;
+    const paid = Math.max(amount - remaining, 0);
+    const raw = Math.min((paid / amount) * 100, 99.9);
+    return Math.round(raw * 10) / 10;
+  }
+
+  private async assertAssociationCanFundLoan(amount: number, action: 'approve' | 'disburse') {
+    const wallet = await this.financialPosting.ensureWallet();
+    const available = Number((wallet as any).associationAvailableBalance ?? wallet.balance ?? 0);
+    if (available < amount) {
+      throw new BadRequestException(
+        `Association balance is not sufficient to ${action} this loan. Available balance: ₦${available.toLocaleString()}.`,
+      );
+    }
+  }
+
   private buildTimeline(
     loan: LoanLike,
     relatedTransactions: Array<{ type: string; status: string; createdAt: Date; amount: any; reference?: string | null }>,
@@ -684,7 +703,9 @@ export class LoansService {
         reference: item.reference,
       }));
 
-    return [...baseTimeline, ...repayments];
+    const withoutCompletion = baseTimeline.filter((item) => item.label !== 'Completed');
+    const completion = baseTimeline.find((item) => item.label === 'Completed');
+    return completion ? [...withoutCompletion, ...repayments, completion] : [...withoutCompletion, ...repayments];
   }
 
   private addTenorStep(date: Date, tenorUnit: LoanTenorUnit, steps: number) {

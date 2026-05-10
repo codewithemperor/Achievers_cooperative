@@ -18,12 +18,18 @@ export class TransactionsService {
   ) {}
 
   async findAll(query: QueryTransactionsDto) {
-    const { status, type } = query;
+    const { status, type, from, to } = query;
     const { page, limit, skip } = normalizePagination(query);
 
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (type) where.type = type;
+    if (from || to) {
+      where.createdAt = {
+        ...(from && { gte: new Date(from) }),
+        ...(to && { lte: new Date(to) }),
+      };
+    }
 
     const [items, total, pending, summaryRows] = await Promise.all([
       this.prisma.transaction.findMany({

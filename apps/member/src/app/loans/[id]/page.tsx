@@ -53,6 +53,18 @@ function formatDate(date?: string | null) {
   });
 }
 
+function formatDateTime(date?: string | null) {
+  if (!date) return "-";
+  return new Date(date).toLocaleString("en-NG", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function label(status: string) {
   return status.replaceAll("_", " ");
 }
@@ -206,19 +218,19 @@ export default function LoanDetailPage() {
       <section
         className={`rounded-3xl border p-5 ${
           isActiveLoan
-            ? "border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10"
+            ? "border-[#5b0b12]/20 bg-gradient-to-br from-[#7a0d16] via-[#5d0910] to-[#340407] text-white shadow-[0_20px_48px_rgba(91,11,18,0.22)] dark:border-red-500/30"
             : "border-background-200 bg-white dark:border-background-200 dark:bg-background-100"
         }`}
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-400">
+            <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isActiveLoan ? "text-white/65" : "text-text-400"}`}>
               Loan details
             </p>
-            <h1 className="mt-1 font-display text-2xl font-semibold text-text-900 dark:text-text-50">
+            <h1 className={`mt-1 font-display text-2xl font-semibold ${isActiveLoan ? "text-white" : "text-text-900 dark:text-text-50"}`}>
               {loan.purpose}
             </h1>
-            <p className="mt-1 text-sm text-text-400">
+            <p className={`mt-1 text-sm ${isActiveLoan ? "text-white/70" : "text-text-400"}`}>
               Submitted {formatDate(loan.submittedAt)}
             </p>
           </div>
@@ -230,15 +242,15 @@ export default function LoanDetailPage() {
         </div>
 
         <div className="mt-5">
-          <div className="flex items-center justify-between text-xs text-text-400">
+          <div className={`flex items-center justify-between text-xs ${isActiveLoan ? "text-white/70" : "text-text-400"}`}>
             <span>Repayment progress</span>
-            <span className="font-semibold text-text-700 dark:text-text-100">
-              {progress.toFixed(0)}%
+            <span className={`font-semibold ${isActiveLoan ? "text-white" : "text-text-700 dark:text-text-100"}`}>
+              {progress >= 100 ? "100" : progress.toFixed(1)}%
             </span>
           </div>
-          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-background-200 dark:bg-background-200">
+          <div className={`mt-2 h-2.5 overflow-hidden rounded-full ${isActiveLoan ? "bg-white/25" : "bg-background-200 dark:bg-background-200"}`}>
             <div
-              className="h-full rounded-full bg-primary-600 transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${isActiveLoan ? "bg-white" : "bg-primary-600"}`}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -261,7 +273,7 @@ export default function LoanDetailPage() {
               />
               <DetailRow label="Due date" value={formatDate(loan.dueDate)} />
               <DetailRow label="Applied on" value={formatDate(loan.submittedAt)} />
-              <DetailRow label="Progress" value={`${progress.toFixed(0)}%`} />
+              <DetailRow label="Progress" value={`${progress >= 100 ? "100" : progress.toFixed(1)}%`} />
             </div>
           </section>
 
@@ -310,7 +322,7 @@ export default function LoanDetailPage() {
                           {label(event.status)}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs text-text-400">{formatDate(event.date)}</p>
+                      <p className="mt-1 text-xs text-text-400">{formatDateTime(event.date)}</p>
                       {typeof event.amount === "number" ? (
                         <p className="mt-1 text-xs text-text-500">{money.format(event.amount)}</p>
                       ) : null}

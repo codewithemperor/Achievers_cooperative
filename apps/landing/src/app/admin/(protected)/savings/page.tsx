@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { parseDate } from "@internationalized/date";
+import { useForm, useWatch } from "react-hook-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
+import { DateRangePicker } from "@/components/ui/form-input";
+import type { DateRange } from "@/components/ui/form-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { AdminTabs } from "@/components/ui/admin-tabs";
@@ -11,6 +15,7 @@ import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-
 import { useApi } from "@/hooks/useApi";
 import { Clock3, PiggyBank, Receipt, Wallet } from "lucide-react";
 import api from "@/lib/api";
+import { getCurrentMonthRange, isWithinDateRange } from "@/lib/date-range";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 interface SavingsSummary {
@@ -58,6 +63,10 @@ interface SavingsWithdrawalsResponse {
   }>;
 }
 
+interface TransactionFiltersForm {
+  transactionDateRange: DateRange;
+}
+
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
@@ -80,6 +89,22 @@ export default function SavingsPage() {
     useApi<SavingsTransactionsResponse>("/savings/transactions");
   const withdrawals =
     useApi<SavingsWithdrawalsResponse>("/savings/withdrawals");
+  const currentMonthRange = useMemo(() => getCurrentMonthRange(), []);
+  const { control: filtersControl } = useForm<TransactionFiltersForm>({
+    defaultValues: {
+      transactionDateRange: {
+        start: parseDate(currentMonthRange.from),
+        end: parseDate(currentMonthRange.to),
+      },
+    },
+  });
+  const selectedDateRange = useWatch({
+    control: filtersControl,
+    name: "transactionDateRange",
+  });
+  const startDate =
+    selectedDateRange?.start?.toString() ?? currentMonthRange.from;
+  const endDate = selectedDateRange?.end?.toString() ?? currentMonthRange.to;
   const [selectedReceipt, setSelectedReceipt] = useState<{
     title: string;
     amount: number;
@@ -114,6 +139,17 @@ export default function SavingsPage() {
   ].sort(
     (a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  const visibleSavingsTransactionRows = savingsTransactionRows.filter((item) =>
+    isWithinDateRange(item.createdAt, startDate, endDate),
+  );
+  const dateRangeToolbar = (
+    <DateRangePicker
+      className="w-full"
+      control={filtersControl}
+      label=""
+      name="transactionDateRange"
+    />
   );
   const pendingWithdrawalAmount = pendingWithdrawals.reduce(
     (sum, item) => sum + Number(item.amount ?? 0),
@@ -220,11 +256,12 @@ export default function SavingsPage() {
                 new Date(item.createdAt).toLocaleDateString("en-NG"),
             },
           ]}
-          data={savingsTransactionRows}
+          data={visibleSavingsTransactionRows}
           emptyDescription={
             transactions.error || "No savings transactions available yet."
           }
           loading={transactions.loading || withdrawals.loading}
+          toolbar={dateRangeToolbar}
           onRowClick={(item) =>
             setSelectedReceipt({
               title:

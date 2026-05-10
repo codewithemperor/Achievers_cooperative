@@ -38,6 +38,16 @@ interface LoanItem {
     accountNumber: string;
     accountName: string;
   } | null;
+  guarantorOne?: {
+    id: string;
+    fullName: string;
+    membershipNumber: string;
+  } | null;
+  guarantorTwo?: {
+    id: string;
+    fullName: string;
+    membershipNumber: string;
+  } | null;
 }
 
 interface LoansPayload {
@@ -120,8 +130,8 @@ export default function LoansPage() {
   const { control, handleSubmit, reset, watch } = useForm<LoanFormValues>({
     resolver: zodResolver(loanSchema),
     defaultValues: {
-      amount: 0,
-      tenorMonths: 0,
+      amount: undefined as unknown as number,
+      tenorMonths: undefined as unknown as number,
       tenorUnit: "MONTHS",
       purpose: "",
       guarantorOneId: "",
@@ -197,8 +207,8 @@ export default function LoansPage() {
   function openCreateModal() {
     setEditingLoan(null);
     reset({
-      amount: 0,
-      tenorMonths: 0,
+      amount: undefined as unknown as number,
+      tenorMonths: undefined as unknown as number,
       tenorUnit: "MONTHS",
       purpose: "",
       guarantorOneId: "",
@@ -215,8 +225,8 @@ export default function LoansPage() {
       tenorMonths: loan.tenorMonths,
       tenorUnit: loan.tenorUnit ?? "MONTHS",
       purpose: loan.purpose,
-      guarantorOneId: "",
-      guarantorTwoId: "",
+      guarantorOneId: loan.guarantorOne?.id ?? "",
+      guarantorTwoId: loan.guarantorTwo?.id ?? "",
       bankAccountId: loan.bankAccount?.id ?? defaultBankAccountId,
     });
     setIsLoanModalOpen(true);

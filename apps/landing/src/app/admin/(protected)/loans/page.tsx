@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useMemo, useState } from "react";
+import { parseDate } from "@internationalized/date";
+import { useForm, useWatch } from "react-hook-form";
 import { Autocomplete, ListBox } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -9,11 +10,14 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminModal } from "@/components/ui/admin-modal";
 import {
   NumberInput,
+  DateRangePicker,
   SelectInput,
   TextareaInput,
 } from "@/components/ui/form-input";
+import type { DateRange } from "@/components/ui/form-input";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
+import { getCurrentMonthRange, toIsoBoundary } from "@/lib/date-range";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { Banknote, CheckCircle2, Clock3, Plus, Wallet } from "lucide-react";
 import { DashboardMetricCard } from "@/components/admin/dashboard-card";
@@ -37,6 +41,7 @@ interface LoansResponse {
     tenorUnit?: "MONTHS" | "WEEKS";
     purpose: string;
     status: string;
+    submittedAt: string;
     dueDate?: string | null;
     disbursedAt?: string | null;
     bankAccount?: BankAccountInfo | null;
@@ -62,6 +67,10 @@ interface MemberSearchResponse {
     email: string;
     phoneNumber: string;
   }>;
+}
+
+interface TransactionFiltersForm {
+  transactionDateRange: DateRange;
 }
 
 const currency = new Intl.NumberFormat("en-NG", {
@@ -92,7 +101,27 @@ function variantForLoan(status: string) {
 }
 
 export default function LoansPage() {
-  const loans = useApi<LoansResponse>("/loans");
+  const currentMonthRange = useMemo(() => getCurrentMonthRange(), []);
+  const { control: filtersControl } = useForm<TransactionFiltersForm>({
+    defaultValues: {
+      transactionDateRange: {
+        start: parseDate(currentMonthRange.from),
+        end: parseDate(currentMonthRange.to),
+      },
+    },
+  });
+  const selectedDateRange = useWatch({
+    control: filtersControl,
+    name: "transactionDateRange",
+  });
+  const startDate =
+    selectedDateRange?.start?.toString() ?? currentMonthRange.from;
+  const endDate = selectedDateRange?.end?.toString() ?? currentMonthRange.to;
+  const rangeQuery = `from=${encodeURIComponent(
+    toIsoBoundary(startDate, "start"),
+  )}&to=${encodeURIComponent(toIsoBoundary(endDate, "end"))}`;
+  const allLoans = useApi<LoansResponse>("/loans");
+  const loans = useApi<LoansResponse>(`/loans?${rangeQuery}`);
   const members = useApi<MemberSearchResponse>("/members/search");
   const [submitting, setSubmitting] = useState(false);
   const [memberBankAccounts, setMemberBankAccounts] = useState<BankAccountInfo[]>([]);
@@ -122,11 +151,20 @@ export default function LoansPage() {
   const selectedGuarantorOneId = watch("guarantorOneId");
   const selectedGuarantorTwoId = watch("guarantorTwoId");
   const loanRows = loans.data?.items ?? [];
-  const pendingLoans = loanRows.filter((item) => item.status === "PENDING");
-  const activeLoans = loanRows.filter((item) =>
+  const allLoanRows = allLoans.data?.items ?? [];
+  const dateRangeToolbar = (
+    <DateRangePicker
+      className="w-full"
+      control={filtersControl}
+      label=""
+      name="transactionDateRange"
+    />
+  );
+  const pendingLoans = allLoanRows.filter((item) => item.status === "PENDING");
+  const activeLoans = allLoanRows.filter((item) =>
     ["APPROVED", "DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(item.status),
   );
-  const completedLoans = loanRows.filter((item) => item.status === "COMPLETED");
+  const completedLoans = allLoanRows.filter((item) => item.status === "COMPLETED");
   const activeAmount = activeLoans.reduce(
     (sum, item) => sum + Number(item.remainingBalance ?? item.amount ?? 0),
     0,
@@ -394,12 +432,6 @@ export default function LoansPage() {
                 <span className="font-semibold text-text-900">
                   {item.member.fullName}
                 </span>
-                {item.bankAccount ? (
-                  <p className="mt-1 text-xs text-text-400">
-                    Bank: {item.bankAccount.bankName} &mdash;{" "}
-                    {item.bankAccount.accountNumber}
-                  </p>
-                ) : null}
               </div>
             ),
           },
@@ -413,18 +445,6 @@ export default function LoansPage() {
             header: "Remaining",
             render: (item) =>
               currency.format(item.remainingBalance ?? item.amount),
-          },
-          {
-            key: "guarantors",
-            header: "Guarantors",
-            render: (item) => (
-              <div className="text-sm">
-                <p>{item.guarantorOne?.fullName || "None"}</p>
-                <p className="text-text-400">
-                  {item.guarantorTwo?.fullName || "None"}
-                </p>
-              </div>
-            ),
           },
           {
             key: "status",
@@ -458,6 +478,7 @@ export default function LoansPage() {
         data={loanRows}
         emptyDescription={loans.error || "No loans are available yet."}
         loading={loans.loading}
+        toolbar={dateRangeToolbar}
       />
     </div>
   );

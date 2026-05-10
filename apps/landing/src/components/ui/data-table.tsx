@@ -160,31 +160,22 @@ export function DataTable<T>({
     );
   }
 
-  if (!data.length) {
-    return (
-      <div className="rounded-2xl border border-dashed border-primary-900/18 bg-white/70 px-6 py-12 text-center dark:border-[var(--background-700)] dark:bg-[var(--background-900)]">
-        <h3 className="text-lg font-semibold text-text-900">{emptyTitle}</h3>
-        <p className="mt-2 text-sm text-text-400">{emptyDescription}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-2xl border border-primary-900/10 bg-white shadow-sm dark:border-[var(--background-800)] dark:bg-[var(--background-900)]">
-      <div className="flex flex-col gap-3 border-b border-primary-900/8 p-4 lg:flex-row lg:items-center lg:justify-between dark:border-[var(--background-800)]">
-        <div className="relative w-full lg:max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-400" />
-          <input
-            className="min-h-11 w-full rounded-2xl border border-primary-900/10 bg-background-50 pl-9 pr-4 text-sm text-text-900 outline-none transition focus:border-primary-500 focus:bg-white dark:border-[var(--background-700)] dark:bg-[var(--background-800)] dark:text-text-50 dark:focus:bg-[var(--background-800)]"
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={searchPlaceholder}
-            value={search}
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <div className="space-y-1.5 border-b border-primary-900/8 p-3 sm:p-4 md:flex md:items-center md:gap-2 md:space-y-0 dark:border-[var(--background-800)]">
+        <div className="flex min-w-0 items-center gap-2 md:flex-1">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-400" />
+            <input
+              className="min-h-11 w-full rounded-2xl border border-primary-900/10 bg-background-50 pl-9 pr-4 text-sm text-text-900 outline-none transition focus:border-primary-500 focus:bg-white dark:border-[var(--background-700)] dark:bg-[var(--background-800)] dark:text-text-50 dark:focus:bg-[var(--background-800)]"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={searchPlaceholder}
+              value={search}
+            />
+          </div>
           {hasStatusColumn && statuses.length ? (
             <select
-              className="min-h-11 rounded-2xl border border-primary-900/10 bg-background-50 px-3 text-sm font-semibold text-text-700 outline-none transition focus:border-primary-500 focus:bg-white dark:border-[var(--background-700)] dark:bg-[var(--background-800)] dark:text-text-100"
+              className="min-h-11 max-w-[7.75rem] shrink-0 rounded-2xl border border-primary-900/10 bg-background-50 px-3 text-sm font-semibold text-text-700 outline-none transition focus:border-primary-500 focus:bg-white dark:border-[var(--background-700)] dark:bg-[var(--background-800)] dark:text-text-100 sm:max-w-none"
               onChange={(event) => setStatusFilter(event.target.value)}
               value={statusFilter}
             >
@@ -197,17 +188,26 @@ export function DataTable<T>({
             </select>
           ) : null}
           <select
-            className="min-h-11 rounded-2xl border border-primary-900/10 bg-background-50 px-3 text-sm font-semibold text-text-700 outline-none transition focus:border-primary-500 focus:bg-white dark:border-[var(--background-700)] dark:bg-[var(--background-800)] dark:text-text-100"
+            className="min-h-11 w-20 shrink-0 rounded-2xl border border-primary-900/10 bg-background-50 px-3 text-sm font-semibold text-text-700 outline-none transition focus:border-primary-500 focus:bg-white dark:border-[var(--background-700)] dark:bg-[var(--background-800)] dark:text-text-100"
             onChange={(event) => setPageSize(Number(event.target.value))}
             value={pageSize}
           >
-            <option value={10}>10 per page</option>
-            <option value={25}>25 per page</option>
-            <option value={50}>50 per page</option>
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
           </select>
-          {toolbar}
         </div>
+        {toolbar ? <div className="w-full md:w-[19rem]">{toolbar}</div> : null}
       </div>
+      {!data.length ? (
+        <div className="px-6 py-12 text-center">
+          <h3 className="text-lg font-semibold text-text-900 dark:text-text-50">
+            {emptyTitle}
+          </h3>
+          <p className="mt-2 text-sm text-text-400">{emptyDescription}</p>
+        </div>
+      ) : (
+        <>
       <div className="overflow-x-auto overflow-y-visible">
         <table className="min-w-full border-collapse text-left text-sm">
           <thead className="bg-[var(--primary-900)] text-white dark:bg-[var(--primary-950)]">
@@ -323,6 +323,8 @@ export function DataTable<T>({
           </button>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

@@ -199,12 +199,12 @@ export default function SavingsPage() {
           <Tabs.List aria-label="Savings activity tabs">
             <Tabs.Tab id="transactions">
               <Tabs.Separator />
-              Savings Transactions
+              Savings
               <Tabs.Indicator />
             </Tabs.Tab>
             <Tabs.Tab id="withdrawals">
               <Tabs.Separator />
-              Withdrawal Requests
+              Withdrawal
               <Tabs.Indicator />
             </Tabs.Tab>
           </Tabs.List>
@@ -252,7 +252,7 @@ export default function SavingsPage() {
           <div className="space-y-5">
             <div>
               <h2 className="text-xl font-semibold font-display tracking-tight text-text-900">
-                Withdrawal requests
+                Withdrawal transactions
               </h2>
               <p className="text-xs text-text-500">
                 Track all pending and processed savings withdrawals.

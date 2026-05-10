@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { parseDate } from "@internationalized/date";
+import { useForm, useWatch } from "react-hook-form";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { AdminTabs } from "@/components/ui/admin-tabs";
 import { DashboardMetricCard } from "@/components/admin/dashboard-card";
 import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
 import { DataTable } from "@/components/ui/data-table";
+import { DateRangePicker } from "@/components/ui/form-input";
+import type { DateRange } from "@/components/ui/form-input";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
+import { getCurrentMonthRange, isWithinDateRange } from "@/lib/date-range";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { CheckCircle2, Clock3, Send, Wallet } from "lucide-react";
 
@@ -52,6 +57,10 @@ interface MemberTransactionsResponse {
   }>;
 }
 
+interface TransactionFiltersForm {
+  transactionDateRange: DateRange;
+}
+
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
@@ -74,6 +83,22 @@ function formatDateTime(value?: string | null) {
 export default function WithdrawalsPage() {
   const withdrawals = useApi<WalletWithdrawalsResponse>("/wallet/withdrawals");
   const transactions = useApi<MemberTransactionsResponse>("/transactions");
+  const currentMonthRange = useMemo(() => getCurrentMonthRange(), []);
+  const { control: filtersControl } = useForm<TransactionFiltersForm>({
+    defaultValues: {
+      transactionDateRange: {
+        start: parseDate(currentMonthRange.from),
+        end: parseDate(currentMonthRange.to),
+      },
+    },
+  });
+  const selectedDateRange = useWatch({
+    control: filtersControl,
+    name: "transactionDateRange",
+  });
+  const startDate =
+    selectedDateRange?.start?.toString() ?? currentMonthRange.from;
+  const endDate = selectedDateRange?.end?.toString() ?? currentMonthRange.to;
   const [tab, setTab] = useState<"requests" | "transactions">("requests");
   const [selectedWithdrawal, setSelectedWithdrawal] =
     useState<WalletWithdrawalsResponse["items"][number] | null>(null);
@@ -81,6 +106,9 @@ export default function WithdrawalsPage() {
   const withdrawalRows = withdrawals.data?.items ?? [];
   const pendingWithdrawals = withdrawalRows.filter((item) => item.status === "PENDING");
   const processedWithdrawals = withdrawalRows.filter((item) => item.status !== "PENDING");
+  const visibleProcessedWithdrawals = processedWithdrawals.filter((item) =>
+    isWithinDateRange(item.createdAt, startDate, endDate),
+  );
   const approvedWithdrawals = withdrawalRows.filter((item) => item.status === "APPROVED");
   const disbursedWithdrawals = withdrawalRows.filter((item) =>
     ["DISBURSED", "COMPLETED"].includes(item.status),
@@ -88,6 +116,14 @@ export default function WithdrawalsPage() {
   const pendingAmount = pendingWithdrawals.reduce(
     (sum, item) => sum + Number(item.amount ?? 0),
     0,
+  );
+  const dateRangeToolbar = (
+    <DateRangePicker
+      className="w-full"
+      control={filtersControl}
+      label=""
+      name="transactionDateRange"
+    />
   );
 
   async function mutateWithdrawal(
@@ -347,12 +383,13 @@ export default function WithdrawalsPage() {
                 ),
               },
             ]}
-            data={processedWithdrawals}
+            data={visibleProcessedWithdrawals}
             emptyDescription={
               transactions.error || "No withdrawal transactions found."
             }
             getRowKey={(item) => item.id}
             loading={withdrawals.loading || transactions.loading}
+            toolbar={dateRangeToolbar}
             onRowClick={(item) => setSelectedWithdrawal(item)}
             searchableText={(item) =>
               `${item.member.fullName} ${item.member.membershipNumber} ${item.bankName} ${item.accountName} ${item.accountNumber} ${item.amount} ${item.status}`

@@ -56,9 +56,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         <Image
           src="/logo.jpeg"
           alt="Achievers Cooperative"
-          width={32}
-          height={32}
-          className="h-8 w-auto object-contain brightness-0 invert rounded-lg"
+          width={40}
+          height={40}
+          className="h-10 w-10 rounded-xl bg-white object-cover p-1 shadow-sm"
         />
         <span className="text-sm font-bold text-white tracking-tight">
           Achievers Cooperative

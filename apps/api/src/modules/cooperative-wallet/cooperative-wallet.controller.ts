@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -27,8 +27,8 @@ export class CooperativeWalletController {
 
   @Get('ledger')
   @ApiOperation({ summary: 'List immutable financial ledger entries' })
-  getLedgerEntries() {
-    return this.cooperativeWalletService.getLedgerEntries();
+  getLedgerEntries(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.cooperativeWalletService.getLedgerEntries({ from, to });
   }
 
   @Post('entries')

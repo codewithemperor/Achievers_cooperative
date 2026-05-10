@@ -10,16 +10,19 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Skeleton } from "@heroui/react";
-import { useForm } from "react-hook-form";
+import { parseDate } from "@internationalized/date";
+import { useForm, useWatch } from "react-hook-form";
 import { AdminModal } from "@/components/ui/admin-modal";
 import { AdminTabs } from "@/components/ui/admin-tabs";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   NumberInput,
+  DateRangePicker,
   TextInput,
   TextareaInput,
 } from "@/components/ui/form-input";
+import type { DateRange } from "@/components/ui/form-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
 import {
@@ -28,6 +31,7 @@ import {
 } from "@/components/admin/dashboard-card";
 import { useApi } from "@/hooks/useApi";
 import api from "@/lib/api";
+import { getCurrentMonthRange, toIsoBoundary } from "@/lib/date-range";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 interface MemberTransactionsResponse {
@@ -101,6 +105,10 @@ interface TreasuryEntryValues {
   category: string;
   description: string;
   reference: string;
+}
+
+interface TransactionFiltersForm {
+  transactionDateRange: DateRange;
 }
 
 interface EditTransactionValues {
@@ -215,10 +223,36 @@ export default function TransactionsPage() {
   const [selectedLedger, setSelectedLedger] = useState<
     TreasuryLedgerResponse["items"][number] | null
   >(null);
-  const memberTransactions =
+  const currentMonthRange = useMemo(() => getCurrentMonthRange(), []);
+  const { control: filtersControl } = useForm<TransactionFiltersForm>({
+    defaultValues: {
+      transactionDateRange: {
+        start: parseDate(currentMonthRange.from),
+        end: parseDate(currentMonthRange.to),
+      },
+    },
+  });
+  const selectedDateRange = useWatch({
+    control: filtersControl,
+    name: "transactionDateRange",
+  });
+  const startDate =
+    selectedDateRange?.start?.toString() ?? currentMonthRange.from;
+  const endDate = selectedDateRange?.end?.toString() ?? currentMonthRange.to;
+  const rangeQuery = `from=${encodeURIComponent(
+    toIsoBoundary(startDate, "start"),
+  )}&to=${encodeURIComponent(toIsoBoundary(endDate, "end"))}`;
+  const allMemberTransactions =
     useApi<MemberTransactionsResponse>("/transactions");
+  const memberTransactions =
+    useApi<MemberTransactionsResponse>(`/transactions?${rangeQuery}`);
   const wallet = useApi<TreasurySummary>("/wallet/cooperative");
-  const treasuryEntries = useApi<TreasuryLedgerResponse>("/wallet/cooperative/ledger");
+  const treasuryEntries = useApi<TreasuryLedgerResponse>(
+    `/wallet/cooperative/ledger?${rangeQuery}`,
+  );
+  const allTreasuryEntries = useApi<TreasuryLedgerResponse>(
+    "/wallet/cooperative/ledger",
+  );
   const [creatingEntry, setCreatingEntry] = useState(false);
   const { control, handleSubmit, reset, setValue, watch } =
     useForm<TreasuryEntryValues>({
@@ -235,22 +269,27 @@ export default function TransactionsPage() {
     () => treasuryEntries.data?.items ?? [],
     [treasuryEntries.data],
   );
+  const allTreasuryRows = useMemo(
+    () => allTreasuryEntries.data?.items ?? [],
+    [allTreasuryEntries.data],
+  );
   const transactionRows = useMemo(
     () => memberTransactions.data?.items ?? [],
     [memberTransactions.data],
   );
 
   const memberSummary = useMemo(() => {
-    if (memberTransactions.data?.summary) {
+    if (allMemberTransactions.data?.summary) {
       return {
-        total: memberTransactions.data.summary.total,
-        pending: memberTransactions.data.summary.pending,
-        totalCredits: memberTransactions.data.summary.approvedCredits,
-        totalDebits: memberTransactions.data.summary.approvedDebits,
+        total: allMemberTransactions.data.summary.total,
+        pending: allMemberTransactions.data.summary.pending,
+        totalCredits: allMemberTransactions.data.summary.approvedCredits,
+        totalDebits: allMemberTransactions.data.summary.approvedDebits,
       };
     }
 
-    const approvedRows = transactionRows.filter(
+    const globalTransactionRows = allMemberTransactions.data?.items ?? [];
+    const approvedRows = globalTransactionRows.filter(
       (item) => item.status === "APPROVED",
     );
     const totalCredits = approvedRows
@@ -261,13 +300,68 @@ export default function TransactionsPage() {
       .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
 
     return {
-      total: transactionRows.length,
-      pending: transactionRows.filter((item) => item.status === "PENDING")
+      total: globalTransactionRows.length,
+      pending: globalTransactionRows.filter((item) => item.status === "PENDING")
         .length,
       totalCredits,
       totalDebits,
     };
-  }, [memberTransactions.data?.summary, transactionRows]);
+  }, [allMemberTransactions.data]);
+
+  const dateRangeToolbar = (
+    <DateRangePicker
+      className="w-full"
+      control={filtersControl}
+      label=""
+      name="transactionDateRange"
+    />
+  );
+
+  const ledgerDerivedTreasurySummary = useMemo(() => {
+    const signedAccountTotal = (account: string) =>
+      allTreasuryRows.reduce((sum, entry) => {
+        const entryTotal = entry.lines
+          .filter((line) => line.account === account)
+          .reduce((lineSum, line) => {
+            const amount = Number(line.amount ?? 0);
+            return lineSum + (line.direction === "DEBIT" ? amount : -amount);
+          }, 0);
+        return sum + entryTotal;
+      }, 0);
+
+    const physicalTreasuryCash = signedAccountTotal(
+      "PHYSICAL_TREASURY_CASH",
+    );
+    const memberWalletLiability = -signedAccountTotal(
+      "MEMBER_WALLET_LIABILITY",
+    );
+    const associationAvailableBalance = -signedAccountTotal(
+      "ASSOCIATION_AVAILABLE",
+    );
+
+    return {
+      associationAvailableBalance,
+      memberWalletLiability,
+      physicalTreasuryCash,
+    };
+  }, [allTreasuryRows]);
+
+  const treasurySummary = {
+    physicalTreasuryCash:
+      wallet.data?.physicalTreasuryCash ||
+      wallet.data?.combinedHoldings ||
+      ledgerDerivedTreasurySummary.physicalTreasuryCash,
+    memberWalletLiability:
+      wallet.data?.memberWalletLiability ||
+      wallet.data?.memberWalletHoldings ||
+      ledgerDerivedTreasurySummary.memberWalletLiability,
+    associationAvailableBalance:
+      wallet.data?.associationAvailableBalance ||
+      wallet.data?.balance ||
+      ledgerDerivedTreasurySummary.associationAvailableBalance,
+    netTreasuryFlow:
+      (wallet.data?.totalIncome ?? 0) - (wallet.data?.totalExpense ?? 0),
+  };
 
   async function updateTransaction(id: string, values: EditTransactionValues) {
     try {
@@ -310,7 +404,7 @@ export default function TransactionsPage() {
     tab === "member" ? (
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <DashboardMetricCard
-          description="Member wallet transactions currently loaded."
+          description="All member wallet transactions recorded."
           href="/admin/transactions"
           icon={<CreditCard className="h-5 w-5" />}
           title="Member Transactions"
@@ -326,14 +420,14 @@ export default function TransactionsPage() {
           value={memberSummary.pending}
         />
         <DashboardMetricCard
-          description="Approved wallet credits in the current result set."
+          description="All approved wallet credits recorded."
           href="/admin/transactions"
           icon={<TrendingUp className="h-5 w-5" />}
           title="Approved Credits"
           value={currency.format(memberSummary.totalCredits)}
         />
         <DashboardMetricCard
-          description="Approved wallet debits in the current result set."
+          description="All approved wallet debits recorded."
           href="/admin/transactions"
           icon={<TrendingDown className="h-5 w-5" />}
           title="Approved Debits"
@@ -342,7 +436,7 @@ export default function TransactionsPage() {
       </div>
     ) : (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {wallet.loading ? (
+      {wallet.loading && allTreasuryEntries.loading ? (
         Array.from({ length: 4 }).map((_, index) => (
           <Skeleton key={index} className="h-32 rounded-[2rem]" />
         ))
@@ -354,21 +448,21 @@ export default function TransactionsPage() {
             icon={<CreditCard className="h-5 w-5" />}
             title="Treasury Cash"
             tone="green"
-            value={currency.format(wallet.data?.physicalTreasuryCash ?? wallet.data?.combinedHoldings ?? 0)}
+            value={currency.format(treasurySummary.physicalTreasuryCash)}
           />
           <DashboardMetricCard
             description="Member-owned wallet funds held by the association."
             href="/admin/transactions"
             icon={<CreditCard className="h-5 w-5" />}
             title="Member Wallet Liability"
-            value={currency.format(wallet.data?.memberWalletLiability ?? wallet.data?.memberWalletHoldings ?? 0)}
+            value={currency.format(treasurySummary.memberWalletLiability)}
           />
           <DashboardMetricCard
             description="Cooperative-owned funds available for loans and spending."
             href="/admin/transactions"
             icon={<TrendingUp className="h-5 w-5" />}
             title="Association Available"
-            value={currency.format(wallet.data?.associationAvailableBalance ?? wallet.data?.balance ?? 0)}
+            value={currency.format(treasurySummary.associationAvailableBalance)}
           />
           <DashboardMetricCard
             description="Total treasury income minus total treasury expense."
@@ -376,16 +470,11 @@ export default function TransactionsPage() {
             icon={<TrendingDown className="h-5 w-5" />}
             title="Net Treasury Flow"
             tone={
-              (wallet.data?.totalIncome ?? 0) -
-                (wallet.data?.totalExpense ?? 0) <
-              0
+              treasurySummary.netTreasuryFlow < 0
                 ? "red"
                 : "neutral"
             }
-            value={currency.format(
-              (wallet.data?.totalIncome ?? 0) -
-                (wallet.data?.totalExpense ?? 0),
-            )}
+            value={currency.format(treasurySummary.netTreasuryFlow)}
           />
         </>
       )}
@@ -484,68 +573,85 @@ export default function TransactionsPage() {
       {summaryCards}
 
       <DashboardPanel
-        title={tab === "treasury" ? "How Treasury Stats Are Calculated" : "How Member Transaction Stats Are Calculated"}
+        title="How Stats Are Calculated"
         subtitle={
           tab === "treasury"
-            ? "These cards come from the cooperative wallet summary endpoint, not from the visible ledger rows alone."
-            : "These cards come from the transaction API summary for the currently requested result set."
+            ? "Treasury cards use the cooperative wallet summary and ledger reconciliation."
+            : "Member transaction cards use the full transaction API summary. Table rows use the selected period."
         }
       >
-        {tab === "treasury" ? (
-          <div className="grid gap-3 text-sm text-text-500 dark:text-text-300 md:grid-cols-2">
-            <p>
-              <span className="font-semibold text-text-900 dark:text-text-50">
-                Treasury Cash:
-              </span>{" "}
-              physical money expected inside the association bank account.
-            </p>
-            <p>
-              <span className="font-semibold text-text-900 dark:text-text-50">
-                Member Wallet Liability:
-              </span>{" "}
-              member-owned wallet funds still held by the association.
-            </p>
-            <p>
-              <span className="font-semibold text-text-900 dark:text-text-50">
-                Association Available:
-              </span>{" "}
-              cooperative-owned funds available for loans and expenses.
-            </p>
-            <p>
-              <span className="font-semibold text-text-900 dark:text-text-50">
-                Net Treasury Flow:
-              </span>{" "}
-              total treasury income minus total treasury expense.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-3 text-sm text-text-500 dark:text-text-300 md:grid-cols-2">
-            <p>
-              <span className="font-semibold text-text-900 dark:text-text-50">
-                Member Transactions:
-              </span>{" "}
-              total transaction records returned by the API summary.
-            </p>
-            <p>
-              <span className="font-semibold text-text-900 dark:text-text-50">
-                Pending:
-              </span>{" "}
-              transactions still waiting for approval, settlement, or review.
-            </p>
-            <p>
-              <span className="font-semibold text-text-900 dark:text-text-50">
-                Approved Credits:
-              </span>{" "}
-              approved funding, credit, refund, and maturity transactions.
-            </p>
-            <p>
-              <span className="font-semibold text-text-900 dark:text-text-50">
-                Approved Debits:
-              </span>{" "}
-              approved deductions, withdrawals, and other debit transactions.
-            </p>
-          </div>
-        )}
+        <AdminModal
+          description="A detailed explanation of the active transaction statistics."
+          title={
+            tab === "treasury"
+              ? "Treasury Stats Calculation"
+              : "Member Transaction Stats Calculation"
+          }
+          trigger={
+            <button
+              className="text-sm font-semibold text-[var(--primary-700)] underline-offset-4 hover:underline dark:text-[var(--primary-300)]"
+              type="button"
+            >
+              View calculation details
+            </button>
+          }
+        >
+          {tab === "treasury" ? (
+            <div className="grid gap-3 text-sm text-text-500 dark:text-text-300 md:grid-cols-2">
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Treasury Cash:
+                </span>{" "}
+                physical money expected inside the association bank account.
+              </p>
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Member Wallet Liability:
+                </span>{" "}
+                member-owned wallet funds still held by the association.
+              </p>
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Association Available:
+                </span>{" "}
+                cooperative-owned funds available for loans and expenses.
+              </p>
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Net Treasury Flow:
+                </span>{" "}
+                total treasury income minus total treasury expense.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 text-sm text-text-500 dark:text-text-300 md:grid-cols-2">
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Member Transactions:
+                </span>{" "}
+                total transaction records returned by the full API summary.
+              </p>
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Pending:
+                </span>{" "}
+                transactions still waiting for approval, settlement, or review.
+              </p>
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Approved Credits:
+                </span>{" "}
+                all approved funding, credit, refund, and maturity transactions.
+              </p>
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Approved Debits:
+                </span>{" "}
+                all approved deductions, withdrawals, and other debit transactions.
+              </p>
+            </div>
+          )}
+        </AdminModal>
       </DashboardPanel>
 
       {tab === "member" ? (
@@ -655,6 +761,7 @@ export default function TransactionsPage() {
             `${item.wallet.member.fullName} ${item.wallet.member.membershipNumber} ${item.type} ${item.status} ${item.reference ?? ""} ${item.createdAt}`
           }
           searchPlaceholder="Search member transactions..."
+          toolbar={dateRangeToolbar}
         />
       ) : (
         <>
@@ -667,9 +774,6 @@ export default function TransactionsPage() {
                   <div>
                     <p className="font-semibold text-text-900">
                       {item.sourceType.replaceAll("_", " ")}
-                    </p>
-                    <p className="text-xs text-text-400">
-                      {item.reference || item.sourceId || "-"}
                     </p>
                   </div>
                 ),
@@ -712,6 +816,7 @@ export default function TransactionsPage() {
               `${item.sourceType} ${item.reference ?? ""} ${item.description} ${item.lines.map((line) => line.account).join(" ")}`
             }
             searchPlaceholder="Search treasury ledger..."
+            toolbar={dateRangeToolbar}
           />
         </>
       )}
