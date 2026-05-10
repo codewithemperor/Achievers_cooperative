@@ -22,6 +22,7 @@ const labels: Record<string, string> = {
   COOPERATIVE_DEDUCTION_AMOUNT: "Weekly Deduction Amount",
   COOPERATIVE_DEDUCTION_ENABLED: "Weekly Deduction Enabled",
   COOPERATIVE_DEDUCTION_LAST_RUN: "Last Deduction Run",
+  COOPERATIVE_DAILY_DEDUCTION_LAST_RUN: "Last Daily Deduction Run",
   COOPERATIVE_DEDUCTION_LAST_STATUS: "Last Deduction Status",
   COOPERATIVE_DEDUCTION_LAST_ERROR: "Last Deduction Error",
   COOPERATIVE_DEDUCTION_LAST_CHECKED_AT: "Last Deduction Check",
@@ -40,6 +41,8 @@ const descriptions: Record<string, string> = {
   COOPERATIVE_DEDUCTION_ENABLED:
     "Controls whether the backend auto-deduction service is allowed to run.",
   COOPERATIVE_DEDUCTION_LAST_RUN: "Managed by the backend auto-deduction flow.",
+  COOPERATIVE_DAILY_DEDUCTION_LAST_RUN:
+    "The last day the daily auto-deduction scan checked due loans, packages, and weekly deductions.",
   COOPERATIVE_DEDUCTION_LAST_STATUS:
     "The latest status recorded by the auto-deduction service.",
   COOPERATIVE_DEDUCTION_LAST_ERROR:
@@ -146,24 +149,24 @@ export default function SettingsPage() {
         }
       />
 
-      <section className="overflow-hidden rounded-[2rem] border border-[var(--primary-900)/8] bg-white">
+      <section className="overflow-hidden rounded-[2rem] border border-[var(--primary-900)/8] bg-white dark:border-[var(--background-800)] dark:bg-[var(--background-900)]">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-[var(--primary-900)/8]">
-            <thead className="bg-[rgba(245,240,232,0.7)]">
+            <thead className="bg-[var(--primary-900)] dark:bg-[var(--primary-950)]">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-text-400">
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
                   Key
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-text-400">
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
                   Value
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-text-400">
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
                   Description
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-text-400">
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
                   Updated
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.16em] text-text-400">
+                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
                   Action
                 </th>
               </tr>
@@ -173,6 +176,7 @@ export default function SettingsPage() {
                 const isTerms = item.key === "MEMBER_TERMS_HTML";
                 const isReadonly =
                   item.key === "COOPERATIVE_DEDUCTION_LAST_RUN" ||
+                  item.key === "COOPERATIVE_DAILY_DEDUCTION_LAST_RUN" ||
                   item.key === "COOPERATIVE_DEDUCTION_LAST_STATUS" ||
                   item.key === "COOPERATIVE_DEDUCTION_LAST_ERROR" ||
                   item.key === "COOPERATIVE_DEDUCTION_LAST_CHECKED_AT";
@@ -188,7 +192,9 @@ export default function SettingsPage() {
                       <p className="font-semibold text-text-900">
                         {labels[item.key] || item.key}
                       </p>
-                      <p className="mt-1 text-xs text-text-400">{item.key}</p>
+                      <p className="mt-1 max-w-[14rem] break-words text-xs text-text-400">
+                        {item.key}
+                      </p>
                     </td>
                     <td className="px-6 py-5 align-top">
                       <div className="max-w-xl break-words text-sm text-text-900">
@@ -196,7 +202,8 @@ export default function SettingsPage() {
                           <span
                             dangerouslySetInnerHTML={{ __html: item.value }}
                           />
-                        ) : item.key === "COOPERATIVE_DEDUCTION_LAST_RUN" &&
+                        ) : (item.key === "COOPERATIVE_DEDUCTION_LAST_RUN" ||
+                            item.key === "COOPERATIVE_DAILY_DEDUCTION_LAST_RUN") &&
                           !item.value ? (
                           "Never"
                         ) : (
@@ -251,7 +258,7 @@ export default function SettingsPage() {
                               />
                             ) : isDay ? (
                               <select
-                                className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm text-text-900 outline-none"
+                                className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] bg-white px-4 text-sm text-text-900 outline-none dark:border-[var(--background-700)] dark:bg-[var(--background-900)] dark:text-text-50"
                                 onChange={(event) =>
                                   setDraftValue(event.target.value)
                                 }
@@ -269,7 +276,7 @@ export default function SettingsPage() {
                               </select>
                             ) : isBoolean ? (
                               <select
-                                className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm text-text-900 outline-none"
+                                className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] bg-white px-4 text-sm text-text-900 outline-none dark:border-[var(--background-700)] dark:bg-[var(--background-900)] dark:text-text-50"
                                 onChange={(event) =>
                                   setDraftValue(event.target.value)
                                 }
@@ -290,7 +297,7 @@ export default function SettingsPage() {
                               </select>
                             ) : (
                               <input
-                                className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm text-text-900 outline-none"
+                                className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] bg-white px-4 text-sm text-text-900 outline-none dark:border-[var(--background-700)] dark:bg-[var(--background-900)] dark:text-text-50"
                                 onChange={(event) =>
                                   setDraftValue(event.target.value)
                                 }

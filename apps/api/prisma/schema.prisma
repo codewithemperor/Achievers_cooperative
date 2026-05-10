@@ -58,6 +58,17 @@ enum CooperativeEntryType {
   EXPENSE
 }
 
+enum FinancialAccountCode {
+  PHYSICAL_TREASURY_CASH
+  MEMBER_WALLET_LIABILITY
+  ASSOCIATION_AVAILABLE
+}
+
+enum FinancialLineDirection {
+  DEBIT
+  CREDIT
+}
+
 enum ApprovalStatus {
   PENDING
   APPROVED
@@ -102,6 +113,7 @@ model User {
   auditEvents            AuditEvent[] @relation("AuditActor")
   verifiedPayments       Payment[]   @relation("PaymentVerifier")
   cooperativeEntries     CooperativeEntry[]
+  financialLedgerEntries FinancialLedgerEntry[]
 }
 
 model Member {
@@ -138,6 +150,7 @@ model Member {
   guaranteedLoansOne    LoanApplication[]      @relation("LoanGuarantorOne")
   guaranteedLoansTwo    LoanApplication[]      @relation("LoanGuarantorTwo")
   bankAccounts          BankAccount[]
+  financialLedgerLines  FinancialLedgerLine[]
 }
 
 model Wallet {
@@ -363,6 +376,9 @@ model InvestmentCancellationRequest {
 model CooperativeWallet {
   id           String             @id @default(cuid())
   balance      Decimal            @default(0)
+  physicalTreasuryCash Decimal     @default(0)
+  memberWalletLiability Decimal    @default(0)
+  associationAvailableBalance Decimal @default(0)
   totalIncome  Decimal            @default(0)
   totalExpense Decimal            @default(0)
   createdAt    DateTime           @default(now())
@@ -398,4 +414,35 @@ model CooperativeEntry {
   createdAt   DateTime             @default(now())
   wallet      CooperativeWallet    @relation(fields: [walletId], references: [id])
   createdBy   User?                @relation(fields: [createdById], references: [id])
+}
+
+model FinancialLedgerEntry {
+  id          String                @id @default(cuid())
+  reference   String?               @unique
+  sourceType  String
+  sourceId    String?
+  description String
+  actorId     String?
+  createdAt   DateTime              @default(now())
+  metadata    Json?
+  actor       User?                 @relation(fields: [actorId], references: [id])
+  lines       FinancialLedgerLine[]
+
+  @@index([sourceType, sourceId])
+  @@index([createdAt])
+}
+
+model FinancialLedgerLine {
+  id        String                 @id @default(cuid())
+  entryId   String
+  account   FinancialAccountCode
+  direction FinancialLineDirection
+  amount    Decimal
+  memberId  String?
+  metadata  Json?
+  entry     FinancialLedgerEntry   @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  member    Member?                @relation(fields: [memberId], references: [id])
+
+  @@index([account])
+  @@index([memberId])
 }

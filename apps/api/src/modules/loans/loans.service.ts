@@ -8,6 +8,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { AuditService } from '../../common/services/audit.service';
+import { FinancialPostingService } from '../../common/services/financial-posting.service';
 import { ApplyLoanDto, QueryLoansDto, RepayLoanDto } from './dto/index';
 import type { LoanStatus, LoanTenorUnit } from '../../common/prisma-types';
 import { normalizePagination } from '../../common/pagination';
@@ -32,6 +33,7 @@ export class LoansService {
     private readonly walletService: WalletService,
     private readonly notifications: NotificationService,
     private readonly audit: AuditService,
+    private readonly financialPosting: FinancialPostingService,
   ) {}
 
   // ─── Apply for a loan ──────────────────────────────────────────────
@@ -352,32 +354,49 @@ export class LoansService {
     const reference = `LOAN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const wallet = await this.walletService.getMemberWallet(loan.memberId);
 
-    await this.prisma.transaction.create({
-      data: {
-        walletId: wallet.id,
-        type: 'LOAN_DISBURSEMENT',
-        amount: Number(loan.amount),
-        status: 'APPROVED',
-        reference,
-        category: 'loan disbursement',
-        description: `Loan disbursement for ${loan.member.fullName} (bank transfer — no wallet credit)`,
-        editable: false,
-        lockReason: 'Loan disbursement transactions are tied to loan records and cannot be edited.',
-        metadata: {
-          loanId: loan.id,
-          disbursedToBank: true,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.transaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'LOAN_DISBURSEMENT',
+          amount: Number(loan.amount),
+          status: 'APPROVED',
+          reference,
+          category: 'loan disbursement',
+          description: `Loan disbursement for ${loan.member.fullName} (bank transfer — no wallet credit)`,
+          editable: false,
+          lockReason: 'Loan disbursement transactions are tied to loan records and cannot be edited.',
+          metadata: {
+            loanId: loan.id,
+            disbursedToBank: true,
+          },
         },
-      },
-    });
+      });
 
-    const updated = await this.prisma.loanApplication.update({
-      where: { id },
-      data: {
-        status: 'DISBURSED',
-        disbursedAt: new Date(),
-        dueDate,
-        remainingBalance: loan.amount,
-      },
+      await this.financialPosting.postAssociationOutflow(
+        {
+          amount: Number(loan.amount),
+          reference,
+          sourceType: 'LoanApplication',
+          sourceId: loan.id,
+          description: `Loan disbursed to ${loan.member.fullName}`,
+          actorId,
+          memberId: loan.memberId,
+          category: 'loan disbursement',
+          enforceAvailable: true,
+        },
+        tx,
+      );
+
+      return tx.loanApplication.update({
+        where: { id },
+        data: {
+          status: 'DISBURSED',
+          disbursedAt: new Date(),
+          dueDate,
+          remainingBalance: loan.amount,
+        },
+      });
     });
 
     await this.audit.log(actorId, 'DISBURSE_LOAN', 'LoanApplication', id, {

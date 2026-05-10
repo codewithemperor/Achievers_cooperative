@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { AuditService } from '../../common/services/audit.service';
+import { FinancialPostingService } from '../../common/services/financial-posting.service';
 import { AdminWalletSpendDto, FundWalletDto, RequestWalletWithdrawalDto } from './dto/index';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class WalletsService {
     private readonly prisma: PrismaService,
     private readonly walletService: WalletService,
     private readonly audit: AuditService,
+    private readonly financialPosting: FinancialPostingService,
   ) {}
 
   async getMyWallet(userId: string) {
@@ -456,6 +458,18 @@ export class WalletsService {
           metadata: { withdrawalRequestId: id },
         },
       });
+      await this.financialPosting.postWalletWithdrawal(
+        {
+          memberId: request.memberId,
+          amount: Number(request.amount),
+          reference,
+          sourceType: 'WalletWithdrawalRequest',
+          sourceId: id,
+          description: `Wallet withdrawal disbursed to ${request.bankName} - ${request.accountNumber}`,
+          actorId,
+        },
+        tx,
+      );
       return (tx as any).walletWithdrawalRequest.update({
         where: { id },
         data: { status: 'DISBURSED', disbursedAt: new Date() },

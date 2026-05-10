@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import type { LoanTenorUnit, TransactionType } from '../prisma-types';
+import { FinancialPostingService } from './financial-posting.service';
 
 interface TransactionOptions {
   category?: string;
@@ -22,7 +23,10 @@ type SettlementRecord = {
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly financialPosting: FinancialPostingService,
+  ) {}
 
   async getMemberWallet(memberId: string) {
     let wallet = await this.prisma.wallet.findUnique({
@@ -56,15 +60,16 @@ export class WalletService {
   ) {
     const wallet = await this.getMemberWallet(memberId);
 
-    const [, transaction] = await this.prisma.$transaction([
-      this.prisma.wallet.update({
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      await tx.wallet.update({
         where: { id: wallet.id },
         data: {
           availableBalance: { increment: amount },
           totalFunded: { increment: amount },
         },
-      }),
-      this.prisma.transaction.create({
+      });
+
+      const transaction = await tx.transaction.create({
         data: {
           walletId: wallet.id,
           type,
@@ -77,8 +82,38 @@ export class WalletService {
           lockReason: options?.lockReason,
           metadata: options?.metadata as any,
         },
-      }),
-    ]);
+      });
+
+      if (type === 'WALLET_FUNDING' || type === 'FUNDING') {
+        await this.financialPosting.postWalletFunding(
+          {
+            memberId,
+            amount,
+            reference,
+            sourceType: 'Transaction',
+            sourceId: transaction.id,
+            description: options?.description || 'Member wallet funding',
+            category: options?.category,
+          } as any,
+          tx,
+        );
+      } else if (['INVESTMENT_CANCELLATION_REFUND', 'INVESTMENT_RETURN', 'ADMIN_REFUND'].includes(type)) {
+        await this.financialPosting.postAssociationToWallet(
+          {
+            memberId,
+            amount,
+            reference,
+            sourceType: 'Transaction',
+            sourceId: transaction.id,
+            description: options?.description || 'Association wallet credit',
+            category: options?.category,
+          },
+          tx,
+        );
+      }
+
+      return transaction;
+    });
 
     const settlements = await this.settleOutstandingObligations(memberId);
     const syncedWallet = await this.getMemberWallet(memberId);
@@ -112,15 +147,16 @@ export class WalletService {
       outstandingAmount,
     };
 
-    const [updatedWallet, transaction] = await this.prisma.$transaction([
-      this.prisma.wallet.update({
+    const { updatedWallet, transaction } = await this.prisma.$transaction(async (tx) => {
+      const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
         data: {
           availableBalance: { decrement: amount },
           pendingBalance: nextBalance < 0 ? Math.abs(nextBalance) : Number(wallet.pendingBalance),
         },
-      }),
-      this.prisma.transaction.create({
+      });
+
+      const transaction = await tx.transaction.create({
         data: {
           walletId: wallet.id,
           type,
@@ -133,8 +169,26 @@ export class WalletService {
           lockReason: options?.lockReason,
           metadata: metadata as any,
         },
-      }),
-    ]);
+      });
+
+      const postedAmount = status === 'APPROVED' ? amount : Math.max(amount - outstandingAmount, 0);
+      if (postedAmount > 0 && this.financialPosting.isAssociationIncomeTransaction(type)) {
+        await this.financialPosting.postWalletToAssociation(
+          {
+            memberId,
+            amount: postedAmount,
+            reference,
+            sourceType: 'Transaction',
+            sourceId: transaction.id,
+            description: options?.description || 'Wallet payment to association',
+            category: options?.category,
+          },
+          tx,
+        );
+      }
+
+      return { updatedWallet, transaction };
+    });
 
     return { wallet: updatedWallet, transaction };
   }
@@ -197,15 +251,32 @@ export class WalletService {
       const newlyCovered = currentOutstanding - nextOutstanding;
       coveredAmount -= newlyCovered;
 
-      const updated = await this.prisma.transaction.update({
-        where: { id: transaction.id },
-        data: {
-          status: nextOutstanding === 0 ? 'APPROVED' : 'PENDING',
-          metadata: {
-            ...((transaction.metadata as Record<string, unknown> | null) ?? {}),
-            outstandingAmount: nextOutstanding,
-          } as any,
-        },
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const updatedTransaction = await tx.transaction.update({
+          where: { id: transaction.id },
+          data: {
+            status: nextOutstanding === 0 ? 'APPROVED' : 'PENDING',
+            metadata: {
+              ...((transaction.metadata as Record<string, unknown> | null) ?? {}),
+              outstandingAmount: nextOutstanding,
+            } as any,
+          },
+        });
+
+        await this.financialPosting.postWalletToAssociation(
+          {
+            memberId: wallet.memberId,
+            amount: newlyCovered,
+            reference: `${transaction.reference ?? transaction.id}-SETTLED-${Date.now()}`,
+            sourceType: 'Transaction',
+            sourceId: transaction.id,
+            description: transaction.description || 'Settled pending wallet deduction',
+            category: transaction.category,
+          },
+          tx,
+        );
+
+        return updatedTransaction;
       });
 
       settledTransactions.push(updated);

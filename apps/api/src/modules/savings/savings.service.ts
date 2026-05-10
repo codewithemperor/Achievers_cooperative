@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { AuditService } from '../../common/services/audit.service';
+import { FinancialPostingService } from '../../common/services/financial-posting.service';
 import { ContributeSavingsDto, RequestSavingsWithdrawalDto } from './dto/index';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class SavingsService {
     private readonly prisma: PrismaService,
     private readonly walletService: WalletService,
     private readonly audit: AuditService,
+    private readonly financialPosting: FinancialPostingService,
   ) {}
 
   async getMySavings(userId: string) {
@@ -198,6 +200,7 @@ export class SavingsService {
       throw new BadRequestException('Member savings balance is no longer sufficient for this withdrawal request.');
     }
 
+    const reference = `SAVINGS-WD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.savingsAccount.update({
         where: { id: request.savingsAccountId },
@@ -205,6 +208,20 @@ export class SavingsService {
           balance: { decrement: request.amount },
         },
       });
+
+      await this.financialPosting.postAssociationOutflow(
+        {
+          amount: Number(request.amount),
+          reference,
+          sourceType: 'SavingsWithdrawalRequest',
+          sourceId: id,
+          description: `Savings withdrawal approved for ${request.member.fullName}`,
+          actorId,
+          memberId: request.memberId,
+          category: 'savings withdrawal',
+        },
+        tx,
+      );
 
       return (tx as any).savingsWithdrawalRequest.update({
         where: { id },
@@ -217,6 +234,7 @@ export class SavingsService {
 
     await this.audit.log(actorId, 'APPROVE_SAVINGS_WITHDRAWAL', 'SavingsWithdrawalRequest', id, {
       amount: Number(request.amount),
+      reference,
     });
 
     return {

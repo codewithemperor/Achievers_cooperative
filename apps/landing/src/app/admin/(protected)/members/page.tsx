@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminModal } from "@/components/ui/admin-modal";
 import { SelectInput, TextInput } from "@/components/ui/form-input";
 import { useApi } from "@/hooks/useApi";
-import api from "@/lib/api";
+import api, { uploadAdminImage } from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { CheckCircle2, Clock3, Users, Wallet } from "lucide-react";
 import { DashboardMetricCard } from "@/components/admin/dashboard-card";
@@ -122,15 +122,13 @@ export default function MembersPage() {
   async function onUploadIdPicture(file?: File | null) {
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("scope", "member-id");
-
-    const response = await api.post("/uploads/image", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-
-    setValue("identificationPicture", response.data.url);
+    try {
+      const response = await uploadAdminImage(file, "member-id");
+      setValue("identificationPicture", response.url);
+      showSuccessToast("Image compressed and uploaded successfully.");
+    } catch (error: any) {
+      showErrorToast(error?.message || "Unable to upload identification image.");
+    }
   }
 
   const createMember = (close?: () => void) =>

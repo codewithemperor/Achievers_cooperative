@@ -3,6 +3,8 @@
 // Edit this file to update any text on the website.
 // ============================================================
 
+const currentYear = new Date().getFullYear();
+
 export const siteConfig = {
   name: "Achievers Cooperative",
   tagline: "Shared progress. Trusted growth.",
@@ -117,7 +119,10 @@ export const benefits = [
 export const statsNumbers = [
   { value: "40+", label: "Active members" },
   { value: "₦12m+", label: "Assets under management" },
-  { value: "22", label: "Years of operation" },
+  {
+    value: String(Math.max(0, currentYear - siteConfig.foundedYear)),
+    label: "Years of operation",
+  },
   { value: "98%", label: "Member satisfaction" },
 ];
 
@@ -279,12 +284,12 @@ export const aboutPage = {
   badge: "Our Story",
   headline: "Built from community,\nshaped by trust",
   intro:
-    "Achievers Cooperative Association was founded in 2003 by a group of market traders and small business owners who wanted a fairer, more dependable way to save, borrow, and grow together.",
-  history: `Over the past two decades, Achievers Cooperative has grown from a small founding circle into a trusted institution serving thousands of active members across multiple communities.
+    "Achievers Cooperative Association was founded in 2024 by a group of professionals, traders, and small business owners who wanted a fairer, more dependable way to save, borrow, and grow together.",
+  history: `Since 2024, Achievers Cooperative has been building a trusted member-led institution focused on practical savings, fair credit, and accountable growth.
 
 Through periods of uncertainty and economic pressure, the cooperative has remained focused on discipline, transparency, and practical value for members. Its steady growth has been driven not by shortcuts, but by consistent participation and accountable governance.
 
-Today, Achievers Cooperative manages over ₦2.4 billion in member assets and has supported businesses, households, and long-term savings goals through a model built on shared responsibility.`,
+Today, Achievers Cooperative continues to support businesses, households, and long-term savings goals through a model built on shared responsibility.`,
   mission:
     "To empower members through accessible financial services, democratic governance, and a cooperative structure that turns discipline into long-term opportunity.",
   vision:
@@ -352,7 +357,7 @@ Today, Achievers Cooperative manages over ₦2.4 billion in member assets and ha
 
 // FOOTER
 export const footer = {
-  tagline: "Trusted cooperative finance since 2003.",
+  tagline: `Trusted cooperative finance since ${siteConfig.foundedYear}.`,
   pages: [
     { label: "Home", href: "/" },
     { label: "About", href: "/about" },

@@ -30,6 +30,9 @@ import {
   CalendarDate,
 } from "@internationalized/date";
 
+const fieldShellClass =
+  "flex min-h-12 w-full items-center rounded-xl border border-background-300 px-3 transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/15 dark:border-background-300 dark:focus-within:border-primary-400";
+
 // ==================== BASE TYPES ====================
 
 interface BaseInputProps<T extends FieldValues> {
@@ -90,7 +93,7 @@ export function TextInput<T extends FieldValues>({
             isInvalid={!!error}
           >
             <Label>{label}</Label>
-            <InputGroup className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
+            <InputGroup className={fieldShellClass}>
               {startContent && (
                 <InputGroup.Prefix>{startContent}</InputGroup.Prefix>
               )}
@@ -98,7 +101,7 @@ export function TextInput<T extends FieldValues>({
                 {...restField}
                 type={type}
                 placeholder={placeholder}
-                className="p-0 focus:outline-none"
+                className="w-full bg-transparent p-0 focus:outline-none"
                 value={formattedValue}
                 onChange={(e) => onChange(e.target.value)}
               />
@@ -148,14 +151,14 @@ export function PasswordInput<T extends FieldValues>({
           isInvalid={!!error}
         >
           <Label>{label}</Label>
-          <InputGroup className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
+          <InputGroup className={fieldShellClass}>
             {startContent && (
               <InputGroup.Prefix>{startContent}</InputGroup.Prefix>
             )}
             <InputGroup.Input
               {...field}
               type={showPassword ? "text" : "password"}
-              className="p-0 focus:outline-none"
+              className="w-full bg-transparent p-0 focus:outline-none"
               placeholder={placeholder}
               value={field.value ?? ""}
             />
@@ -267,11 +270,11 @@ export function NumberInput<T extends FieldValues>({
           }}
         >
           <Label>{label}</Label>
-          <NumberField.Group className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
+          <NumberField.Group className={fieldShellClass}>
             <NumberField.DecrementButton className="h-full px-2" />
             <NumberField.Input
               placeholder={placeholder}
-              className="h-full flex-1 px-0 focus:outline-none"
+              className="h-full flex-1 bg-transparent px-0 focus:outline-none"
             />
             <NumberField.IncrementButton className="h-full px-2" />
           </NumberField.Group>
@@ -321,7 +324,7 @@ export function TextareaInput<T extends FieldValues>({
             isInvalid={!!error}
           >
             <Label>{label}</Label>
-            <InputGroup className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
+            <InputGroup className={fieldShellClass}>
               <InputGroup.TextArea
                 {...field}
                 placeholder={placeholder}
@@ -379,7 +382,7 @@ export function DatePickerInput<T extends FieldValues>({
       name={name}
       render={({ field, fieldState: { error } }) => (
         <div
-          className={`flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20 ${
+          className={`${fieldShellClass} ${
             className ?? ""
           }`}
         >
@@ -476,7 +479,7 @@ export function DateRangePickerInput<T extends FieldValues>({
       name={name}
       render={({ field, fieldState: { error } }) => (
         <div
-          className={`flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20 ${
+          className={`${fieldShellClass} ${
             className ?? ""
           }`}
         >
@@ -591,7 +594,7 @@ export function TimeFieldInput<T extends FieldValues>({
       name={name}
       render={({ field, fieldState: { error } }) => (
         <div
-          className={`flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20 ${
+          className={`${fieldShellClass} ${
             className ?? ""
           }`}
         >
@@ -699,7 +702,7 @@ export function SelectInput<T extends FieldValues>({
             onChange={(val) => field.onChange(val)}
           >
             <Label>{label}</Label>
-            <Select.Trigger className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
+            <Select.Trigger className={fieldShellClass}>
               <Select.Value />
               <Select.Indicator />
             </Select.Trigger>
@@ -790,7 +793,7 @@ export function AutocompleteInput({
         selectedKey={selectedKey}
         onSelectionChange={(key) => onSelectionChange(key)}
       >
-        <Autocomplete.Trigger className="flex min-h-12 w-full items-center rounded-xl border border-primary-100 focus-visible:border-0 ring-primary-500/20">
+        <Autocomplete.Trigger className={fieldShellClass}>
           <Autocomplete.Value />
           <Autocomplete.ClearButton className="text-sm text-text-400" />
           <Autocomplete.Indicator />

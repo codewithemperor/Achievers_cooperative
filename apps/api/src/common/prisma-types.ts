@@ -28,6 +28,13 @@ export type TransactionType =
 
 export type CooperativeEntryType = 'INCOME' | 'EXPENSE';
 
+export type FinancialAccountCode =
+  | 'PHYSICAL_TREASURY_CASH'
+  | 'MEMBER_WALLET_LIABILITY'
+  | 'ASSOCIATION_AVAILABLE';
+
+export type FinancialLineDirection = 'DEBIT' | 'CREDIT';
+
 export type LoanStatus =
   | 'PENDING'
   | 'APPROVED'

@@ -25,6 +25,12 @@ export class CooperativeWalletController {
     return this.cooperativeWalletService.getEntries();
   }
 
+  @Get('ledger')
+  @ApiOperation({ summary: 'List immutable financial ledger entries' })
+  getLedgerEntries() {
+    return this.cooperativeWalletService.getLedgerEntries();
+  }
+
   @Post('entries')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Create cooperative wallet entry' })

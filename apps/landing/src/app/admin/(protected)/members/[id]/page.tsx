@@ -10,6 +10,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -136,6 +137,7 @@ function FinancialRecordCard({
   amount,
   status,
   tone = "neutral",
+  href,
 }: {
   icon: ReactNode;
   title: string;
@@ -143,6 +145,7 @@ function FinancialRecordCard({
   amount?: string;
   status?: string;
   tone?: "green" | "amber" | "blue" | "red" | "neutral";
+  href?: string;
 }) {
   const tones = {
     green: "bg-[var(--primary-50)] text-[var(--primary-700)]",
@@ -152,32 +155,40 @@ function FinancialRecordCard({
     neutral: "bg-background-100 text-text-700",
   };
 
-  return (
-    <div className="flex min-w-0 items-start gap-3 rounded-2xl border border-primary-900/10 bg-white p-4 dark:border-[var(--background-800)] dark:bg-[var(--background-900)]">
+  const content = (
+    <div className="flex w-full min-w-0 items-start gap-3 rounded-2xl border border-primary-900/10 bg-white p-3 transition hover:border-primary-700/30 dark:border-[var(--background-800)] dark:bg-[var(--background-900)] sm:p-4">
       <div
         className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${tones[tone]}`}
       >
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="truncate font-semibold text-text-900 dark:text-text-50">
+            <p className="break-words text-sm font-semibold text-text-900 dark:text-text-50">
               {title}
             </p>
-            <p className="mt-1 text-sm text-text-400">{subtitle}</p>
+            <p className="mt-1 break-words text-xs text-text-400">{subtitle}</p>
           </div>
           {status ? (
             <StatusBadge status={status} variant={statusVariant(status) as any} />
           ) : null}
         </div>
         {amount ? (
-          <p className="mt-3 text-sm font-medium text-text-700 dark:text-text-200">
+          <p className="mt-3 break-words text-xs font-medium text-text-700 dark:text-text-200 sm:text-sm">
             {amount}
           </p>
         ) : null}
       </div>
     </div>
+  );
+
+  if (!href) return content;
+
+  return (
+    <Link className="block min-w-0" href={href}>
+      {content}
+    </Link>
   );
 }
 
@@ -339,6 +350,53 @@ export default function MemberDetailPage() {
       <div className="space-y-6">
         <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
           <DetailCard title="Personal Information">
+            <div className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl bg-background-50 p-4 dark:bg-background-100">
+              <AdminModal
+                title="Profile Picture"
+                trigger={
+                  <button
+                    className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-primary-900/10 bg-white text-lg font-semibold text-primary-700"
+                    type="button"
+                  >
+                    {member.data?.avatarUrl ? (
+                      <img
+                        alt={member.data.fullName}
+                        className="h-full w-full object-cover"
+                        src={member.data.avatarUrl}
+                      />
+                    ) : (
+                      <span>
+                        {(member.data?.fullName || "M")
+                          .split(" ")
+                          .map((part) => part[0])
+                          .join("")
+                          .slice(0, 2)}
+                      </span>
+                    )}
+                  </button>
+                }
+              >
+                {member.data?.avatarUrl ? (
+                  <img
+                    alt={member.data.fullName}
+                    className="max-h-[75vh] w-full rounded-2xl object-contain"
+                    src={member.data.avatarUrl}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-primary-900/12 p-8 text-center text-sm text-text-400">
+                    No profile picture uploaded.
+                  </div>
+                )}
+              </AdminModal>
+              <div className="min-w-0">
+                <p className="break-words text-lg font-semibold text-text-900 dark:text-text-50">
+                  {member.data?.fullName || "Member"}
+                </p>
+                <p className="mt-1 text-sm text-text-400">
+                  {member.data?.membershipNumber || "-"}
+                </p>
+              </div>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               {[
                 ["Membership number", member.data?.membershipNumber],
@@ -493,11 +551,12 @@ export default function MemberDetailPage() {
 
         <div className="grid gap-6 lg:grid-cols-3">
           <DetailCard title="Loans">
-            <div className="space-y-3">
+            <div className="max-w-full space-y-3 overflow-hidden">
               {(member.data?.loanApplications ?? []).length ? (
                 member.data?.loanApplications.map((loan) => (
                   <FinancialRecordCard
                     amount={`${currency.format(loan.amount)} requested, ${currency.format(loan.remainingBalance)} remaining`}
+                    href={`/admin/loans/${loan.id}`}
                     icon={<Landmark className="h-5 w-5" />}
                     key={loan.id}
                     status={
@@ -529,11 +588,12 @@ export default function MemberDetailPage() {
           </DetailCard>
 
           <DetailCard title="Investments">
-            <div className="space-y-3">
+            <div className="max-w-full space-y-3 overflow-hidden">
               {(member.data?.investments ?? []).length ? (
                 member.data?.investments.map((investment) => (
                   <FinancialRecordCard
                     amount={currency.format(investment.principal)}
+                    href={`/admin/investments/${investment.product.id}`}
                     icon={<TrendingUp className="h-5 w-5" />}
                     key={investment.id}
                     status={investment.status}
@@ -557,11 +617,12 @@ export default function MemberDetailPage() {
           </DetailCard>
 
           <DetailCard title="Packages">
-            <div className="space-y-3">
+            <div className="max-w-full space-y-3 overflow-hidden">
               {(member.data?.packageSubscriptions ?? []).length ? (
                 member.data?.packageSubscriptions?.map((subscription) => (
                   <FinancialRecordCard
                     amount={`${currency.format(subscription.amountPaid)} paid, ${currency.format(subscription.amountRemaining)} remaining`}
+                    href={`/admin/packages/subscriptions/${subscription.id}`}
                     icon={<CreditCard className="h-5 w-5" />}
                     key={subscription.id}
                     status={

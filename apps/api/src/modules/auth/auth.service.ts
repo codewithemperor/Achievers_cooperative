@@ -55,7 +55,13 @@ export class AuthService {
           },
         },
       },
-      include: { member: true },
+      include: {
+        member: {
+          include: {
+            referrer: { select: { id: true, fullName: true, membershipNumber: true } },
+          },
+        },
+      },
     });
 
     await this.audit.log(user.id, 'SELF_REGISTER_MEMBER', 'Member', user.member!.id, {
@@ -125,7 +131,13 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { member: true },
+      include: {
+        member: {
+          include: {
+            referrer: { select: { id: true, fullName: true, membershipNumber: true } },
+          },
+        },
+      },
     });
 
     if (!user) {
@@ -151,6 +163,7 @@ export class AuthService {
             identificationPicture: user.member.identificationPicture,
             identificationType: user.member.identificationType,
             avatarUrl: user.member.avatarUrl,
+            referrer: user.member.referrer,
             membershipNumber: user.member.membershipNumber,
             status: user.member.status,
             joinedAt: user.member.joinedAt,

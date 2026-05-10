@@ -12,7 +12,7 @@ const iconMap: Record<string, React.ElementType> = {
 
 export default function BenefitsSection() {
   return (
-    <section className="bg-background-100 py-24 overflow-hidden">
+    <section className="bg-background-100 py-24 overflow-hidden dark:bg-background-950">
       <div className="section-padding mx-auto max-w-[1400px]">
         {/* Header */}
         <AnimatedSection className="mb-16">
@@ -34,7 +34,7 @@ export default function BenefitsSection() {
               const Icon = iconMap[b.icon] ?? Shield;
               return (
                 <AnimatedSection key={b.title} delay={i * 80}>
-                  <div className="bg-background-50 rounded-3xl p-6 h-full">
+                  <div className="bg-background-50 rounded-3xl p-6 h-full dark:bg-background-900">
                     <div className="w-10 h-10 rounded-2xl bg-primary-700/10 flex items-center justify-center mb-4">
                       <Icon size={18} className="text-primary-700" />
                     </div>
@@ -62,7 +62,7 @@ export default function BenefitsSection() {
                   className="object-cover"
                 />
                 {/* Overlay card */}
-                <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur-sm rounded-2xl px-5 py-3 flex items-center gap-3">
+                <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur-sm rounded-2xl px-5 py-3 flex items-center gap-3 dark:bg-background-950/90">
                   <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center shrink-0">
                     <span className="text-white text-xs font-bold">UC</span>
                   </div>
@@ -84,12 +84,12 @@ export default function BenefitsSection() {
                 {statsNumbers.map((stat, i) => (
                   <div
                     key={i}
-                    className="bg-primary-900 rounded-3xl p-6 text-background-50"
+                    className="bg-primary-900 rounded-3xl p-6 text-white dark:bg-primary-950"
                   >
-                    <p className="font-display text-3xl font-semibold mb-1">
+                    <p className="font-display text-3xl font-semibold mb-1 text-white">
                       {stat.value}
                     </p>
-                    <p className="text-sm text-background-50/60">{stat.label}</p>
+                    <p className="text-sm text-white/70">{stat.label}</p>
                   </div>
                 ))}
               </div>

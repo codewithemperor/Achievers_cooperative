@@ -210,15 +210,15 @@ export function DataTable<T>({
       </div>
       <div className="overflow-x-auto overflow-y-visible">
         <table className="min-w-full border-collapse text-left text-sm">
-          <thead className="bg-background-100/70 text-text-900 dark:bg-[var(--background-800)]">
+          <thead className="bg-[var(--primary-900)] text-white dark:bg-[var(--primary-950)]">
             <tr>
-              <th className="w-14 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-500">
+              <th className="w-14 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-white/80">
                 S/N
               </th>
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-500 ${
+                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-white/80 ${
                     column.align === "right"
                       ? "text-right"
                       : column.align === "center"

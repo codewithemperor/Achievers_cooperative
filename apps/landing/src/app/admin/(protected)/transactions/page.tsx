@@ -21,6 +21,7 @@ import {
   TextareaInput,
 } from "@/components/ui/form-input";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
 import {
   DashboardMetricCard,
   DashboardPanel,
@@ -59,21 +60,38 @@ interface MemberTransactionsResponse {
 
 interface TreasurySummary {
   balance: number;
+  physicalTreasuryCash: number;
+  memberWalletLiability: number;
+  associationAvailableBalance: number;
   totalIncome: number;
   totalExpense: number;
   memberWalletHoldings: number;
   combinedHoldings: number;
+  reconciliation?: {
+    isBalanced: boolean;
+    physicalTreasuryCashFromLedger: number;
+    memberWalletLiabilityFromLedger: number;
+    associationAvailableFromLedger: number;
+  };
 }
 
-interface TreasuryEntriesResponse {
+interface TreasuryLedgerResponse {
   items: Array<{
     id: string;
-    type: "INCOME" | "EXPENSE";
-    amount: number;
-    category: string;
-    description: string;
     reference?: string | null;
+    sourceType: string;
+    sourceId?: string | null;
+    amount: number;
+    description: string;
+    actor?: { email: string; role: string } | null;
     createdAt: string;
+    lines: Array<{
+      id: string;
+      account: string;
+      direction: string;
+      amount: number;
+      member?: { fullName: string; membershipNumber: string } | null;
+    }>;
   }>;
 }
 
@@ -194,12 +212,13 @@ export default function TransactionsPage() {
   const [selectedTransaction, setSelectedTransaction] = useState<
     MemberTransactionsResponse["items"][number] | null
   >(null);
+  const [selectedLedger, setSelectedLedger] = useState<
+    TreasuryLedgerResponse["items"][number] | null
+  >(null);
   const memberTransactions =
     useApi<MemberTransactionsResponse>("/transactions");
   const wallet = useApi<TreasurySummary>("/wallet/cooperative");
-  const treasuryEntries = useApi<TreasuryEntriesResponse>(
-    "/wallet/cooperative/entries",
-  );
+  const treasuryEntries = useApi<TreasuryLedgerResponse>("/wallet/cooperative/ledger");
   const [creatingEntry, setCreatingEntry] = useState(false);
   const { control, handleSubmit, reset, setValue, watch } =
     useForm<TreasuryEntryValues>({
@@ -330,26 +349,26 @@ export default function TransactionsPage() {
       ) : (
         <>
           <DashboardMetricCard
-            description="Current cooperative treasury wallet balance."
+            description="Physical money expected inside the association bank account."
             href="/admin/transactions"
             icon={<CreditCard className="h-5 w-5" />}
             title="Treasury Cash"
             tone="green"
-            value={currency.format(wallet.data?.balance ?? 0)}
+            value={currency.format(wallet.data?.physicalTreasuryCash ?? wallet.data?.combinedHoldings ?? 0)}
           />
           <DashboardMetricCard
-            description="Total balances held inside member wallets."
+            description="Member-owned wallet funds held by the association."
             href="/admin/transactions"
             icon={<CreditCard className="h-5 w-5" />}
-            title="Member Wallet Holdings"
-            value={currency.format(wallet.data?.memberWalletHoldings ?? 0)}
+            title="Member Wallet Liability"
+            value={currency.format(wallet.data?.memberWalletLiability ?? wallet.data?.memberWalletHoldings ?? 0)}
           />
           <DashboardMetricCard
-            description="Treasury cash plus member wallet holdings."
+            description="Cooperative-owned funds available for loans and spending."
             href="/admin/transactions"
             icon={<TrendingUp className="h-5 w-5" />}
-            title="Money At Hand"
-            value={currency.format(wallet.data?.combinedHoldings ?? 0)}
+            title="Association Available"
+            value={currency.format(wallet.data?.associationAvailableBalance ?? wallet.data?.balance ?? 0)}
           />
           <DashboardMetricCard
             description="Total treasury income minus total treasury expense."
@@ -478,19 +497,19 @@ export default function TransactionsPage() {
               <span className="font-semibold text-text-900 dark:text-text-50">
                 Treasury Cash:
               </span>{" "}
-              the cooperative wallet balance stored on the backend.
+              physical money expected inside the association bank account.
             </p>
             <p>
               <span className="font-semibold text-text-900 dark:text-text-50">
-                Member Wallet Holdings:
+                Member Wallet Liability:
               </span>{" "}
-              the sum of all member wallet available and pending balances.
+              member-owned wallet funds still held by the association.
             </p>
             <p>
               <span className="font-semibold text-text-900 dark:text-text-50">
-                Money At Hand:
+                Association Available:
               </span>{" "}
-              treasury cash plus member wallet holdings.
+              cooperative-owned funds available for loans and expenses.
             </p>
             <p>
               <span className="font-semibold text-text-900 dark:text-text-50">
@@ -642,26 +661,27 @@ export default function TransactionsPage() {
           <DataTable
             columns={[
               {
-                key: "type",
-                header: "Type",
+                key: "sourceType",
+                header: "Source",
                 render: (item) => (
-                  <span
-                    className={
-                      item.type === "INCOME"
-                        ? "font-semibold text-[var(--primary-700)]"
-                        : "font-semibold text-[#b42318]"
-                    }
-                  >
-                    {item.type}
-                  </span>
+                  <div>
+                    <p className="font-semibold text-text-900">
+                      {item.sourceType.replaceAll("_", " ")}
+                    </p>
+                    <p className="text-xs text-text-400">
+                      {item.reference || item.sourceId || "-"}
+                    </p>
+                  </div>
                 ),
               },
               {
-                key: "category",
-                header: "Name",
+                key: "direction",
+                header: "Movement",
                 render: (item) => (
                   <span className="font-semibold text-text-900">
-                    {item.category}
+                    {item.lines
+                      .map((line) => `${line.direction} ${line.account.replaceAll("_", " ")}`)
+                      .join(" / ")}
                   </span>
                 ),
               },
@@ -684,79 +704,93 @@ export default function TransactionsPage() {
             ]}
             data={treasuryRows}
             emptyDescription={
-              treasuryEntries.error || "No treasury transactions found."
+              treasuryEntries.error || "No treasury ledger entries found."
             }
             loading={treasuryEntries.loading}
+            onRowClick={(item) => setSelectedLedger(item)}
+            searchableText={(item) =>
+              `${item.sourceType} ${item.reference ?? ""} ${item.description} ${item.lines.map((line) => line.account).join(" ")}`
+            }
+            searchPlaceholder="Search treasury ledger..."
           />
         </>
       )}
       {selectedTransaction ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(0,0,0,0.45)] p-4 backdrop-blur-sm">
-          <button
-            aria-label="Close transaction details"
-            className="absolute inset-0"
-            onClick={() => setSelectedTransaction(null)}
-            type="button"
-          />
-          <div
-            aria-modal="true"
-            className="relative z-[101] max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[1.75rem] border border-primary-900/8 bg-white shadow-[0_24px_60px_var(--primary-900)/12] dark:border-[var(--background-700)] dark:bg-[var(--background-900)]"
-            role="dialog"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-primary-900/8 px-5 py-4 sm:px-6 dark:border-[var(--background-700)]">
-              <div>
-                <h2 className="text-2xl font-semibold text-text-900 dark:text-text-50">
-                  Transaction Details
-                </h2>
-                <p className="mt-2 text-sm text-text-400">
-                  {selectedTransaction.wallet.member.fullName} -{" "}
-                  {formatDateTime(selectedTransaction.createdAt)}
-                </p>
-              </div>
-              <button
-                className="rounded-full border border-primary-900/12 px-3 py-1 text-sm text-text-900 dark:border-[var(--background-700)] dark:text-text-100"
-                onClick={() => setSelectedTransaction(null)}
-                type="button"
-              >
-                Close
-              </button>
-            </div>
-            <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 sm:px-6 sm:py-5">
-              {[
-                ["Member", selectedTransaction.wallet.member.fullName],
-                [
-                  "Membership No.",
-                  selectedTransaction.wallet.member.membershipNumber,
-                ],
-                ["Type", selectedTransaction.type.replaceAll("_", " ")],
-                ["Amount", currency.format(selectedTransaction.amount)],
-                ["Status", selectedTransaction.status.replaceAll("_", " ")],
-                ["Date", formatDateTime(selectedTransaction.createdAt)],
-                ["Reference", selectedTransaction.reference || "-"],
-                ["Category", selectedTransaction.category || "-"],
-                ["Description", selectedTransaction.description || "-"],
-                [
-                  "Edit State",
-                  selectedTransaction.editable
-                    ? "Editable"
-                    : selectedTransaction.lockReason || "Locked",
-                ],
-              ].map(([label, value]) => (
-                <div
-                  className="rounded-2xl bg-background-50 p-4 dark:bg-[var(--background-800)]"
-                  key={label}
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-400">
-                    {label}
-                  </p>
-                  <p className="mt-2 break-words text-sm font-semibold text-text-900 dark:text-text-50">
-                    {value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <TransactionReceiptModal
+          amount={selectedTransaction.amount}
+          date={selectedTransaction.createdAt}
+          fields={[
+            {
+              label: "Member",
+              value: selectedTransaction.wallet.member.fullName,
+            },
+            {
+              label: "Membership No.",
+              value: selectedTransaction.wallet.member.membershipNumber,
+            },
+            {
+              label: "Type",
+              value: selectedTransaction.type.replaceAll("_", " "),
+            },
+            { label: "Category", value: selectedTransaction.category || "-" },
+            {
+              label: "Description",
+              value: selectedTransaction.description || "-",
+            },
+            { label: "Reference", value: selectedTransaction.reference || "-" },
+            {
+              label: "Edit State",
+              value: selectedTransaction.editable
+                ? "Editable"
+                : selectedTransaction.lockReason || "Locked",
+            },
+          ]}
+          onClose={() => setSelectedTransaction(null)}
+          reference={selectedTransaction.reference || selectedTransaction.id}
+          status={selectedTransaction.status}
+          timeline={[
+            {
+              date: selectedTransaction.createdAt,
+              label: "Transaction created",
+              status: selectedTransaction.status,
+            },
+          ]}
+          title="Member Transaction Receipt"
+        />
+      ) : null}
+      {selectedLedger ? (
+        <TransactionReceiptModal
+          amount={selectedLedger.amount}
+          date={selectedLedger.createdAt}
+          fields={[
+            { label: "Source", value: selectedLedger.sourceType },
+            { label: "Source ID", value: selectedLedger.sourceId || "-" },
+            { label: "Description", value: selectedLedger.description },
+            { label: "Actor", value: selectedLedger.actor?.email || "System" },
+            {
+              label: "Ledger Lines",
+              value: selectedLedger.lines
+                .map(
+                  (line) =>
+                    `${line.direction} ${line.account.replaceAll("_", " ")} ${currency.format(line.amount)}${
+                      line.member ? ` (${line.member.fullName})` : ""
+                    }`,
+                )
+                .join(" | "),
+            },
+          ]}
+          onClose={() => setSelectedLedger(null)}
+          reference={selectedLedger.reference || selectedLedger.id}
+          status="POSTED"
+          timeline={[
+            {
+              label: "Ledger entry posted",
+              date: selectedLedger.createdAt,
+              status: "POSTED",
+            },
+          ]}
+          title="Treasury Ledger Receipt"
+        />
       ) : null}
     </div>
   );

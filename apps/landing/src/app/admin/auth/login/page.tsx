@@ -19,8 +19,8 @@ export default function AdminLoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const { control, handleSubmit } = useForm<LoginValues>({
     defaultValues: {
-      email: "operations@achievers.com",
-      password: "Admin@123",
+      email: "",
+      password: "",
     },
   });
 
@@ -54,71 +54,64 @@ export default function AdminLoginPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,var(--primary-700)/18,transparent_40%),linear-gradient(160deg,var(--background-50)_0%,#ffffff_55%,var(--background-100)_100%)] px-4 py-10">
-      <div className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-[2.5rem] bg-[linear-gradient(165deg,var(--primary-950),var(--primary-900)/94)] p-8 text-white shadow-[0_30px_80px_var(--primary-900)/22] md:p-12">
-          <div className="mb-6">
-            <Image
-              src="/logo.jpeg"
-              alt="Achievers Cooperative"
-              width={40}
-              height={40}
-              className="h-8 w-auto object-contain brightness-0 invert"
-            />
-          </div>
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/72">
-            Cooperative Management System
+    <div className="flex min-h-screen items-center justify-center bg-background-50 px-4">
+      <section className="w-full max-w-md rounded-2xl bg-background-50 p-6 py-10 shadow-lg">
+        <div className="flex justify-center">
+          <Image
+            src="/logo.jpeg"
+            alt="Achievers Cooperative"
+            width={56}
+            height={56}
+            className="h-14 w-14 rounded-2xl object-cover"
+            priority
+          />
+        </div>
+
+        <div className="mt-5 text-center">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-text-400">
+            Admin Access
           </p>
-          <h1 className="mt-5 max-w-xl text-4xl font-semibold leading-tight md:text-5xl">
-            Admin operations with traceable finance, members, and approvals.
+          <h1 className="mt-2 text-3xl font-bold leading-[1.05] text-text-900">
+            Sign in to admin workspace
           </h1>
-          <p className="mt-5 max-w-2xl text-base text-white/80">
-            Review members, verify wallet funding, oversee loans, and manage
-            cooperative finances from one secure dashboard.
-          </p>
-        </section>
+        </div>
 
-        <section className="rounded-[2rem] border border-white/70 bg-white/88 p-8 shadow-[0_24px_60px_var(--primary-900)/10] backdrop-blur">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-400">
-            Admin sign in
-          </p>
-          <h2 className="mt-3 text-3xl font-semibold text-text-900">
-            Welcome back
-          </h2>
-          <p className="mt-2 text-sm text-text-400">
-            Use an administrator account to access the cooperative workspace.
-          </p>
+        <form
+          autoComplete="off"
+          className="mt-6 grid gap-4"
+          onSubmit={onSubmit}
+        >
+          <TextInput
+            autoComplete="off"
+            control={control}
+            label="Email address"
+            name="email"
+            placeholder="admin@example.com"
+            type="email"
+          />
+          <PasswordInput
+            autoComplete="new-password"
+            control={control}
+            label="Password"
+            name="password"
+            placeholder="Enter your password"
+          />
 
-          <form className="mt-8 space-y-5" onSubmit={onSubmit}>
-            <TextInput
-              control={control}
-              label="Email address"
-              name="email"
-              placeholder="admin@example.com"
-            />
-            <PasswordInput
-              control={control}
-              label="Password"
-              name="password"
-              placeholder="Enter your password"
-            />
+          {error ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
 
-            {error ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {error}
-              </div>
-            ) : null}
-
-            <button
-              className="w-full rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--primary-600)]"
-              disabled={submitting}
-              type="submit"
-            >
-              {submitting ? "Signing in..." : "Enter admin workspace"}
-            </button>
-          </form>
-        </section>
-      </div>
+          <button
+            className="min-h-11 rounded-2xl bg-[var(--primary-800)] px-4 py-3 text-sm font-bold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={submitting}
+            type="submit"
+          >
+            {submitting ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+      </section>
     </div>
   );
 }

@@ -114,34 +114,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  tone?: "default" | "warning" | "success";
-}) {
-  const toneClass =
-    tone === "warning"
-      ? "border-amber-200 bg-amber-50 dark:border-amber-400/30 dark:bg-amber-400/10"
-      : tone === "success"
-        ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
-        : "border-background-200 bg-white dark:border-background-200 dark:bg-background-100";
-
-  return (
-    <div className={`rounded-2xl border p-4 ${toneClass}`}>
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-400">
-        {label}
-      </p>
-      <p className="mt-2 text-lg font-semibold text-text-900 dark:text-text-50">
-        {value}
-      </p>
-    </div>
-  );
-}
-
 export default function PackageDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -237,16 +209,16 @@ export default function PackageDetailPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-400/30 dark:bg-amber-400/10">
+      <section className="rounded-3xl border border-[#8f5a2a]/30 bg-gradient-to-br from-[#6b3f1d] via-[#8a552b] to-[#c08a4a] p-5 text-white shadow-[0_20px_48px_rgba(107,63,29,0.18)] dark:border-[#d6a05c]/30 dark:from-[#27170d] dark:via-[#3a2212] dark:to-[#5a371e]">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/65">
               Package subscription
             </p>
-            <h1 className="mt-1 font-display text-2xl font-semibold text-text-900 dark:text-text-50">
+            <h1 className="mt-1 font-display text-2xl font-semibold text-white">
               {item.package.name}
             </h1>
-            <p className="mt-1 text-sm text-text-400">
+            <p className="mt-1 text-sm text-white/70">
               Started {formatDate(item.createdAt)}
             </p>
           </div>
@@ -258,42 +230,31 @@ export default function PackageDetailPage() {
         </div>
 
         <div className="mt-5">
-          <div className="flex items-center justify-between text-xs text-text-400">
+          <div className="flex items-center justify-between text-xs text-white/70">
             <span>Repayment progress</span>
-            <span className="font-semibold text-text-700 dark:text-text-100">
+            <span className="font-semibold text-white">
               {item.progress.toFixed(0)}%
             </span>
           </div>
-          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-background-200 dark:bg-background-200">
+          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-white/25">
             <div
-              className="h-full rounded-full bg-[#a85a16] transition-all duration-500"
+              className="h-full rounded-full bg-white transition-all duration-500"
               style={{ width: `${item.progress}%` }}
             />
           </div>
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard label="Subscribed amount" value={money.format(item.subscribedAmount)} />
-        <MetricCard
-          label="Paid so far"
-          tone="success"
-          value={money.format(item.amountPaid)}
-        />
-        <MetricCard
-          label="Outstanding"
-          tone={outstanding > 0 ? "warning" : "success"}
-          value={money.format(outstanding)}
-        />
-      </section>
-
-      <div className="grid gap-5 lg:grid-cols-[minmax(260px,340px)_1fr] lg:items-start">
+      <div className="grid max-w-full gap-5 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-start">
         <aside className="space-y-4 lg:sticky lg:top-24">
           <section className="rounded-3xl border border-background-200 bg-white p-5 dark:border-background-200 dark:bg-background-100">
             <h2 className="font-display text-lg font-semibold text-text-900 dark:text-text-50">
               Subscription summary
             </h2>
             <div className="mt-3">
+              <DetailRow label="Subscribed amount" value={money.format(item.subscribedAmount)} />
+              <DetailRow label="Paid so far" value={money.format(item.amountPaid)} />
+              <DetailRow label="Outstanding" value={money.format(outstanding)} />
               <DetailRow label="Tenor" value={`${item.package.durationMonths} months`} />
               <DetailRow label="Next due date" value={formatDate(item.nextDueAt)} />
               <DetailRow label="Penalty accrued" value={money.format(item.penaltyAccrued)} />
@@ -328,7 +289,7 @@ export default function PackageDetailPage() {
           ) : null}
         </aside>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           {item.timeline?.length ? (
             <section className="rounded-3xl border border-background-200 bg-white p-5 dark:border-background-200 dark:bg-background-100">
               <h2 className="font-display text-lg font-semibold text-text-900 dark:text-text-50">
@@ -365,7 +326,7 @@ export default function PackageDetailPage() {
               <h2 className="font-display text-lg font-semibold text-text-900 dark:text-text-50">
                 Installment Schedule
               </h2>
-              <div className="mt-4 overflow-x-auto">
+              <div className="mt-4 max-w-full overflow-x-auto">
                 <div className="min-w-[560px] overflow-hidden rounded-2xl border border-background-200 dark:border-background-200">
                   <div className="grid grid-cols-[64px_1fr_1fr_1fr_1fr] bg-background-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-400 dark:bg-background-50">
                     <span>S/N</span>

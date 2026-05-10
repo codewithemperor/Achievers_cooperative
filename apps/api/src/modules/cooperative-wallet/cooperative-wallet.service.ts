@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { CooperativeEntryType } from '../../common/prisma-types';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
+import { FinancialPostingService } from '../../common/services/financial-posting.service';
 
 interface CreateEntryInput {
   type: CooperativeEntryType;
@@ -26,34 +27,52 @@ export class CooperativeWalletService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly financialPosting: FinancialPostingService,
   ) {}
 
   async ensureWallet() {
-    const existing = await this.prisma.cooperativeWallet.findFirst();
-    if (existing) {
-      return existing;
-    }
-
-    return this.prisma.cooperativeWallet.create({ data: {} });
+    return this.financialPosting.ensureWallet();
   }
 
   async getSummary() {
     const wallet = await this.ensureWallet();
-    const memberWalletAggregate = await this.prisma.wallet.aggregate({
-      _sum: { availableBalance: true, pendingBalance: true },
+    const ledgerRows = await this.prisma.financialLedgerLine.groupBy({
+      by: ['account', 'direction'],
+      _sum: { amount: true },
     });
-    const memberWalletHoldings =
-      Number(memberWalletAggregate._sum.availableBalance ?? 0) +
-      Number(memberWalletAggregate._sum.pendingBalance ?? 0);
-    const treasuryBalance = Number(wallet.balance);
+
+    const ledgerAccountTotal = (account: string) =>
+      ledgerRows
+        .filter((row) => row.account === account)
+        .reduce((sum, row) => {
+          const amount = Number(row._sum.amount ?? 0);
+          return sum + (row.direction === 'DEBIT' ? amount : -amount);
+        }, 0);
+
+    const physicalTreasuryCash = Number((wallet as any).physicalTreasuryCash ?? wallet.balance);
+    const memberWalletLiability = Number((wallet as any).memberWalletLiability ?? 0);
+    const associationAvailableBalance = Number((wallet as any).associationAvailableBalance ?? wallet.balance);
+    const ledgerPhysicalTreasuryCash = ledgerAccountTotal('PHYSICAL_TREASURY_CASH');
+    const ledgerMemberWalletLiability = -ledgerAccountTotal('MEMBER_WALLET_LIABILITY');
+    const ledgerAssociationAvailable = -ledgerAccountTotal('ASSOCIATION_AVAILABLE');
 
     return {
       id: wallet.id,
-      balance: treasuryBalance,
+      balance: associationAvailableBalance,
+      physicalTreasuryCash,
+      memberWalletLiability,
+      associationAvailableBalance,
       totalIncome: Number(wallet.totalIncome),
       totalExpense: Number(wallet.totalExpense),
-      memberWalletHoldings,
-      combinedHoldings: treasuryBalance + memberWalletHoldings,
+      memberWalletHoldings: memberWalletLiability,
+      combinedHoldings: physicalTreasuryCash,
+      reconciliation: {
+        isBalanced:
+          Math.abs(physicalTreasuryCash - (memberWalletLiability + associationAvailableBalance)) < 0.01,
+        physicalTreasuryCashFromLedger: ledgerPhysicalTreasuryCash,
+        memberWalletLiabilityFromLedger: ledgerMemberWalletLiability,
+        associationAvailableFromLedger: ledgerAssociationAvailable,
+      },
     };
   }
 
@@ -72,12 +91,41 @@ export class CooperativeWalletService {
     };
   }
 
+  async getLedgerEntries() {
+    const entries = await this.prisma.financialLedgerEntry.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        actor: { select: { id: true, email: true, role: true } },
+        lines: {
+          include: {
+            member: { select: { id: true, fullName: true, membershipNumber: true } },
+          },
+        },
+      },
+    });
+
+    return {
+      items: entries.map((entry) => {
+        const lines = entry.lines.map((line) => ({
+          ...line,
+          amount: Number(line.amount),
+        }));
+        const amount = lines.reduce((max, line) => Math.max(max, Number(line.amount)), 0);
+        return {
+          ...entry,
+          amount,
+          lines,
+        };
+      }),
+    };
+  }
+
   async createEntry(actorId: string, input: CreateEntryInput) {
     const wallet = await this.ensureWallet();
     const isIncome = input.type === 'INCOME';
 
-    const [entry] = await this.prisma.$transaction([
-      this.prisma.cooperativeEntry.create({
+    const entry = await this.prisma.$transaction(async (tx) => {
+      const entry = await tx.cooperativeEntry.create({
         data: {
           walletId: wallet.id,
           type: input.type,
@@ -88,16 +136,38 @@ export class CooperativeWalletService {
           createdById: actorId,
           createdAt: input.createdAt,
         },
-      }),
-      this.prisma.cooperativeWallet.update({
-        where: { id: wallet.id },
-        data: {
-          balance: isIncome ? { increment: input.amount } : { decrement: input.amount },
-          totalIncome: isIncome ? { increment: input.amount } : undefined,
-          totalExpense: !isIncome ? { increment: input.amount } : undefined,
-        },
-      }),
-    ]);
+      });
+
+      if (isIncome) {
+        await this.financialPosting.postAssociationInflow(
+          {
+            amount: input.amount,
+            reference: input.reference,
+            sourceType: 'CooperativeEntry',
+            sourceId: entry.id,
+            description: input.description,
+            actorId,
+            category: input.category,
+          },
+          tx,
+        );
+      } else {
+        await this.financialPosting.postAssociationOutflow(
+          {
+            amount: input.amount,
+            reference: input.reference,
+            sourceType: 'CooperativeEntry',
+            sourceId: entry.id,
+            description: input.description,
+            actorId,
+            category: input.category,
+          },
+          tx,
+        );
+      }
+
+      return entry;
+    });
 
     await this.audit.log(actorId, 'CREATE_COOPERATIVE_ENTRY', 'CooperativeEntry', entry.id, {
       ...input,
@@ -119,58 +189,8 @@ export class CooperativeWalletService {
       throw new NotFoundException('Cooperative entry not found');
     }
 
-    const reverseOldBalance =
-      existing.type === 'INCOME' ? -Number(existing.amount) : Number(existing.amount);
-    const applyNewBalance = input.type === 'INCOME' ? input.amount : -input.amount;
-    const balanceDelta = reverseOldBalance + applyNewBalance;
-
-    const reverseOldIncome = existing.type === 'INCOME' ? -Number(existing.amount) : 0;
-    const applyNewIncome = input.type === 'INCOME' ? input.amount : 0;
-    const incomeDelta = reverseOldIncome + applyNewIncome;
-
-    const reverseOldExpense = existing.type === 'EXPENSE' ? -Number(existing.amount) : 0;
-    const applyNewExpense = input.type === 'EXPENSE' ? input.amount : 0;
-    const expenseDelta = reverseOldExpense + applyNewExpense;
-
-    const [entry] = await this.prisma.$transaction([
-      this.prisma.cooperativeEntry.update({
-        where: { id: entryId },
-        data: {
-          type: input.type,
-          amount: input.amount,
-          category: input.category,
-          description: input.description,
-          reference: input.reference,
-          createdAt: input.createdAt,
-        },
-      }),
-      this.prisma.cooperativeWallet.update({
-        where: { id: wallet.id },
-        data: {
-          balance: balanceDelta === 0 ? undefined : { increment: balanceDelta },
-          totalIncome: incomeDelta === 0 ? undefined : { increment: incomeDelta },
-          totalExpense: expenseDelta === 0 ? undefined : { increment: expenseDelta },
-        },
-      }),
-    ]);
-
-    await this.audit.log(actorId, 'UPDATE_COOPERATIVE_ENTRY', 'CooperativeEntry', entry.id, {
-      previous: {
-        type: existing.type,
-        amount: Number(existing.amount),
-        category: existing.category,
-        description: existing.description,
-        reference: existing.reference,
-        createdAt: existing.createdAt,
-      },
-      next: {
-        ...input,
-      },
-    });
-
-    return {
-      ...entry,
-      amount: Number(entry.amount),
-    };
+    throw new BadRequestException(
+      'Treasury entries are immutable. Create a reversal or correction entry instead.',
+    );
   }
 }

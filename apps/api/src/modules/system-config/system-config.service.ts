@@ -20,6 +20,7 @@ export class SystemConfigService {
         ['COOPERATIVE_DEDUCTION_ENABLED', 'true'],
         ['MEMBER_TERMS_HTML', '<p>Welcome to Achievers Cooperative.</p>'],
         ['COOPERATIVE_DEDUCTION_LAST_RUN', ''],
+        ['COOPERATIVE_DAILY_DEDUCTION_LAST_RUN', ''],
         ['COOPERATIVE_DEDUCTION_LAST_STATUS', 'NEVER_RUN'],
         ['COOPERATIVE_DEDUCTION_LAST_ERROR', ''],
         ['COOPERATIVE_DEDUCTION_LAST_CHECKED_AT', ''],
@@ -70,7 +71,7 @@ export class SystemConfigService {
 
   async runWeeklyDeductions(actorId: string, force = false) {
     try {
-      return await this.weeklyDeductions.run(actorId, { force, trigger: 'ADMIN' });
+      return await this.weeklyDeductions.runDaily(actorId, { force, trigger: 'ADMIN' });
     } catch (error: any) {
       await Promise.all([
         this.prisma.systemConfig.upsert({

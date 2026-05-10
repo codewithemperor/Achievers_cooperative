@@ -6,6 +6,7 @@ import { navLinks } from "@/data/content";
 import { Menu, X } from "lucide-react";
 import { clsx } from "clsx";
 import Image from "next/image";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -28,10 +29,7 @@ export default function Navbar() {
     >
       <nav className="section-padding mx-auto flex items-center justify-between h-16 md:h-18 max-w-350">
         {/* Logo */}
-        <Link
-          href="/"
-          className="flex items-center gap-2"
-        >
+        <Link href="/" className="flex items-center gap-2">
           <Image
             src="/logo.jpeg"
             alt="Achievers Cooperative"
@@ -47,7 +45,7 @@ export default function Navbar() {
             <li key={link.href}>
               <Link
                 href={link.href}
-                className="text-sm font-medium text-text-400 hover:text-text-900 transition-colors duration-200"
+                className="rounded-full px-3 py-2 text-sm font-medium text-text-500 transition-colors duration-200 hover:bg-primary-900/6 hover:text-primary-800 dark:text-text-300 dark:hover:bg-white/8 dark:hover:text-white"
               >
                 {link.label}
               </Link>
@@ -57,9 +55,10 @@ export default function Navbar() {
 
         {/* CTA */}
         <div className="hidden md:flex items-center gap-3">
+          <ThemeToggle />
           <Link
             href="/contact"
-            className="inline-flex items-center px-5 py-2.5 rounded-full bg-primary-900 text-white text-sm font-medium hover:bg-primary-700 transition-colors duration-200"
+            className="inline-flex items-center px-5 py-2.5 rounded-full bg-primary-900 text-white text-sm font-medium hover:bg-primary-700 dark:bg-primary-500 dark:text-white dark:hover:bg-primary-400 transition-colors duration-200"
           >
             Contact Us
           </Link>
@@ -67,7 +66,7 @@ export default function Navbar() {
 
         {/* Mobile hamburger */}
         <button
-          className="md:hidden text-text-900"
+          className="md:hidden text-text-900 dark:text-text-50"
           onClick={() => setMenuOpen((v) => !v)}
           aria-label="Toggle menu"
         >
@@ -77,21 +76,27 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div className="md:hidden bg-background-50 border-t border-background-100 px-6 py-6 flex flex-col gap-5">
+        <div className="md:hidden bg-background-50 dark:bg-background-900 border-t border-background-100 dark:border-background-700 px-6 py-6 flex flex-col gap-5">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               onClick={() => setMenuOpen(false)}
-              className="text-base font-medium text-text-900"
+              className="rounded-2xl px-3 py-2 text-base font-medium text-text-900 transition hover:bg-primary-900/6 hover:text-primary-800 dark:text-text-100 dark:hover:bg-white/8 dark:hover:text-white"
             >
               {link.label}
             </Link>
           ))}
+          <div className="flex items-center justify-between rounded-2xl border border-background-200 px-3 py-2 dark:border-background-700">
+            <span className="text-sm font-medium text-text-500 dark:text-text-300">
+              Theme
+            </span>
+            <ThemeToggle />
+          </div>
           <Link
             href="/contact"
             onClick={() => setMenuOpen(false)}
-            className="inline-flex items-center justify-center px-5 py-3 rounded-full bg-primary-900 text-white text-sm font-medium mt-2"
+            className="inline-flex items-center justify-center px-5 py-3 rounded-full bg-primary-900 text-white text-sm font-medium mt-2 dark:bg-primary-500"
           >
             Contact Us
           </Link>

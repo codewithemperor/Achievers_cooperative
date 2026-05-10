@@ -85,34 +85,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  tone?: "default" | "danger" | "success";
-}) {
-  const toneClass =
-    tone === "danger"
-      ? "border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10"
-      : tone === "success"
-        ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
-        : "border-background-200 bg-white dark:border-background-200 dark:bg-background-100";
-
-  return (
-    <div className={`rounded-2xl border p-4 ${toneClass}`}>
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-400">
-        {label}
-      </p>
-      <p className="mt-2 text-lg font-semibold text-text-900 dark:text-text-50">
-        {value}
-      </p>
-    </div>
-  );
-}
-
 export default function LoanDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -273,27 +245,16 @@ export default function LoanDetailPage() {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <MetricCard label="Loan amount" value={money.format(loan.amount)} />
-        <MetricCard
-          label="Paid so far"
-          tone="success"
-          value={money.format(loan.amountPaidSoFar ?? 0)}
-        />
-        <MetricCard
-          label="Outstanding"
-          tone={(loan.remainingBalance ?? 0) > 0 ? "danger" : "success"}
-          value={money.format(loan.remainingBalance ?? 0)}
-        />
-      </section>
-
-      <div className="grid gap-5 lg:grid-cols-[minmax(260px,340px)_1fr] lg:items-start">
+      <div className="grid max-w-full gap-5 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-start">
         <aside className="space-y-4 lg:sticky lg:top-24">
           <section className="rounded-3xl border border-background-200 bg-white p-5 dark:border-background-200 dark:bg-background-100">
             <h2 className="font-display text-lg font-semibold text-text-900 dark:text-text-50">
               Loan summary
             </h2>
             <div className="mt-3">
+              <DetailRow label="Loan amount" value={money.format(loan.amount)} />
+              <DetailRow label="Paid so far" value={money.format(loan.amountPaidSoFar ?? 0)} />
+              <DetailRow label="Outstanding" value={money.format(loan.remainingBalance ?? 0)} />
               <DetailRow
                 label="Tenor"
                 value={`${loan.tenorMonths} ${loan.tenorUnit === "WEEKS" ? "weeks" : "months"}`}
@@ -328,7 +289,7 @@ export default function LoanDetailPage() {
           ) : null}
         </aside>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           {loan.timeline && loan.timeline.length > 0 ? (
             <section className="rounded-3xl border border-background-200 bg-white p-5 dark:border-background-200 dark:bg-background-100">
               <h2 className="font-display text-lg font-semibold text-text-900 dark:text-text-50">
@@ -368,7 +329,7 @@ export default function LoanDetailPage() {
               <h2 className="font-display text-lg font-semibold text-text-900 dark:text-text-50">
                 Installment Schedule
               </h2>
-              <div className="mt-4 overflow-x-auto">
+              <div className="mt-4 max-w-full overflow-x-auto">
                 <div className="min-w-[560px] overflow-hidden rounded-2xl border border-background-200 dark:border-background-200">
                   <div className="grid grid-cols-[64px_1fr_1fr_1fr_1fr] bg-background-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-400 dark:bg-background-50">
                     <span>S/N</span>

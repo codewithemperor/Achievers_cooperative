@@ -47,6 +47,7 @@ interface TextInputProps<T extends FieldValues> extends BaseInputProps<T> {
   type?: "text" | "email" | "tel" | "url" | "password";
   startContent?: React.ReactNode;
   endContent?: React.ReactNode;
+  autoComplete?: string;
 }
 
 export type { TextInputProps };
@@ -59,6 +60,7 @@ export function TextInput<T extends FieldValues>({
   type = "text",
   startContent,
   endContent,
+  autoComplete,
   isRequired = false,
   isDisabled = false,
   className,
@@ -94,6 +96,7 @@ export function TextInput<T extends FieldValues>({
                 {...restField}
                 type={type}
                 placeholder={placeholder}
+                autoComplete={autoComplete}
                 value={formattedValue}
                 onChange={(e) => onChange(e.target.value)}
               />
@@ -114,6 +117,7 @@ export function TextInput<T extends FieldValues>({
 
 interface PasswordInputProps<T extends FieldValues> extends BaseInputProps<T> {
   startContent?: React.ReactNode;
+  autoComplete?: string;
 }
 
 export type { PasswordInputProps };
@@ -124,6 +128,7 @@ export function PasswordInput<T extends FieldValues>({
   label,
   placeholder,
   startContent,
+  autoComplete,
   isRequired = false,
   isDisabled = false,
   className,
@@ -151,6 +156,7 @@ export function PasswordInput<T extends FieldValues>({
               {...field}
               type={showPassword ? "text" : "password"}
               placeholder={placeholder}
+              autoComplete={autoComplete}
               value={field.value ?? ""}
             />
             <InputGroup.Suffix>
@@ -653,8 +659,8 @@ export function SelectInput<T extends FieldValues>({
               <Select.Value />
               <Select.Indicator />
             </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
+            <Select.Popover className="border border-[var(--primary-900)/10] bg-white text-text-900 shadow-xl dark:border-[var(--background-700)] dark:bg-[var(--background-900)] dark:text-text-50">
+              <ListBox className="bg-transparent text-text-900 dark:text-text-50">
                 {sections
                   ? sections.map((section) => (
                       <ListBox.Section key={section.id}>
@@ -663,6 +669,7 @@ export function SelectInput<T extends FieldValues>({
                         </div>
                         {section.options.map((opt) => (
                           <ListBox.Item
+                            className="rounded-xl px-3 py-2 text-sm text-text-900 outline-none data-[hovered=true]:bg-primary-700/10 dark:text-text-50 dark:data-[hovered=true]:bg-primary-500/20"
                             key={opt.id}
                             id={opt.id}
                             textValue={opt.label}
@@ -675,6 +682,7 @@ export function SelectInput<T extends FieldValues>({
                     ))
                   : options?.map((opt) => (
                       <ListBox.Item
+                        className="rounded-xl px-3 py-2 text-sm text-text-900 outline-none data-[hovered=true]:bg-primary-700/10 dark:text-text-50 dark:data-[hovered=true]:bg-primary-500/20"
                         key={opt.id}
                         id={opt.id}
                         textValue={opt.label}

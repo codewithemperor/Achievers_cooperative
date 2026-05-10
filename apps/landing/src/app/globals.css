@@ -260,6 +260,50 @@ body {
   color: var(--text-200);
 }
 
+.dark .text-text-600,
+.dark .text-text-500,
+.dark .text-text-400 {
+  color: var(--text-300);
+}
+
+.dark .text-primary-900,
+.dark .text-primary-800,
+.dark .text-primary-700 {
+  color: var(--primary-100);
+}
+
+.dark select,
+.dark option {
+  background-color: var(--background-900);
+  color: var(--text-50);
+}
+
+.bg-primary-700,
+.bg-primary-800,
+.bg-primary-900,
+.bg-primary-950 {
+  color: white;
+}
+
+.bg-primary-700 h1,
+.bg-primary-700 h2,
+.bg-primary-700 h3,
+.bg-primary-700 p,
+.bg-primary-800 h1,
+.bg-primary-800 h2,
+.bg-primary-800 h3,
+.bg-primary-800 p,
+.bg-primary-900 h1,
+.bg-primary-900 h2,
+.bg-primary-900 h3,
+.bg-primary-900 p,
+.bg-primary-950 h1,
+.bg-primary-950 h2,
+.bg-primary-950 h3,
+.bg-primary-950 p {
+  color: inherit;
+}
+
 a {
   text-decoration: none;
 }
@@ -332,6 +376,11 @@ h1, h2, h3, h4, h5, h6 {
   border-bottom: 1px solid color-mix(in oklch, var(--text-900) 12%, transparent);
   background: color-mix(in oklch, var(--background-50) 92%, transparent);
   backdrop-filter: blur(12px);
+}
+
+.dark .nav-scrolled {
+  border-bottom-color: color-mix(in oklch, white 10%, transparent);
+  background: color-mix(in oklch, var(--background-900) 92%, transparent);
 }
 
 .marquee-track {

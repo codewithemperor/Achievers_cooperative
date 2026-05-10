@@ -16,10 +16,10 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     return (
       <button
         type="button"
-        className={`flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--background-200)] bg-white transition hover:bg-[var(--background-100)] dark:border-[var(--background-700)] dark:bg-[var(--background-800)] ${className}`}
+        className={`flex h-9 w-9 items-center justify-center rounded-xl border border-background-200 bg-white text-text-600 transition hover:border-primary-500 hover:bg-primary-50 hover:text-primary-800 dark:border-background-700 dark:bg-background-800 dark:text-text-200 dark:hover:border-primary-400 dark:hover:bg-background-700 dark:hover:text-white ${className}`}
         aria-label="Toggle theme"
       >
-        <Sun className="h-4 w-4 text-text-400" />
+        <Sun className="h-4 w-4" />
       </button>
     );
   }
@@ -30,13 +30,13 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     <button
       type="button"
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className={`flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--background-200)] bg-white transition hover:bg-[var(--background-100)] dark:border-[var(--background-700)] dark:bg-[var(--background-800)] ${className}`}
+      className={`flex h-9 w-9 items-center justify-center rounded-xl border border-background-200 bg-white text-text-600 transition hover:border-primary-500 hover:bg-primary-50 hover:text-primary-800 dark:border-background-700 dark:bg-background-800 dark:text-text-200 dark:hover:border-primary-400 dark:hover:bg-background-700 dark:hover:text-white ${className}`}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
     >
       {isDark ? (
-        <Sun className="h-4 w-4 text-[var(--text-300)]" />
+        <Sun className="h-4 w-4" />
       ) : (
-        <Moon className="h-4 w-4 text-text-500" />
+        <Moon className="h-4 w-4" />
       )}
     </button>
   );

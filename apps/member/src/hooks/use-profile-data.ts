@@ -21,8 +21,10 @@ export interface CachedProfilePayload {
     occupation?: string;
     maritalStatus?: string;
     identificationNumber?: string;
+    identificationPicture?: string;
     identificationType?: string;
     avatarUrl?: string | null;
+    referrer?: { id: string; fullName: string; membershipNumber: string } | null;
   } | null;
 }
 

@@ -7,6 +7,7 @@ import { MembershipChargeService } from './services/membership-charge.service';
 import { MailService } from './services/mail.service';
 import { WeeklyDeductionsService } from './services/weekly-deductions.service';
 import { CloudinaryService } from './services/cloudinary.service';
+import { FinancialPostingService } from './services/financial-posting.service';
 
 @Global()
 @Module({
@@ -19,6 +20,7 @@ import { CloudinaryService } from './services/cloudinary.service';
     MailService,
     WeeklyDeductionsService,
     CloudinaryService,
+    FinancialPostingService,
   ],
   exports: [
     PrismaService,
@@ -29,6 +31,7 @@ import { CloudinaryService } from './services/cloudinary.service';
     MailService,
     WeeklyDeductionsService,
     CloudinaryService,
+    FinancialPostingService,
   ],
 })
 export class PrismaModule {}
