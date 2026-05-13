@@ -8,6 +8,9 @@ import api, { fetchMemberApi } from "@/lib/member-api";
 interface LoanDetail {
   id: string;
   amount: number;
+  approvedAmount?: number;
+  disbursedAmount?: number;
+  remainingToDisburse?: number;
   remainingBalance: number;
   amountPaidSoFar: number;
   tenorMonths: number;
@@ -28,6 +31,16 @@ interface LoanDetail {
     date: string;
     amount?: number;
     reference?: string | null;
+  }>;
+  activities?: Array<{
+    id: string;
+    type: "AMOUNT_INCREASE" | "DISBURSEMENT";
+    previousAmount?: number | null;
+    newAmount?: number | null;
+    deltaAmount: number;
+    note?: string | null;
+    createdAt: string;
+    actor?: { email: string; role: string } | null;
   }>;
   paymentSchedule?: Array<{
     installment?: number;
@@ -194,8 +207,8 @@ export default function LoanDetailPage() {
   }
 
   const progress =
-    loan.amount > 0
-      ? Math.min(100, ((loan.amountPaidSoFar ?? 0) / loan.amount) * 100)
+    (loan.disbursedAmount ?? 0) > 0
+      ? loan.repaymentProgress ?? Math.min(100, ((loan.amountPaidSoFar ?? 0) / (loan.disbursedAmount ?? loan.amount)) * 100)
       : 0;
   const isActiveLoan = ["DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(
     loan.status.toUpperCase(),
@@ -264,9 +277,11 @@ export default function LoanDetailPage() {
               Loan summary
             </h2>
             <div className="mt-3">
-              <DetailRow label="Loan amount" value={money.format(loan.amount)} />
+              <DetailRow label="Approved amount" value={money.format(loan.approvedAmount ?? loan.amount)} />
+              <DetailRow label="Disbursed amount" value={money.format(loan.disbursedAmount ?? 0)} />
+              <DetailRow label="Remaining to disburse" value={money.format(loan.remainingToDisburse ?? 0)} />
               <DetailRow label="Paid so far" value={money.format(loan.amountPaidSoFar ?? 0)} />
-              <DetailRow label="Outstanding" value={money.format(loan.remainingBalance ?? 0)} />
+              <DetailRow label="Repayment outstanding" value={money.format(loan.remainingBalance ?? 0)} />
               <DetailRow
                 label="Tenor"
                 value={`${loan.tenorMonths} ${loan.tenorUnit === "WEEKS" ? "weeks" : "months"}`}
@@ -333,6 +348,47 @@ export default function LoanDetailPage() {
                   </li>
                 ))}
               </ol>
+            </section>
+          ) : null}
+
+          {loan.activities && loan.activities.length > 0 ? (
+            <section className="rounded-3xl border border-background-200 bg-white p-5 dark:border-background-200 dark:bg-background-100">
+              <h2 className="font-display text-lg font-semibold text-text-900 dark:text-text-50">
+                Loan activity
+              </h2>
+              <div className="mt-4 space-y-3">
+                {loan.activities.map((activity) => (
+                  <div
+                    className="rounded-2xl bg-background-50 px-4 py-3 dark:bg-background-50"
+                    key={activity.id}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-text-900 dark:text-text-50">
+                          {activity.type === "AMOUNT_INCREASE"
+                            ? "Approved amount increased"
+                            : "Partial disbursement"}
+                        </p>
+                        <p className="mt-1 text-xs text-text-400">
+                          {formatDateTime(activity.createdAt)}
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold text-text-900 dark:text-text-50">
+                        {money.format(activity.deltaAmount)}
+                      </p>
+                    </div>
+                    <div className="mt-2 grid gap-1 text-xs text-text-500 dark:text-text-300">
+                      {activity.previousAmount != null ? (
+                        <span>Previous: {money.format(activity.previousAmount)}</span>
+                      ) : null}
+                      {activity.newAmount != null ? (
+                        <span>New: {money.format(activity.newAmount)}</span>
+                      ) : null}
+                      {activity.note ? <span>{activity.note}</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </section>
           ) : null}
 

@@ -23,12 +23,16 @@ import { formatMoney } from "@/lib/member-format";
 interface LoanItem {
   id: string;
   amount: number;
+  approvedAmount?: number;
+  disbursedAmount?: number;
+  remainingToDisburse?: number;
   remainingBalance: number;
   amountPaidSoFar?: number;
   tenorMonths: number;
   tenorUnit?: "MONTHS" | "WEEKS";
   purpose: string;
   status: string;
+  submittedAt?: string;
   repaymentProgress?: number;
   canEdit?: boolean;
   canDelete?: boolean;
@@ -116,8 +120,24 @@ export default function LoansPage() {
   );
   const activeLoanTotal = loans.data.items.reduce(
     (sum, item) =>
-      repaymentStatuses.includes(item.status.toUpperCase())
-        ? sum + item.amount
+      ACTIVE_STATUSES.includes(item.status.toUpperCase())
+        ? sum + (item.approvedAmount ?? item.amount)
+        : sum,
+    0,
+  );
+  const disbursedLoanTotal = loans.data.items.reduce(
+    (sum, item) =>
+      ACTIVE_STATUSES.includes(item.status.toUpperCase())
+        ? sum + (item.disbursedAmount ?? 0)
+        : sum,
+    0,
+  );
+  const remainingToDisburseTotal = loans.data.items.reduce(
+    (sum, item) =>
+      ACTIVE_STATUSES.includes(item.status.toUpperCase())
+        ? sum +
+          (item.remainingToDisburse ??
+            Math.max((item.approvedAmount ?? item.amount) - (item.disbursedAmount ?? 0), 0))
         : sum,
     0,
   );
@@ -262,9 +282,9 @@ export default function LoansPage() {
     <div className="space-y-5">
       <SummaryCard
         eyebrow="Loans"
-        title="Active loan balance"
+        title="Repayment outstanding"
         value={formatMoney(activeLoanOutstanding)}
-        caption={`Your active loan total is ${formatMoney(activeLoanTotal)}, while ${formatMoney(pendingLoanTotal)} is still waiting for approval.`}
+        caption={`Your approved active loan amount is ${formatMoney(activeLoanTotal)}. ${formatMoney(disbursedLoanTotal)} has been disbursed, ${formatMoney(remainingToDisburseTotal)} is still available for disbursement, and ${formatMoney(pendingLoanTotal)} is waiting for approval.`}
         ctaLabel={
           !hasActiveLoan && bankAccounts.data.length
             ? "New application"
@@ -326,15 +346,25 @@ export default function LoansPage() {
 
         {loans.data.items.length ? (
           <div className="space-y-2 flex flex-col">
-            {loans.data.items.map((loan) => (
-              <TransactionCard
+            {loans.data.items.map((loan) => {
+              const approved = loan.approvedAmount ?? loan.amount;
+              const disbursed = loan.disbursedAmount ?? 0;
+              const toDisburse =
+                loan.remainingToDisburse ??
+                Math.max(approved - disbursed, 0);
+              const isRepaymentLoan = repaymentStatuses.includes(
+                loan.status.toUpperCase(),
+              );
+
+              return (
+                <TransactionCard
                 key={loan.id}
                 type="LOAN"
                 title={loan.purpose}
-                subtitle={`${loan.tenorMonths} ${loan.tenorUnit === "WEEKS" ? "weeks" : "months"}${loan.bankAccount ? ` · ${loan.bankAccount.bankName}` : ""}`}
-                amount={loan.remainingBalance ?? loan.amount}
+                subtitle={`Approved ${formatMoney(approved)}. Disbursed ${formatMoney(disbursed)}. To disburse ${formatMoney(toDisburse)}.`}
+                amount={isRepaymentLoan ? loan.remainingBalance : approved}
                 status={loan.status}
-                timestamp={new Date().toISOString()}
+                timestamp={loan.submittedAt ?? new Date().toISOString()}
                 href={
                   loan.canEdit || loan.canDelete
                     ? undefined
@@ -377,8 +407,9 @@ export default function LoansPage() {
                     </Link>
                   )
                 }
-              />
-            ))}
+                />
+              );
+            })}
           </div>
         ) : (
           <div className="rounded-[20px] border border-dashed border-background-300 dark:border-white/10 px-5 py-10 text-center text-sm text-text-400">

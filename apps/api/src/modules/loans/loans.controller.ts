@@ -7,7 +7,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { LoansService } from './loans.service';
-import { ApplyLoanDto, QueryLoansDto, RepayLoanDto } from './dto/index';
+import { ApplyLoanDto, DisburseLoanDto, IncreaseLoanAmountDto, QueryLoansDto, RepayLoanDto } from './dto/index';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -79,20 +79,27 @@ export class LoansController {
     return this.loansService.reject(id, req.user.id, body?.reason);
   }
 
+  @Patch(':id/increase-amount')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Increase approved loan amount' })
+  increaseAmount(@Param('id') id: string, @Request() req: any, @Body() dto: IncreaseLoanAmountDto) {
+    return this.loansService.increaseAmount(id, req.user.id, dto);
+  }
+
   @Post(':id/disburse')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Disburse an approved loan' })
   @ApiOkResponse({ description: 'Loan disbursed' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
-  disburse(@Param('id') id: string, @Request() req: any) {
-    return this.loansService.disburse(id, req.user.id);
+  disburse(@Param('id') id: string, @Request() req: any, @Body() dto: DisburseLoanDto) {
+    return this.loansService.disburse(id, req.user.id, dto);
   }
 
   @Patch(':id/disburse')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Disburse an approved loan' })
-  disbursePatch(@Param('id') id: string, @Request() req: any) {
-    return this.loansService.disburse(id, req.user.id);
+  disbursePatch(@Param('id') id: string, @Request() req: any, @Body() dto: DisburseLoanDto) {
+    return this.loansService.disburse(id, req.user.id, dto);
   }
 
   @Patch(':id/mark-in-progress')

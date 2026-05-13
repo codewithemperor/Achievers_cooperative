@@ -231,7 +231,16 @@ export class MembersService {
         user: { select: { email: true } },
         wallet: true,
         investments: { include: { product: true }, take: 5, orderBy: { maturityDate: 'desc' } },
-        loanApplications: { take: 5, orderBy: { submittedAt: 'desc' } },
+        loanApplications: {
+          take: 5,
+          orderBy: { submittedAt: 'desc' },
+          include: {
+            activities: {
+              where: { type: 'AMOUNT_INCREASE' },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        },
         packageSubscriptions: { include: { package: true }, take: 10, orderBy: { createdAt: 'desc' } },
       },
     });
@@ -265,10 +274,8 @@ export class MembersService {
       this.prisma.systemConfig.findUnique({ where: { key: 'BANK_ACCOUNT_NUMBER' } }),
     ]);
 
-    const activeLoan = member.loanApplications.find(
-      (loan) =>
-        ['DISBURSED', 'IN_PROGRESS', 'OVERDUE'].includes(loan.status) &&
-        Number(loan.remainingBalance) > 0,
+    const activeLoan = member.loanApplications.find((loan) =>
+      ['APPROVED', 'DISBURSED', 'IN_PROGRESS', 'OVERDUE'].includes(loan.status),
     );
     const activePackage = member.packageSubscriptions.find((subscription) =>
       ['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(subscription.status),
@@ -279,6 +286,20 @@ export class MembersService {
     const pendingLoansTotal = member.loanApplications
       .filter((loan) => loan.status === 'PENDING')
       .reduce((sum, loan) => sum + Number(loan.amount), 0);
+    const activeLoanAmount = activeLoan ? Number(activeLoan.amount) : 0;
+    const activeLoanExplicitDisbursed = activeLoan ? Number((activeLoan as any).disbursedAmount ?? 0) : 0;
+    const activeLoanFirstIncreasePreviousAmount =
+      activeLoan && Array.isArray((activeLoan as any).activities) && (activeLoan as any).activities.length
+        ? Number((activeLoan as any).activities[0].previousAmount ?? 0)
+        : 0;
+    const activeLoanDisbursed =
+      activeLoan && activeLoanExplicitDisbursed > 0
+        ? activeLoanExplicitDisbursed
+        : activeLoan && activeLoanFirstIncreasePreviousAmount > 0 && ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(activeLoan.status)
+          ? activeLoanFirstIncreasePreviousAmount
+          : activeLoan && ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(activeLoan.status)
+            ? activeLoanAmount
+            : 0;
     const cooperativeAccounts = [
       {
         bankName: bankName?.value ?? '',
@@ -340,7 +361,11 @@ export class MembersService {
         activeLoan: activeLoan
           ? {
               id: activeLoan.id,
-              amount: Number(activeLoan.amount),
+              amount: activeLoanAmount,
+              approvedAmount: activeLoanAmount,
+              disbursedAmount: activeLoanDisbursed,
+              remainingToDisburse: Math.max(activeLoanAmount - activeLoanDisbursed, 0),
+              amountPaidSoFar: Math.max(activeLoanDisbursed - Number(activeLoan.remainingBalance), 0),
               remainingBalance: Number(activeLoan.remainingBalance),
               status: activeLoan.status,
             }

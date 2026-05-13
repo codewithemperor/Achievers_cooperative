@@ -11,6 +11,8 @@ export interface MemberSession {
 
 const SESSION_KEY = "member_pwa_session";
 const COOKIE_NAME = "member_pwa_session";
+const MEMBER_STORAGE_PREFIXES = ["member_", "member-"];
+const MEMBER_STORAGE_KEYS = [SESSION_KEY, "member_profile_cache_v1"];
 
 function encodeSession(data: MemberSession) {
   return encodeURIComponent(JSON.stringify(data));
@@ -37,6 +39,29 @@ export function setMemberSession(data: MemberSession) {
   document.cookie = `${COOKIE_NAME}=${encodeSession(data)}; path=/; max-age=86400; samesite=lax`;
 }
 
+function clearStorageKeys(storage: Storage) {
+  const keysToRemove: string[] = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key) continue;
+    if (
+      MEMBER_STORAGE_KEYS.includes(key) ||
+      MEMBER_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+    ) {
+      keysToRemove.push(key);
+    }
+  }
+
+  keysToRemove.forEach((key) => storage.removeItem(key));
+}
+
+export function clearMemberLocalCache() {
+  if (typeof window === "undefined") return;
+  clearStorageKeys(window.localStorage);
+  clearStorageKeys(window.sessionStorage);
+  document.cookie = `${COOKIE_NAME}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax`;
+}
+
 export function getMemberSession() {
   if (typeof window === "undefined") return null;
 
@@ -59,8 +84,7 @@ export function getMemberSession() {
 
 export function clearMemberSession() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(SESSION_KEY);
-  document.cookie = `${COOKIE_NAME}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax`;
+  clearMemberLocalCache();
 }
 
 export function isMemberAuthenticated() {

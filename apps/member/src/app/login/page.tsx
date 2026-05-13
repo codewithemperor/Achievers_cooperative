@@ -8,7 +8,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { TextInput, PasswordInput } from "@/components/form-input";
 import api from "@/lib/member-api";
-import { setMemberSession } from "@/lib/member-session";
+import { clearMemberLocalCache, setMemberSession } from "@/lib/member-session";
+import { useMemberDataStore } from "@/lib/member-data-store";
 
 const loginSchema = z.object({
   email: z
@@ -58,6 +59,8 @@ export default function MemberLoginPage() {
         return;
       }
 
+      clearMemberLocalCache();
+      useMemberDataStore.getState().clear();
       setMemberSession({
         token: payload.token,
         userId: payload.user.id,

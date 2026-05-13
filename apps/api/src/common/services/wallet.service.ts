@@ -21,6 +21,10 @@ type SettlementRecord = {
   targetId: string;
 };
 
+function isUniqueConstraintError(error: unknown) {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002';
+}
+
 @Injectable()
 export class WalletService {
   constructor(
@@ -370,55 +374,6 @@ export class WalletService {
       return settlements;
     }
 
-    const pendingSavingsTransactions = await this.prisma.transaction.findMany({
-      where: {
-        walletId: refreshedWallet.id,
-        type: 'SAVINGS',
-        status: 'PENDING',
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    for (const item of pendingSavingsTransactions) {
-      if (availableBalance <= 0) break;
-
-      const rawOutstanding = (item.metadata as Record<string, unknown> | null)?.outstandingAmount;
-      const outstanding = typeof rawOutstanding === 'number' ? rawOutstanding : Number(item.amount);
-      const amountToApply = Math.min(availableBalance, outstanding);
-      const savingsAccountId = (item.metadata as Record<string, unknown> | null)?.savingsAccountId;
-
-      if (amountToApply <= 0 || typeof savingsAccountId !== 'string') {
-        continue;
-      }
-
-      await this.prisma.$transaction([
-        this.prisma.transaction.update({
-          where: { id: item.id },
-          data: {
-            status: amountToApply >= outstanding ? 'APPROVED' : 'PENDING',
-            metadata: {
-              ...((item.metadata as Record<string, unknown> | null) ?? {}),
-              outstandingAmount: Math.max(outstanding - amountToApply, 0),
-            } as any,
-          },
-        }),
-        this.prisma.savingsAccount.update({
-          where: { id: savingsAccountId },
-          data: {
-            balance: { increment: amountToApply },
-          },
-        }),
-      ]);
-
-      settlements.push({
-        type: 'SAVINGS',
-        amount: amountToApply,
-        targetId: savingsAccountId,
-      });
-
-      availableBalance -= amountToApply;
-    }
-
     return settlements;
   }
 
@@ -428,7 +383,10 @@ export class WalletService {
     amount: number,
     mode: 'AUTO' | 'ADMIN' | 'MEMBER' = 'MEMBER',
   ) {
-    const loan = await this.prisma.loanApplication.findUnique({ where: { id: loanId } });
+    const loan = await this.prisma.loanApplication.findUnique({
+      where: { id: loanId },
+      include: { member: { select: { fullName: true, membershipNumber: true } } },
+    });
     if (!loan || loan.memberId !== memberId) {
       throw new NotFoundException('Loan not found');
     }
@@ -436,29 +394,44 @@ export class WalletService {
     if (!['DISBURSED', 'IN_PROGRESS', 'OVERDUE'].includes(loan.status)) {
       throw new BadRequestException('This loan is not currently active for repayment.');
     }
+    const repayableBalance = Number(loan.remainingBalance);
+    if (amount > repayableBalance) {
+      throw new BadRequestException(`Repayment amount cannot exceed the outstanding balance of ₦${repayableBalance.toLocaleString()}.`);
+    }
 
     const referencePrefix = mode === 'AUTO' ? 'AUTO-LOAN' : mode === 'ADMIN' ? 'ADMIN-LOAN' : 'REPAY';
     const reference = `${referencePrefix}-${loan.id}-${Date.now()}`;
+    const loanName = loan.purpose || `loan for ${loan.member.fullName}`;
 
     await this.debitWallet(memberId, amount, 'LOAN_REPAYMENT', reference, {
       category: mode === 'AUTO' ? 'automatic loan repayment' : 'loan repayment',
       description:
         mode === 'AUTO'
-          ? `Automatic settlement for loan ${loan.id}`
+          ? `Automatic settlement for ${loanName}`
           : mode === 'ADMIN'
-            ? `Admin wallet allocation for loan ${loan.id}`
-            : `Loan repayment for loan ${loan.id}`,
+            ? `Admin wallet allocation for ${loanName}`
+            : `Loan repayment for ${loanName}`,
       editable: false,
       lockReason: 'Loan repayment transactions are system-generated and cannot be edited.',
-      metadata: { loanId: loan.id, autoSettled: mode === 'AUTO', adminAllocated: mode === 'ADMIN' },
+      metadata: {
+        loanId: loan.id,
+        loanName,
+        memberName: loan.member.fullName,
+        membershipNumber: loan.member.membershipNumber,
+        autoSettled: mode === 'AUTO',
+        adminAllocated: mode === 'ADMIN',
+      },
     });
 
-    const nextRemaining = Math.max(Number(loan.remainingBalance) - amount, 0);
+    const nextRemaining = Math.max(repayableBalance - amount, 0);
+    const explicitDisbursedAmount = Number((loan as any).disbursedAmount ?? 0);
+    const disbursedAmount = explicitDisbursedAmount > 0 ? explicitDisbursedAmount : Number(loan.amount);
+    const isFullyRepaid = nextRemaining <= 0 && disbursedAmount >= Number(loan.amount);
     await this.prisma.loanApplication.update({
       where: { id: loan.id },
       data: {
         remainingBalance: nextRemaining,
-        status: nextRemaining <= 0 ? 'COMPLETED' : 'IN_PROGRESS',
+        status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
       },
     });
 
@@ -498,42 +471,111 @@ export class WalletService {
     let amountRemaining = Number(subscription.amountRemaining);
     let amountPaid = Number(subscription.amountPaid);
     const settlements: SettlementRecord[] = [];
+    const packageName = subscription.package.name;
+    const dueKey =
+      mode === 'AUTO'
+        ? (subscription.nextDueAt ?? this.getNextPackageDueDate({
+            amountPaid,
+            approvedAt: (subscription as any).approvedAt,
+            disbursedAt: (subscription as any).disbursedAt,
+            package: subscription.package,
+            createdAt: subscription.createdAt,
+          }) ?? subscription.createdAt)
+            .toISOString()
+            .slice(0, 10)
+        : `${Date.now()}`;
 
     if (penaltyAccrued > 0 && remainingToSpend > 0) {
       const penaltyPayment = Math.min(remainingToSpend, penaltyAccrued);
-      await this.debitWallet(memberId, penaltyPayment, 'PACKAGE_PENALTY', `PACKAGE-PENALTY-${subscription.id}-${Date.now()}`, {
-        category: mode === 'AUTO' ? 'automatic package penalty settlement' : 'package penalty settlement',
-        description:
-          mode === 'AUTO'
-            ? `Automatic penalty settlement for package subscription ${subscription.id}`
-            : `Wallet allocation for package penalty ${subscription.id}`,
-        editable: false,
-        lockReason: 'Package penalty transactions are system-generated and cannot be edited.',
-        metadata: { subscriptionId: subscription.id, autoSettled: mode === 'AUTO', adminAllocated: mode === 'ADMIN' },
-      });
+      const penaltyReference =
+        mode === 'AUTO'
+          ? `AUTO-PACKAGE-PENALTY-${subscription.id}-${dueKey}-${Math.round(penaltyAccrued * 100)}`
+          : `PACKAGE-PENALTY-${subscription.id}-${Date.now()}`;
+      const existingPenalty =
+        mode === 'AUTO'
+          ? await this.prisma.transaction.findUnique({ where: { reference: penaltyReference } })
+          : null;
+      let penaltyWasApplied = false;
 
-      penaltyAccrued -= penaltyPayment;
-      remainingToSpend -= penaltyPayment;
-      settlements.push({ type: 'PACKAGE_PENALTY', amount: penaltyPayment, targetId: subscription.id });
+      if (!existingPenalty) {
+        try {
+          await this.debitWallet(memberId, penaltyPayment, 'PACKAGE_PENALTY', penaltyReference, {
+            category: mode === 'AUTO' ? 'automatic package penalty settlement' : 'package penalty settlement',
+            description:
+              mode === 'AUTO'
+                ? `Automatic penalty settlement for ${packageName}`
+                : `Wallet allocation for ${packageName} penalty`,
+            editable: false,
+            lockReason: 'Package penalty transactions are system-generated and cannot be edited.',
+            metadata: {
+              subscriptionId: subscription.id,
+              packageName,
+              dueAt: subscription.nextDueAt?.toISOString() ?? null,
+              dueCycle: dueKey,
+              autoSettled: mode === 'AUTO',
+              adminAllocated: mode === 'ADMIN',
+            },
+          });
+          penaltyWasApplied = true;
+        } catch (error) {
+          if (!isUniqueConstraintError(error)) {
+            throw error;
+          }
+        }
+      }
+
+      if (penaltyWasApplied) {
+        penaltyAccrued -= penaltyPayment;
+        remainingToSpend -= penaltyPayment;
+        settlements.push({ type: 'PACKAGE_PENALTY', amount: penaltyPayment, targetId: subscription.id });
+      }
     }
 
     if (amountRemaining > 0 && remainingToSpend > 0) {
       const principalPayment = Math.min(remainingToSpend, amountRemaining);
-      await this.debitWallet(memberId, principalPayment, 'PACKAGE_SUBSCRIPTION', `PACKAGE-${subscription.id}-${Date.now()}`, {
-        category: mode === 'AUTO' ? 'automatic package repayment' : 'package repayment',
-        description:
-          mode === 'AUTO'
-            ? `Automatic package settlement for subscription ${subscription.id}`
-            : `Wallet allocation for package subscription ${subscription.id}`,
-        editable: false,
-        lockReason: 'Package subscription transactions are system-generated and cannot be edited.',
-        metadata: { subscriptionId: subscription.id, autoSettled: mode === 'AUTO', adminAllocated: mode === 'ADMIN' },
-      });
+      const packageReference =
+        mode === 'AUTO'
+          ? `AUTO-PACKAGE-${subscription.id}-${dueKey}-${Math.round(amountPaid * 100)}`
+          : `PACKAGE-${subscription.id}-${Date.now()}`;
+      const existingPackage =
+        mode === 'AUTO'
+          ? await this.prisma.transaction.findUnique({ where: { reference: packageReference } })
+          : null;
+      let packageWasApplied = false;
 
-      amountRemaining -= principalPayment;
-      amountPaid += principalPayment;
-      remainingToSpend -= principalPayment;
-      settlements.push({ type: 'PACKAGE_SUBSCRIPTION', amount: principalPayment, targetId: subscription.id });
+      if (!existingPackage) {
+        try {
+          await this.debitWallet(memberId, principalPayment, 'PACKAGE_SUBSCRIPTION', packageReference, {
+            category: mode === 'AUTO' ? 'automatic package repayment' : 'package repayment',
+            description:
+              mode === 'AUTO'
+                ? `Automatic package settlement for ${packageName}`
+                : `Wallet allocation for ${packageName}`,
+            editable: false,
+            lockReason: 'Package subscription transactions are system-generated and cannot be edited.',
+            metadata: {
+              subscriptionId: subscription.id,
+              packageName,
+              dueAt: subscription.nextDueAt?.toISOString() ?? null,
+              dueCycle: dueKey,
+              autoSettled: mode === 'AUTO',
+              adminAllocated: mode === 'ADMIN',
+            },
+          });
+          packageWasApplied = true;
+        } catch (error) {
+          if (!isUniqueConstraintError(error)) {
+            throw error;
+          }
+        }
+      }
+
+      if (packageWasApplied) {
+        amountRemaining -= principalPayment;
+        amountPaid += principalPayment;
+        remainingToSpend -= principalPayment;
+        settlements.push({ type: 'PACKAGE_SUBSCRIPTION', amount: principalPayment, targetId: subscription.id });
+      }
     }
 
     const nextStatus = amountRemaining <= 0 && penaltyAccrued <= 0 ? 'COMPLETED' : 'IN_PROGRESS';
@@ -567,8 +609,8 @@ export class WalletService {
   ) {
     let account =
       (accountId
-        ? await this.prisma.savingsAccount.findUnique({ where: { id: accountId } })
-        : await this.prisma.savingsAccount.findFirst({ where: { memberId } })) ?? null;
+        ? await this.prisma.savingsAccount.findUnique({ where: { id: accountId }, include: { member: true } })
+        : await this.prisma.savingsAccount.findFirst({ where: { memberId }, include: { member: true } })) ?? null;
 
     if (account && account.memberId !== memberId) {
       throw new BadRequestException('Invalid savings account selected.');
@@ -580,23 +622,31 @@ export class WalletService {
           memberId,
           contributionFrequency: 'MONTHLY',
         },
+        include: { member: true },
       });
     }
 
     const referencePrefix = mode === 'AUTO' ? 'AUTO-SAVE' : mode === 'ADMIN' ? 'ADMIN-SAVE' : 'SAVE';
     const reference = `${referencePrefix}-${account.id}-${Date.now()}`;
+    const description =
+      mode === 'AUTO'
+        ? `Automatic savings contribution for ${account.member.fullName}`
+        : mode === 'ADMIN'
+          ? `Admin wallet allocation to ${account.member.fullName}'s savings`
+          : `Savings contribution for ${account.member.fullName}`;
 
     await this.debitWallet(memberId, amount, 'SAVINGS', reference, {
       category: mode === 'AUTO' ? 'automatic savings contribution' : 'savings contribution',
-      description:
-        mode === 'AUTO'
-          ? `Automatic savings contribution for account ${account.id}`
-          : mode === 'ADMIN'
-            ? `Admin wallet allocation to savings account ${account.id}`
-            : 'Savings contribution',
+      description,
       editable: false,
       lockReason: 'Savings contribution transactions are system-generated and cannot be edited.',
-      metadata: { savingsAccountId: account.id, autoSettled: mode === 'AUTO', adminAllocated: mode === 'ADMIN' },
+      metadata: {
+        savingsAccountId: account.id,
+        memberName: account.member.fullName,
+        membershipNumber: account.member.membershipNumber,
+        autoSettled: mode === 'AUTO',
+        adminAllocated: mode === 'ADMIN',
+      },
     });
 
     const updated = await this.prisma.savingsAccount.update({

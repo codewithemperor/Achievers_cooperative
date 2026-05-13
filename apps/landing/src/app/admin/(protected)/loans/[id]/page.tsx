@@ -34,6 +34,9 @@ interface BankAccountInfo {
 interface LoanDetail {
   id: string;
   amount: number;
+  approvedAmount?: number;
+  disbursedAmount: number;
+  remainingToDisburse: number;
   remainingBalance: number;
   amountPaidSoFar: number;
   repaymentProgress: number;
@@ -78,6 +81,16 @@ interface LoanDetail {
     status: string;
     reference?: string | null;
     createdAt: string;
+  }>;
+  activities: Array<{
+    id: string;
+    type: "AMOUNT_INCREASE" | "DISBURSEMENT";
+    previousAmount?: number | null;
+    newAmount?: number | null;
+    deltaAmount: number;
+    note?: string | null;
+    createdAt: string;
+    actor?: { email: string; role: string } | null;
   }>;
 }
 
@@ -124,20 +137,37 @@ export default function LoanDetailPage() {
   const loan = useApi<LoanDetail>(`/loans/${params.id}`);
   const [rejecting, setRejecting] = useState(false);
   const [repaying, setRepaying] = useState(false);
-  const { control, handleSubmit, reset } = useForm<{ reason: string; amount: number | undefined }>({
-    defaultValues: { reason: "", amount: undefined },
+  const [increasing, setIncreasing] = useState(false);
+  const [disbursing, setDisbursing] = useState(false);
+  const { control, handleSubmit, reset, watch } = useForm<{
+    reason: string;
+    amount: number | undefined;
+    newAmount: number | undefined;
+    tenorMonths: number | undefined;
+    tenorUnit: "MONTHS" | "WEEKS";
+    disburseAmount: number | undefined;
+  }>({
+    defaultValues: { reason: "", amount: undefined, newAmount: undefined, tenorMonths: undefined, tenorUnit: "MONTHS", disburseAmount: undefined },
   });
 
   const status = loan.data?.status;
   const isNewLoan = status === "PENDING";
   const isApprovedLoan = status === "APPROVED";
   const isDisbursedLoan = status === "DISBURSED";
+  const approvedAmount = loan.data?.approvedAmount ?? loan.data?.amount ?? 0;
+  const disbursedAmount = loan.data?.disbursedAmount ?? 0;
+  const remainingToDisburse = loan.data?.remainingToDisburse ?? Math.max(approvedAmount - disbursedAmount, 0);
+  const increaseValue = Number(watch("newAmount") ?? 0);
+  const tenorValue = Number(watch("tenorMonths") ?? 0);
+  const disburseValue = Number(watch("disburseAmount") ?? 0);
+  const canIncreaseAmount = ["PENDING", "APPROVED", "DISBURSED", "IN_PROGRESS"].includes(status || "");
+  const canDisburse = ["APPROVED", "DISBURSED", "IN_PROGRESS"].includes(status || "") && remainingToDisburse > 0;
   const isRepayable = ["DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(
     status || "",
   );
 
   async function runAction(
-    action: "approve" | "reject" | "disburse" | "markInProgress",
+    action: "approve" | "reject" | "markInProgress",
     reason?: string,
   ) {
     try {
@@ -149,11 +179,6 @@ export default function LoanDetailPage() {
       } else if (action === "approve") {
         await api.patch(`/loans/${params.id}/approve`);
         showSuccessToast("Loan approved successfully.");
-      } else if (action === "disburse") {
-        await api.patch(`/loans/${params.id}/disburse`);
-        showSuccessToast(
-          "Loan disbursed successfully. Funds will be sent to the member's bank account.",
-        );
       } else if (action === "markInProgress") {
         await api.patch(`/loans/${params.id}/mark-in-progress`);
         showSuccessToast("Loan marked as in progress.");
@@ -202,6 +227,47 @@ export default function LoanDetailPage() {
       }
     });
 
+  const handleIncreaseAmount = (close?: () => void) =>
+    handleSubmit(async (values) => {
+      const amount = Number(values.newAmount);
+      if (!Number.isFinite(amount) || amount <= approvedAmount) return;
+      try {
+        setIncreasing(true);
+        await api.patch(`/loans/${params.id}/increase-amount`, {
+          amount,
+          tenorMonths: tenorValue > (loan.data?.tenorMonths ?? 0) ? tenorValue : undefined,
+          tenorUnit: watch("tenorUnit"),
+          reason: values.reason || undefined,
+        });
+        showSuccessToast("Loan approved amount increased successfully.");
+        reset({ reason: "", amount: undefined, newAmount: undefined, tenorMonths: undefined, tenorUnit: "MONTHS", disburseAmount: undefined });
+        await loan.refetch();
+        close?.();
+      } catch (error: any) {
+        showErrorToast(error?.response?.data?.message || "Unable to increase loan amount.");
+      } finally {
+        setIncreasing(false);
+      }
+    });
+
+  const handleDisburse = (close?: () => void) =>
+    handleSubmit(async (values) => {
+      const amount = Number(values.disburseAmount);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > remainingToDisburse) return;
+      try {
+        setDisbursing(true);
+        await api.patch(`/loans/${params.id}/disburse`, { amount });
+        showSuccessToast("Loan disbursement recorded successfully.");
+        reset({ reason: "", amount: undefined, newAmount: undefined, tenorMonths: undefined, tenorUnit: "MONTHS", disburseAmount: undefined });
+        await loan.refetch();
+        close?.();
+      } catch (error: any) {
+        showErrorToast(error?.response?.data?.message || "Unable to disburse loan.");
+      } finally {
+        setDisbursing(false);
+      }
+    });
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -209,6 +275,84 @@ export default function LoanDetailPage() {
         subtitle="Track approval, disbursement, repayments, and the expected installment schedule for this facility."
         actions={
           <>
+            {canIncreaseAmount ? (
+              <AdminModal
+                description="Enter the new total approved amount for this loan. Repayment balance will not change until money is disbursed."
+                title="Increase loan amount"
+                trigger={
+                  <button
+                    className="rounded-full border border-[var(--primary-900)/12] px-4 py-2 text-sm font-semibold text-text-900 transition-colors hover:bg-background-50 dark:border-[var(--background-700)] dark:text-text-50 dark:hover:bg-[var(--background-800)]"
+                    onClick={() =>
+                      reset({
+                        reason: "",
+                        amount: undefined,
+                        newAmount: approvedAmount,
+                        tenorMonths: loan.data?.tenorMonths,
+                        tenorUnit: "MONTHS",
+                        disburseAmount: undefined,
+                      })
+                    }
+                    type="button"
+                  >
+                    Increase amount
+                  </button>
+                }
+              >
+                {({ close }) => {
+                  const increase = Math.max(increaseValue - approvedAmount, 0);
+                  return (
+                    <>
+                      <NumberInput
+                        control={control}
+                        label="New approved amount"
+                        name="newAmount"
+                        min={approvedAmount + 1}
+                      />
+                      <p className="mt-2 text-sm text-text-500 dark:text-text-300">
+                        Current approved amount is {currency.format(approvedAmount)}. Increase: {currency.format(increase)}.
+                      </p>
+                      <div className="mt-4">
+                        <NumberInput
+                          control={control}
+                          label="Repayment tenor"
+                          name="tenorMonths"
+                          min={loan.data?.tenorMonths ?? 1}
+                        />
+                        <div className="mt-2 rounded-2xl bg-background-50 p-4 text-sm text-text-500 dark:bg-[var(--background-800)] dark:text-text-300">
+                          Current tenor is {loan.data?.tenorMonths ?? 0} months. Enter a higher value to extend the repayment period.
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <TextareaInput
+                          control={control}
+                          label="Reason (optional)"
+                          name="reason"
+                          placeholder="Why is the loan amount being increased?"
+                          rows={3}
+                        />
+                      </div>
+                      <div className="mt-6 flex justify-end gap-3">
+                        <button
+                          className="rounded-full border border-[var(--primary-900)/12] px-4 py-2 text-sm font-medium text-text-900 dark:border-[var(--background-700)] dark:text-text-50"
+                          onClick={close}
+                          type="button"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                          disabled={increasing || !Number.isFinite(increaseValue) || increaseValue <= approvedAmount}
+                          onClick={() => void handleIncreaseAmount(close)()}
+                          type="button"
+                        >
+                          {increasing ? "Saving..." : "Save increase"}
+                        </button>
+                      </div>
+                    </>
+                  );
+                }}
+              </AdminModal>
+            ) : null}
             {isNewLoan ? (
               <>
                 <ConfirmActionButton
@@ -262,19 +406,83 @@ export default function LoanDetailPage() {
                 </AdminModal>
               </>
             ) : null}
-            {isApprovedLoan ? (
-              <ConfirmActionButton
-                confirmMessage={
-                  loan.data?.bankAccount
-                    ? `Disburse this approved loan. Funds will be sent to ${loan.data.bankAccount.accountName}'s account at ${loan.data.bankAccount.bankName} (${loan.data.bankAccount.accountNumber}).`
-                    : "Disburse this approved loan. A LOAN_DISBURSEMENT transaction record will be created."
+            {canDisburse ? (
+              <AdminModal
+                description="Record the amount actually transferred now. The member repays only disbursed funds."
+                title="Disburse loan"
+                trigger={
+                  <button
+                    className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+                    onClick={() =>
+                      reset({
+                        reason: "",
+                        amount: undefined,
+                        newAmount: undefined,
+                        disburseAmount: remainingToDisburse,
+                      })
+                    }
+                    type="button"
+                  >
+                    Disburse
+                  </button>
                 }
-                confirmTitle="Disburse approved loan?"
-                label="Disburse"
-                onConfirm={() => runAction("disburse")}
-                pendingLabel="Disbursing..."
-                tone="success"
-              />
+              >
+                {({ close }) => {
+                  const remainingAfter = Math.max(remainingToDisburse - (Number.isFinite(disburseValue) ? disburseValue : 0), 0);
+                  const invalid = !Number.isFinite(disburseValue) || disburseValue <= 0 || disburseValue > remainingToDisburse;
+                  return (
+                    <>
+                      <NumberInput
+                        control={control}
+                        label="Amount to disburse"
+                        name="disburseAmount"
+                        min={1}
+                        max={remainingToDisburse}
+                      />
+                      <div className="mt-4 grid gap-3 rounded-2xl bg-background-50 p-4 text-sm dark:bg-[var(--background-800)]">
+                        <div className="flex justify-between gap-4">
+                          <span className="text-text-400">Total approved</span>
+                          <span className="font-semibold text-text-900 dark:text-text-50">{currency.format(approvedAmount)}</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-text-400">Already disbursed</span>
+                          <span className="font-semibold text-text-900 dark:text-text-50">{currency.format(disbursedAmount)}</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-text-400">Amount to disburse</span>
+                          <span className="font-semibold text-text-900 dark:text-text-50">{currency.format(Number.isFinite(disburseValue) ? disburseValue : 0)}</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-text-400">Remaining after this</span>
+                          <span className="font-semibold text-text-900 dark:text-text-50">{currency.format(remainingAfter)}</span>
+                        </div>
+                      </div>
+                      {invalid ? (
+                        <p className="mt-2 text-sm text-[#b42318]">
+                          Amount must be greater than zero and not more than {currency.format(remainingToDisburse)}.
+                        </p>
+                      ) : null}
+                      <div className="mt-6 flex justify-end gap-3">
+                        <button
+                          className="rounded-full border border-[var(--primary-900)/12] px-4 py-2 text-sm font-medium text-text-900 dark:border-[var(--background-700)] dark:text-text-50"
+                          onClick={close}
+                          type="button"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                          disabled={disbursing || invalid}
+                          onClick={() => void handleDisburse(close)()}
+                          type="button"
+                        >
+                          {disbursing ? "Disbursing..." : "Confirm disbursement"}
+                        </button>
+                      </div>
+                    </>
+                  );
+                }}
+              </AdminModal>
             ) : null}
             {isDisbursedLoan ? (
               <ConfirmActionButton
@@ -340,12 +548,20 @@ export default function LoanDetailPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <DashboardMetricCard
-          description="Original loan amount requested by the member."
+          description="Maximum total amount currently approved for this loan."
           href={`/admin/loans/${params.id}`}
           icon={<Banknote className="h-5 w-5" />}
-          title="Loan Amount"
+          title="Approved Amount"
           tone="green"
-          value={currency.format(loan.data?.amount ?? 0)}
+          value={currency.format(approvedAmount)}
+        />
+        <DashboardMetricCard
+          description={`${currency.format(remainingToDisburse)} is still available for later disbursement.`}
+          href={`/admin/loans/${params.id}`}
+          icon={<WalletCards className="h-5 w-5" />}
+          title="Disbursed"
+          tone="green"
+          value={currency.format(disbursedAmount)}
         />
         <DashboardMetricCard
           description="Total repayments already applied to this loan."
@@ -358,16 +574,9 @@ export default function LoanDetailPage() {
           description="Outstanding balance still owed by the member."
           href={`/admin/loans/${params.id}`}
           icon={<WalletCards className="h-5 w-5" />}
-          title="Remaining"
+          title="Repayment Balance"
           tone={(loan.data?.remainingBalance ?? 0) > 0 ? "amber" : "neutral"}
           value={currency.format(loan.data?.remainingBalance ?? 0)}
-        />
-        <DashboardMetricCard
-          description="Current member wallet balance available for repayment."
-          href={`/admin/loans/${params.id}`}
-          icon={<WalletCards className="h-5 w-5" />}
-          title="Wallet Balance"
-          value={currency.format(loan.data?.member.wallet?.availableBalance ?? 0)}
         />
       </section>
 
@@ -410,6 +619,30 @@ export default function LoanDetailPage() {
               </div>
 
               <div className="grid gap-3 rounded-2xl bg-background-50 p-4 dark:bg-[var(--background-800)]">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-400">
+                    Approved Amount
+                  </p>
+                  <p className="mt-1 font-semibold text-text-900 dark:text-text-50">
+                    {currency.format(approvedAmount)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-400">
+                    Disbursed So Far
+                  </p>
+                  <p className="mt-1 font-semibold text-text-900 dark:text-text-50">
+                    {currency.format(disbursedAmount)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-400">
+                    Remaining To Disburse
+                  </p>
+                  <p className="mt-1 font-semibold text-text-900 dark:text-text-50">
+                    {currency.format(remainingToDisburse)}
+                  </p>
+                </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-400">
                     Due Date
@@ -543,6 +776,52 @@ export default function LoanDetailPage() {
               ) : (
                 <p className="rounded-2xl border border-dashed border-primary-900/12 p-5 text-sm text-text-400 dark:border-[var(--background-700)]">
                   No timeline records found for this loan.
+                </p>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-primary-900/10 bg-white p-5 shadow-sm dark:border-[var(--background-800)] dark:bg-[var(--background-900)]">
+            <h2 className="text-lg font-semibold text-text-900 dark:text-text-50">
+              Loan Activity
+            </h2>
+            <div className="mt-4 space-y-3">
+              {(loan.data?.activities ?? []).length ? (
+                (loan.data?.activities ?? []).map((activity) => (
+                  <div
+                    className="rounded-2xl bg-background-50 p-4 dark:bg-[var(--background-800)]"
+                    key={activity.id}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-text-900 dark:text-text-50">
+                          {activity.type === "AMOUNT_INCREASE" ? "Approved amount increased" : "Partial disbursement"}
+                        </p>
+                        <p className="mt-1 text-sm text-text-400">
+                          {new Date(activity.createdAt).toLocaleString("en-NG")}
+                          {activity.actor?.email ? ` by ${activity.actor.email}` : ""}
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold text-text-900 dark:text-text-50">
+                        {currency.format(activity.deltaAmount)}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-sm text-text-500 dark:text-text-300 sm:grid-cols-2">
+                      {activity.previousAmount != null ? (
+                        <span>Previous: {currency.format(activity.previousAmount)}</span>
+                      ) : null}
+                      {activity.newAmount != null ? (
+                        <span>New: {currency.format(activity.newAmount)}</span>
+                      ) : null}
+                    </div>
+                    {activity.note ? (
+                      <p className="mt-3 text-sm text-text-500 dark:text-text-300">{activity.note}</p>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <p className="rounded-2xl border border-dashed border-primary-900/12 p-5 text-sm text-text-400 dark:border-[var(--background-700)]">
+                  No loan increase or partial disbursement activity has been recorded yet.
                 </p>
               )}
             </div>

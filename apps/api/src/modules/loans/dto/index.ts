@@ -60,3 +60,29 @@ export class RepayLoanDto {
   @Min(100)
   amount!: number;
 }
+
+export class IncreaseLoanAmountDto {
+  @IsNumber()
+  @Min(1)
+  amount!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  tenorMonths?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['MONTHS', 'WEEKS'])
+  tenorUnit?: 'MONTHS' | 'WEEKS';
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class DisburseLoanDto {
+  @IsNumber()
+  @Min(1)
+  amount!: number;
+}

@@ -46,7 +46,16 @@ interface DashboardPayload {
     pendingPaymentsCount: number;
     pendingPackagesTotal?: number;
     pendingLoansTotal?: number;
-    activeLoan: { remainingBalance: number } | null;
+    activeLoan: {
+      id?: string;
+      amount?: number;
+      approvedAmount?: number;
+      disbursedAmount?: number;
+      remainingToDisburse?: number;
+      amountPaidSoFar?: number;
+      remainingBalance: number;
+      status?: string;
+    } | null;
     activePackage: {
       totalAmount?: number;
       subscribedAmount: number;
@@ -309,7 +318,7 @@ export default function DashboardPage() {
                           : `You have ${formatMoney(data.summary.pendingPackagesTotal ?? 0)} in package requests waiting for approval.`
                         : card.valueKey === "loans"
                           ? data.summary.activeLoan
-                            ? `Your active loan still has ${formatMoney(data.summary.activeLoan.remainingBalance)} outstanding, with ${formatMoney(data.summary.pendingLoansTotal ?? 0)} waiting for approval.`
+                            ? `Your approved loan is ${formatMoney(data.summary.activeLoan.approvedAmount ?? data.summary.activeLoan.amount ?? 0)}. ${formatMoney(data.summary.activeLoan.disbursedAmount ?? 0)} has been disbursed, ${formatMoney(data.summary.activeLoan.remainingToDisburse ?? 0)} is still available for disbursement, and ${formatMoney(data.summary.activeLoan.remainingBalance)} is outstanding.`
                             : `You have ${formatMoney(data.summary.pendingLoansTotal ?? 0)} in loan requests waiting for approval.`
                           : card.caption
                     }
@@ -327,29 +336,18 @@ export default function DashboardPage() {
 
       {/* Association Account */}
       {cooperativeAccounts.length ? (
-        <section className="px-2 -mt-4">
-          <div className="">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-400">
-                  Association account
-                </p>
-                <h2 className="mt-1 truncate font-display text-lg font-semibold text-text-900 dark:text-text-50">
-                  {cooperativeAccounts[0].bankName || "Bank details"}
-                </h2>
-                <p className="mt-1 text-sm text-text-500 dark:text-text-300">
-                  {cooperativeAccounts[0].accountName || "Account name"} -{" "}
-                  {cooperativeAccounts[0].accountNumber || "Account number"}
-                </p>
-              </div>
-              <button
-                className="shrink-0 rounded-2xl border border-background-200 bg-background-50 px-4 py-2 text-xs font-semibold text-text-700 transition-colors hover:bg-background-100 dark:border-white/10 dark:bg-background-900 dark:text-text-200"
-                onClick={() => setIsAccountModalOpen(true)}
-                type="button"
-              >
-                View details
-              </button>
-            </div>
+        <section className="-mt-4 px-5">
+          <div className="flex min-h-14 items-center justify-between gap-4 rounded-2xl bg-background-50 px-4 py-3 dark:bg-background-900">
+            <p className="min-w-0 truncate text-sm font-semibold text-text-900 dark:text-text-50">
+              Association account
+            </p>
+            <button
+              className="shrink-0 rounded-full border border-background-200 bg-background-50 px-4 py-2 text-xs font-semibold text-text-700 transition-colors hover:bg-background-100 dark:border-white/10 dark:bg-background-800 dark:text-text-200"
+              onClick={() => setIsAccountModalOpen(true)}
+              type="button"
+            >
+              View details
+            </button>
           </div>
         </section>
       ) : null}

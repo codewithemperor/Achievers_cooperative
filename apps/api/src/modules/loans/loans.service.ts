@@ -9,12 +9,13 @@ import { WalletService } from '../../common/services/wallet.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { AuditService } from '../../common/services/audit.service';
 import { FinancialPostingService } from '../../common/services/financial-posting.service';
-import { ApplyLoanDto, QueryLoansDto, RepayLoanDto } from './dto/index';
+import { ApplyLoanDto, DisburseLoanDto, IncreaseLoanAmountDto, QueryLoansDto, RepayLoanDto } from './dto/index';
 import type { LoanStatus, LoanTenorUnit } from '../../common/prisma-types';
 import { normalizePagination } from '../../common/pagination';
 
 type LoanLike = {
   amount: any;
+  disbursedAmount?: any;
   remainingBalance: any;
   tenorMonths: number;
   tenorUnit?: LoanTenorUnit;
@@ -97,7 +98,8 @@ export class LoansService {
         tenorMonths: dto.tenorMonths,
         tenorUnit: dto.tenorUnit ?? 'MONTHS',
         purpose: dto.purpose,
-        remainingBalance: dto.amount,
+        disbursedAmount: 0,
+        remainingBalance: 0,
         bankAccountId: dto.bankAccountId,
       } as any,
     });
@@ -155,24 +157,36 @@ export class LoansService {
           guarantorOne: { select: { id: true, fullName: true, membershipNumber: true } },
           guarantorTwo: { select: { id: true, fullName: true, membershipNumber: true } },
           bankAccount: { select: { id: true, bankName: true, accountNumber: true, accountName: true } },
+          activities: {
+            where: { type: 'AMOUNT_INCREASE' },
+            orderBy: { createdAt: 'asc' },
+          },
         },
       }),
       this.prisma.loanApplication.count({ where }),
     ]);
 
     return {
-      items: items.map((l) => ({
-        ...l,
-        amount: Number(l.amount),
-        tenorUnit: (l as any).tenorUnit ?? 'MONTHS',
-        remainingBalance: this.shouldExposeRemainingBalance(l.status) ? Number(l.remainingBalance) : 0,
-        amountPaidSoFar: this.shouldExposeRemainingBalance(l.status)
-          ? Math.max(Number(l.amount) - Number(l.remainingBalance), 0)
-          : 0,
-        repaymentProgress: this.calculateRepaymentProgress(l),
-        canEdit: l.status === 'PENDING',
-        canDelete: l.status === 'PENDING',
-      })),
+      items: items.map((l) => {
+        const amount = Number(l.amount);
+        const disbursedAmount = this.resolveDisbursedAmount(l);
+        const remainingBalance = this.shouldExposeRemainingBalance(l.status) ? Number(l.remainingBalance) : 0;
+        return {
+          ...l,
+          amount,
+          approvedAmount: amount,
+          disbursedAmount,
+          remainingToDisburse: Math.max(amount - disbursedAmount, 0),
+          tenorUnit: (l as any).tenorUnit ?? 'MONTHS',
+          remainingBalance,
+          amountPaidSoFar: this.shouldExposeRemainingBalance(l.status)
+            ? Math.max(disbursedAmount - remainingBalance, 0)
+            : 0,
+          repaymentProgress: this.calculateRepaymentProgress(l),
+          canEdit: l.status === 'PENDING',
+          canDelete: l.status === 'PENDING',
+        };
+      }),
       total,
       page,
       limit,
@@ -193,6 +207,12 @@ export class LoansService {
         guarantorOne: { select: { id: true, fullName: true, membershipNumber: true } },
         guarantorTwo: { select: { id: true, fullName: true, membershipNumber: true } },
         bankAccount: { select: { id: true, bankName: true, accountNumber: true, accountName: true } },
+        activities: {
+          include: {
+            actor: { select: { id: true, email: true, role: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
@@ -210,10 +230,13 @@ export class LoansService {
       : [];
 
     const amount = Number(loan.amount);
+    const disbursedAmount = this.resolveDisbursedAmount(loan);
+    const remainingToDisburse = Math.max(amount - disbursedAmount, 0);
     const remainingBalance = this.shouldExposeRemainingBalance(loan.status) ? Number(loan.remainingBalance) : 0;
-    const amountPaidSoFar = this.shouldExposeRemainingBalance(loan.status) ? Math.max(amount - Number(loan.remainingBalance), 0) : 0;
+    const amountPaidSoFar = this.shouldExposeRemainingBalance(loan.status) ? Math.max(disbursedAmount - remainingBalance, 0) : 0;
     const repaymentProgress = this.calculateRepaymentProgress(loan);
-    const installmentAmount = loan.tenorMonths > 0 ? amount / loan.tenorMonths : amount;
+    const schedulePrincipal = disbursedAmount > 0 ? disbursedAmount : amount;
+    const installmentAmount = loan.tenorMonths > 0 ? schedulePrincipal / loan.tenorMonths : schedulePrincipal;
     const paymentSchedule = Array.from({ length: Math.max(loan.tenorMonths, 1) }).map((_, index) => {
       const anchorDate = loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt;
       const dueDate = this.addTenorStep(anchorDate, ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, index + 1);
@@ -243,6 +266,9 @@ export class LoansService {
     return {
       ...loan,
       amount,
+      approvedAmount: amount,
+      disbursedAmount,
+      remainingToDisburse,
       tenorUnit: (loan as any).tenorUnit ?? 'MONTHS',
       remainingBalance,
       amountPaidSoFar,
@@ -253,6 +279,12 @@ export class LoansService {
         ...item,
         amount: Number(item.amount),
       })),
+      activities: (loan as any).activities?.map((activity: any) => ({
+        ...activity,
+        previousAmount: activity.previousAmount == null ? null : Number(activity.previousAmount),
+        newAmount: activity.newAmount == null ? null : Number(activity.newAmount),
+        deltaAmount: Number(activity.deltaAmount),
+      })) ?? [],
       member: {
         ...loan.member,
         wallet: loan.member.wallet
@@ -276,7 +308,6 @@ export class LoansService {
     });
     if (!loan) throw new NotFoundException('Loan application not found');
     if (loan.status !== 'PENDING') throw new BadRequestException('Only pending loan applications can be approved.');
-    await this.assertAssociationCanFundLoan(Number(loan.amount), 'approve');
 
     const updated = await this.prisma.loanApplication.update({
       where: { id },
@@ -335,7 +366,93 @@ export class LoansService {
   }
 
   // ─── Disburse loan — NO wallet credit ──────────────────────────────
-  async disburse(id: string, actorId: string) {
+  async increaseAmount(id: string, actorId: string, dto: IncreaseLoanAmountDto) {
+    const loan = await this.prisma.loanApplication.findUnique({
+      where: { id },
+      include: { member: true },
+    });
+    if (!loan) throw new NotFoundException('Loan application not found');
+    if (!['PENDING', 'APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(loan.status)) {
+      throw new BadRequestException('Only pending, approved, disbursed, or in-progress loans can be increased.');
+    }
+
+    const previousAmount = Number(loan.amount);
+    const newAmount = Number(dto.amount);
+    if (!Number.isFinite(newAmount) || newAmount <= previousAmount) {
+      throw new BadRequestException(
+        `New approved amount must be greater than the current approved amount of ₦${previousAmount.toLocaleString()}.`,
+      );
+    }
+
+    const deltaAmount = newAmount - previousAmount;
+    const currentDisbursedAmount = this.resolveDisbursedAmount(loan);
+    const nextTenorMonths = dto.tenorMonths && dto.tenorMonths > loan.tenorMonths ? dto.tenorMonths : loan.tenorMonths;
+    const nextTenorUnit = dto.tenorUnit ?? ((loan as any).tenorUnit ?? 'MONTHS');
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.loanApplication.update({
+        where: { id },
+        data: {
+          amount: newAmount,
+          disbursedAmount: currentDisbursedAmount,
+          tenorMonths: nextTenorMonths,
+          tenorUnit: nextTenorUnit,
+          ...(loan.dueDate && nextTenorMonths !== loan.tenorMonths
+            ? { dueDate: this.addTenorStep(loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt, nextTenorUnit as LoanTenorUnit, nextTenorMonths) }
+            : {}),
+        } as any,
+      });
+
+      await tx.loanActivity.create({
+        data: {
+          loanId: id,
+          type: 'AMOUNT_INCREASE',
+          previousAmount,
+          newAmount,
+          deltaAmount,
+          note: dto.reason || null,
+          actorId,
+          metadata: {
+            memberId: loan.memberId,
+            previousStatus: loan.status,
+            previousTenorMonths: loan.tenorMonths,
+            newTenorMonths: nextTenorMonths,
+            previousTenorUnit: (loan as any).tenorUnit ?? 'MONTHS',
+            newTenorUnit: nextTenorUnit,
+          },
+        } as any,
+      });
+
+      return next;
+    });
+
+    await this.audit.log(actorId, 'INCREASE_LOAN_AMOUNT', 'LoanApplication', id, {
+      previousAmount,
+      newAmount,
+      deltaAmount,
+      reason: dto.reason,
+      previousTenorMonths: loan.tenorMonths,
+      newTenorMonths: nextTenorMonths,
+      tenorUnit: nextTenorUnit,
+    });
+
+    await this.notifications.notifyMember(
+      loan.member.userId,
+      'Loan Amount Increased',
+      `Your approved loan amount has been increased from ₦${previousAmount.toLocaleString()} to ₦${newAmount.toLocaleString()}.`,
+    );
+
+    const disbursedAmount = this.resolveDisbursedAmount(updated);
+    return {
+      ...updated,
+      amount: Number(updated.amount),
+      disbursedAmount,
+      remainingToDisburse: Math.max(Number(updated.amount) - disbursedAmount, 0),
+      remainingBalance: Number(updated.remainingBalance),
+      message: `Loan approved amount increased by ₦${deltaAmount.toLocaleString()}.`,
+    };
+  }
+
+  async disburse(id: string, actorId: string, dto: DisburseLoanDto) {
     const loan = await this.prisma.loanApplication.findUnique({
       where: { id },
       include: {
@@ -344,11 +461,29 @@ export class LoansService {
       },
     });
     if (!loan) throw new NotFoundException('Loan application not found');
-    if (loan.status !== 'APPROVED') throw new BadRequestException('Loan must be approved before it can be disbursed.');
-    await this.assertAssociationCanFundLoan(Number(loan.amount), 'disburse');
+    if (!['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(loan.status)) {
+      throw new BadRequestException('Loan must be approved, disbursed, or in progress before funds can be disbursed.');
+    }
 
-    // Compute dueDate: approvedAt + tenorMonths
-    const dueDate = this.addTenorStep(new Date(), ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, loan.tenorMonths);
+    const approvedAmount = Number(loan.amount);
+    const alreadyDisbursed = this.resolveDisbursedAmount(loan);
+    const remainingToDisburse = Math.max(approvedAmount - alreadyDisbursed, 0);
+    const disbursementAmount = Number(dto.amount);
+    if (!Number.isFinite(disbursementAmount) || disbursementAmount <= 0) {
+      throw new BadRequestException('Enter a valid disbursement amount.');
+    }
+    if (remainingToDisburse <= 0) {
+      throw new BadRequestException('This loan has already been fully disbursed.');
+    }
+    if (disbursementAmount > remainingToDisburse) {
+      throw new BadRequestException(
+        `Disbursement amount cannot exceed the remaining approved balance of ₦${remainingToDisburse.toLocaleString()}.`,
+      );
+    }
+    await this.assertAssociationCanFundLoan(disbursementAmount, 'disburse');
+
+    const now = new Date();
+    const dueDate = loan.dueDate ?? this.addTenorStep(now, ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, loan.tenorMonths);
 
     // Create a LOAN_DISBURSEMENT transaction for record-keeping only (no wallet credit)
     const reference = `LOAN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -359,7 +494,7 @@ export class LoansService {
         data: {
           walletId: wallet.id,
           type: 'LOAN_DISBURSEMENT',
-          amount: Number(loan.amount),
+          amount: disbursementAmount,
           status: 'APPROVED',
           reference,
           category: 'loan disbursement',
@@ -369,13 +504,16 @@ export class LoansService {
           metadata: {
             loanId: loan.id,
             disbursedToBank: true,
+            approvedAmount,
+            previousDisbursedAmount: alreadyDisbursed,
+            newDisbursedAmount: alreadyDisbursed + disbursementAmount,
           },
         },
       });
 
       await this.financialPosting.postAssociationOutflow(
         {
-          amount: Number(loan.amount),
+          amount: disbursementAmount,
           reference,
           sourceType: 'LoanApplication',
           sourceId: loan.id,
@@ -388,27 +526,46 @@ export class LoansService {
         tx,
       );
 
+      await tx.loanActivity.create({
+        data: {
+          loanId: id,
+          type: 'DISBURSEMENT',
+          previousAmount: alreadyDisbursed,
+          newAmount: alreadyDisbursed + disbursementAmount,
+          deltaAmount: disbursementAmount,
+          actorId,
+          metadata: {
+            reference,
+            approvedAmount,
+            remainingToDisburseBefore: remainingToDisburse,
+            remainingToDisburseAfter: remainingToDisburse - disbursementAmount,
+          },
+        } as any,
+      });
+
       return tx.loanApplication.update({
         where: { id },
         data: {
-          status: 'DISBURSED',
-          disbursedAt: new Date(),
+          status: loan.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'DISBURSED',
+          disbursedAt: loan.disbursedAt ?? now,
           dueDate,
-          remainingBalance: loan.amount,
+          disbursedAmount: { increment: disbursementAmount },
+          remainingBalance: { increment: disbursementAmount },
         },
       });
     });
 
     await this.audit.log(actorId, 'DISBURSE_LOAN', 'LoanApplication', id, {
-      amount: Number(loan.amount),
+      amount: disbursementAmount,
       reference,
+      approvedAmount,
+      previousDisbursedAmount: alreadyDisbursed,
     });
 
     // Build the disbursement message with bank details
-    const amount = Number(loan.amount);
     const bankName = loan.bankAccount?.bankName ?? 'N/A';
     const accountNumber = loan.bankAccount?.accountNumber ?? 'N/A';
-    const message = `Loan of ₦${amount.toLocaleString()} has been disbursed to ${loan.member.fullName}'s bank account (${bankName} - ${accountNumber}). The funds will reflect within 24 hours.`;
+    const message = `Loan disbursement of ₦${disbursementAmount.toLocaleString()} has been sent to ${loan.member.fullName}'s bank account (${bankName} - ${accountNumber}). The funds will reflect within 24 hours.`;
 
     await this.notifications.notifyMember(
       loan.member.userId,
@@ -416,9 +573,13 @@ export class LoansService {
       message,
     );
 
+    const nextDisbursedAmount = this.resolveDisbursedAmount(updated);
     return {
       ...updated,
-      amount,
+      amount: Number(updated.amount),
+      disbursedAmount: nextDisbursedAmount,
+      remainingToDisburse: Math.max(Number(updated.amount) - nextDisbursedAmount, 0),
+      remainingBalance: Number(updated.remainingBalance),
       tenorUnit: (updated as any).tenorUnit ?? 'MONTHS',
       message,
       reference,
@@ -467,7 +628,7 @@ export class LoansService {
       data: {
         ...(dto.guarantorOneId !== undefined && { guarantorOneId: dto.guarantorOneId || null }),
         ...(dto.guarantorTwoId !== undefined && { guarantorTwoId: dto.guarantorTwoId || null }),
-        ...(dto.amount !== undefined && { amount: dto.amount, remainingBalance: dto.amount }),
+        ...(dto.amount !== undefined && { amount: dto.amount, remainingBalance: 0 }),
         ...(dto.tenorMonths !== undefined && { tenorMonths: dto.tenorMonths }),
         tenorUnit: dto.tenorUnit ?? (loan as any).tenorUnit ?? 'MONTHS',
         ...(dto.purpose !== undefined && { purpose: dto.purpose }),
@@ -529,9 +690,14 @@ export class LoansService {
       );
     }
 
+    const repayableBalance = Number(loan.remainingBalance);
+    if (dto.amount > repayableBalance) {
+      throw new BadRequestException(`Repayment amount cannot exceed the outstanding balance of ₦${repayableBalance.toLocaleString()}.`);
+    }
+
     const repayment = await this.walletService.applyLoanRepayment(member.id, loan.id, dto.amount, 'MEMBER');
-    const newRemainingBalance = Number(loan.remainingBalance) - dto.amount;
-    const isFullyRepaid = newRemainingBalance <= 0;
+    const newRemainingBalance = repayableBalance - dto.amount;
+    const isFullyRepaid = newRemainingBalance <= 0 && this.resolveDisbursedAmount(loan) >= Number(loan.amount);
 
     await this.audit.log(userId, 'REPAY_LOAN', 'LoanApplication', id, {
       amount: dto.amount,
@@ -582,8 +748,14 @@ export class LoansService {
       );
     }
 
+    const repayableBalance = Number(loan.remainingBalance);
+    if (dto.amount > repayableBalance) {
+      throw new BadRequestException(`Repayment amount cannot exceed the outstanding balance of ₦${repayableBalance.toLocaleString()}.`);
+    }
+
     const repayment = await this.walletService.applyLoanRepayment(loan.memberId, loan.id, dto.amount, 'ADMIN');
-    const remaining = Math.max(Number(loan.remainingBalance) - dto.amount, 0);
+    const remaining = Math.max(repayableBalance - dto.amount, 0);
+    const isFullyRepaid = remaining <= 0 && this.resolveDisbursedAmount(loan) >= Number(loan.amount);
 
     await this.audit.log(actorId, 'ADMIN_REPAY_LOAN', 'LoanApplication', id, {
       amount: dto.amount,
@@ -594,7 +766,7 @@ export class LoansService {
       amount: dto.amount,
       remainingBalance: remaining,
       reference: repayment.reference,
-      status: remaining <= 0 ? 'COMPLETED' : 'IN_PROGRESS',
+      status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
     };
   }
 
@@ -615,11 +787,29 @@ export class LoansService {
     return ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(status);
   }
 
-  private calculateRepaymentProgress(loan: Pick<LoanLike, 'amount' | 'remainingBalance' | 'status'>) {
-    const amount = Number(loan.amount);
+  private resolveDisbursedAmount(loan: Pick<LoanLike, 'amount' | 'disbursedAmount' | 'status'>) {
+    const explicitAmount = Number((loan as any).disbursedAmount ?? 0);
+    if (explicitAmount > 0) return explicitAmount;
+    const increaseActivities = Array.isArray((loan as any).activities)
+      ? (loan as any).activities.filter((activity: any) => activity.type === 'AMOUNT_INCREASE')
+      : [];
+    const firstIncreasePreviousAmount = increaseActivities.length
+      ? Number(increaseActivities[0].previousAmount ?? 0)
+      : 0;
+    if (firstIncreasePreviousAmount > 0 && ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(loan.status)) {
+      return firstIncreasePreviousAmount;
+    }
+    return ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(loan.status)
+      ? Number(loan.amount)
+      : 0;
+  }
+
+  private calculateRepaymentProgress(loan: Pick<LoanLike, 'amount' | 'disbursedAmount' | 'remainingBalance' | 'status'>) {
+    const amount = this.resolveDisbursedAmount(loan);
     const remaining = Number(loan.remainingBalance);
     if (amount <= 0 || !this.shouldExposeRemainingBalance(loan.status)) return 0;
-    if (loan.status === 'COMPLETED' || remaining <= 0) return 100;
+    if (loan.status === 'COMPLETED') return 100;
+    if (remaining <= 0) return amount >= Number(loan.amount) ? 100 : 99.9;
     const paid = Math.max(amount - remaining, 0);
     const raw = Math.min((paid / amount) * 100, 99.9);
     return Math.round(raw * 10) / 10;
@@ -669,7 +859,7 @@ export class LoansService {
       },
       {
         label: 'Repayment',
-        date: loan.disbursedAt ?? loan.dueDate ?? null,
+        date: loan.dueDate ?? loan.disbursedAt ?? null,
         status:
           loan.status === 'COMPLETED'
             ? 'COMPLETED'
@@ -693,6 +883,16 @@ export class LoansService {
       },
     ].filter((item) => item.date);
 
+    const disbursements = relatedTransactions
+      .filter((item) => item.type === 'LOAN_DISBURSEMENT')
+      .map((item) => ({
+        label: 'Disbursement posted',
+        date: item.createdAt,
+        status: 'SUCCESSFUL',
+        amount: Number(item.amount),
+        reference: item.reference,
+      }));
+
     const repayments = relatedTransactions
       .filter((item) => item.type === 'LOAN_REPAYMENT')
       .map((item) => ({
@@ -705,7 +905,12 @@ export class LoansService {
 
     const withoutCompletion = baseTimeline.filter((item) => item.label !== 'Completed');
     const completion = baseTimeline.find((item) => item.label === 'Completed');
-    return completion ? [...withoutCompletion, ...repayments, completion] : [...withoutCompletion, ...repayments];
+    const moneyEvents = [...disbursements, ...repayments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const stageEvents = withoutCompletion.filter((item) => item.label !== 'Repayment');
+    const repaymentStage = withoutCompletion.find((item) => item.label === 'Repayment');
+    return completion
+      ? [...stageEvents, ...moneyEvents, ...(repaymentStage ? [repaymentStage] : []), completion]
+      : [...stageEvents, ...moneyEvents, ...(repaymentStage ? [repaymentStage] : [])];
   }
 
   private addTenorStep(date: Date, tenorUnit: LoanTenorUnit, steps: number) {

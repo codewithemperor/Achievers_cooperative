@@ -46,6 +46,8 @@ export type LoanStatus =
 
 export type LoanTenorUnit = 'MONTHS' | 'WEEKS';
 
+export type LoanActivityType = 'AMOUNT_INCREASE' | 'DISBURSEMENT';
+
 export type PackageSubscriptionStatus =
   | 'PENDING'
   | 'APPROVED'

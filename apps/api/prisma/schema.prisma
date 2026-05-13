@@ -90,6 +90,11 @@ enum LoanTenorUnit {
   WEEKS
 }
 
+enum LoanActivityType {
+  AMOUNT_INCREASE
+  DISBURSEMENT
+}
+
 enum PackageSubscriptionStatus {
   PENDING
   APPROVED
@@ -114,6 +119,7 @@ model User {
   verifiedPayments       Payment[]   @relation("PaymentVerifier")
   cooperativeEntries     CooperativeEntry[]
   financialLedgerEntries FinancialLedgerEntry[]
+  loanActivities         LoanActivity[]
 }
 
 model Member {
@@ -207,12 +213,32 @@ model LoanApplication {
   rejectedAt       DateTime?
   disbursedAt      DateTime?
   dueDate          DateTime?
+  disbursedAmount  Decimal        @default(0)
   remainingBalance Decimal        @default(0)
   bankAccountId    String?
   member           Member         @relation(fields: [memberId], references: [id])
   guarantorOne     Member?        @relation("LoanGuarantorOne", fields: [guarantorOneId], references: [id])
   guarantorTwo     Member?        @relation("LoanGuarantorTwo", fields: [guarantorTwoId], references: [id])
   bankAccount      BankAccount?   @relation(fields: [bankAccountId], references: [id])
+  activities       LoanActivity[]
+}
+
+model LoanActivity {
+  id             String           @id @default(cuid())
+  loanId         String
+  type           LoanActivityType
+  previousAmount Decimal?
+  newAmount      Decimal?
+  deltaAmount    Decimal
+  note           String?
+  actorId        String?
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+  loan           LoanApplication  @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  actor          User?            @relation(fields: [actorId], references: [id])
+
+  @@index([loanId, createdAt])
+  @@index([type])
 }
 
 model InvestmentProduct {
