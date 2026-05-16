@@ -112,10 +112,6 @@ interface TransactionFiltersForm {
   transactionDateRange: DateRange;
 }
 
-interface ReportFiltersForm {
-  reportDateRange: DateRange;
-}
-
 interface EditTransactionValues {
   amount: number | undefined;
   category: string;
@@ -156,6 +152,38 @@ function daysBetweenInclusive(from: string, to: string) {
   const start = new Date(`${from}T00:00:00`);
   const end = new Date(`${to}T00:00:00`);
   return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
+function toMonthValue(date: string) {
+  return date.slice(0, 7);
+}
+
+function monthIndex(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return year * 12 + monthNumber - 1;
+}
+
+function addMonths(month: string, count: number) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(year, monthNumber - 1 + count, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthStartDate(month: string) {
+  return `${month}-01`;
+}
+
+function monthEndDate(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(year, monthNumber, 0);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatMonthLabel(month: string) {
+  return new Date(`${month}-01T00:00:00`).toLocaleDateString("en-NG", {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function isWithinDateRange(createdAt: string, from: string, to: string) {
@@ -260,21 +288,15 @@ export default function TransactionsPage() {
       },
     },
   });
-  const { control: reportControl } = useForm<ReportFiltersForm>({
-    defaultValues: {
-      reportDateRange: {
-        start: parseDate(currentMonthRange.from),
-        end: parseDate(currentMonthRange.to),
-      },
-    },
-  });
   const [reportType, setReportType] = useState<"monthly" | "yearly">(
     "monthly",
   );
-  const selectedReportRange = useWatch({
-    control: reportControl,
-    name: "reportDateRange",
-  });
+  const [reportStartMonth, setReportStartMonth] = useState(
+    toMonthValue(currentMonthRange.from),
+  );
+  const [reportEndMonth, setReportEndMonth] = useState(
+    toMonthValue(currentMonthRange.to),
+  );
   const selectedDateRange = useWatch({
     control: filtersControl,
     name: "transactionDateRange",
@@ -322,11 +344,16 @@ export default function TransactionsPage() {
   );
 
   const reportRows = useMemo(() => {
-    const from = selectedReportRange?.start?.toString() ?? currentMonthRange.from;
-    const to = selectedReportRange?.end?.toString() ?? currentMonthRange.to;
+    const normalizedEndMonth =
+      reportType === "yearly" ? addMonths(reportStartMonth, 11) : reportEndMonth;
+    const from = monthStartDate(reportStartMonth);
+    const to = monthEndDate(normalizedEndMonth);
+
     return {
       from,
       to,
+      startMonth: reportStartMonth,
+      endMonth: normalizedEndMonth,
       member: (allMemberTransactions.data?.items ?? []).filter((item) =>
         isWithinDateRange(item.createdAt, from, to),
       ),
@@ -337,9 +364,9 @@ export default function TransactionsPage() {
   }, [
     allMemberTransactions.data,
     allTreasuryRows,
-    currentMonthRange.from,
-    currentMonthRange.to,
-    selectedReportRange,
+    reportEndMonth,
+    reportStartMonth,
+    reportType,
   ]);
 
   const memberSummary = useMemo(() => {
@@ -428,17 +455,23 @@ export default function TransactionsPage() {
   };
 
   function generateTransactionReport() {
+    const selectedMonths =
+      monthIndex(reportRows.endMonth) - monthIndex(reportRows.startMonth) + 1;
     const days = daysBetweenInclusive(reportRows.from, reportRows.to);
     if (days < 1) {
       showErrorToast("Choose a valid report period.");
       return;
     }
-    if (days > 366) {
+    if (selectedMonths < 1) {
+      showErrorToast("End month cannot be before start month.");
+      return;
+    }
+    if (selectedMonths > 12) {
       showErrorToast("Report period cannot be more than one year.");
       return;
     }
-    if (reportType === "yearly" && days < 360) {
-      showErrorToast("A yearly report must cover a full one-year period.");
+    if (reportType === "yearly" && selectedMonths !== 12) {
+      showErrorToast("A yearly report must cover exactly 12 months.");
       return;
     }
 
@@ -496,7 +529,7 @@ export default function TransactionsPage() {
 <body>
   <button onclick="window.print()" style="float:right;padding:10px 14px;border-radius:999px;border:0;background:#166534;color:white;font-weight:700;">Download / Save as PDF</button>
   <h1>Achievers Cooperative Transaction Report</h1>
-  <p class="muted">${escapeHtml(reportType === "yearly" ? "Yearly" : "Monthly")} report: ${escapeHtml(reportRows.from)} to ${escapeHtml(reportRows.to)}</p>
+  <p class="muted">${escapeHtml(reportType === "yearly" ? "Yearly" : "Monthly")} report: ${escapeHtml(formatMonthLabel(reportRows.startMonth))} to ${escapeHtml(formatMonthLabel(reportRows.endMonth))}</p>
   <div class="grid">
     <div class="card"><div class="label">Member Transactions</div><div class="value">${reportRows.member.length}</div></div>
     <div class="card"><div class="label">Pending</div><div class="value">${pending}</div></div>
@@ -542,14 +575,16 @@ export default function TransactionsPage() {
 </body>
 </html>`;
 
-    const win = window.open("", "_blank", "noopener,noreferrer,width=960,height=720");
+    const reportUrl = URL.createObjectURL(
+      new Blob([html], { type: "text/html;charset=utf-8" }),
+    );
+    const win = window.open(reportUrl, "_blank", "width=960,height=720");
     if (!win) {
+      URL.revokeObjectURL(reportUrl);
       showErrorToast("Please allow popups to generate the report.");
       return;
     }
-    win.document.write(html);
-    win.document.close();
-    win.focus();
+    window.setTimeout(() => URL.revokeObjectURL(reportUrl), 60_000);
   }
 
   async function updateTransaction(id: string, values: EditTransactionValues) {
@@ -678,7 +713,7 @@ export default function TransactionsPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <AdminModal
-              description="Choose a monthly range or a one-year period. The report opens in a print-ready PDF view."
+              description="Choose a month range or a one-year period. The report opens in a print-ready PDF view."
               title="Generate Transaction Report"
               trigger={
                 <button
@@ -712,16 +747,67 @@ export default function TransactionsPage() {
                         </button>
                       ))}
                     </div>
-                    <DateRangePicker
-                      control={reportControl}
-                      label=""
-                      name="reportDateRange"
-                    />
+                    {reportType === "monthly" ? (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="grid gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-text-400">
+                            Start month
+                          </span>
+                          <input
+                            className="min-h-12 rounded-2xl border border-[var(--background-200)] bg-white px-4 text-sm font-semibold text-text-900 outline-none transition focus:border-[var(--primary-600)] dark:border-[var(--background-700)] dark:bg-[var(--background-900)] dark:text-text-50"
+                            onChange={(event) =>
+                              setReportStartMonth(event.target.value)
+                            }
+                            type="month"
+                            value={reportStartMonth}
+                          />
+                        </label>
+                        <label className="grid gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-text-400">
+                            End month
+                          </span>
+                          <input
+                            className="min-h-12 rounded-2xl border border-[var(--background-200)] bg-white px-4 text-sm font-semibold text-text-900 outline-none transition focus:border-[var(--primary-600)] dark:border-[var(--background-700)] dark:bg-[var(--background-900)] dark:text-text-50"
+                            onChange={(event) =>
+                              setReportEndMonth(event.target.value)
+                            }
+                            type="month"
+                            value={reportEndMonth}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="grid gap-4">
+                        <label className="grid gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-text-400">
+                            Start month
+                          </span>
+                          <input
+                            className="min-h-12 rounded-2xl border border-[var(--background-200)] bg-white px-4 text-sm font-semibold text-text-900 outline-none transition focus:border-[var(--primary-600)] dark:border-[var(--background-700)] dark:bg-[var(--background-900)] dark:text-text-50"
+                            onChange={(event) =>
+                              setReportStartMonth(event.target.value)
+                            }
+                            type="month"
+                            value={reportStartMonth}
+                          />
+                        </label>
+                        <div className="rounded-2xl border border-[var(--background-200)] bg-background-50 px-4 py-3 text-sm text-text-600 dark:border-[var(--background-700)] dark:bg-[var(--background-900)] dark:text-text-300">
+                          This yearly report will run from{" "}
+                          <span className="font-semibold text-text-900 dark:text-text-50">
+                            {formatMonthLabel(reportStartMonth)}
+                          </span>{" "}
+                          to{" "}
+                          <span className="font-semibold text-text-900 dark:text-text-50">
+                            {formatMonthLabel(addMonths(reportStartMonth, 11))}
+                          </span>
+                          .
+                        </div>
+                      </div>
+                    )}
                     <p className="text-xs leading-5 text-text-500 dark:text-text-300">
                       Monthly reports can cover one month or a range such as
-                      December to February. Yearly reports can start from any
-                      month, such as September to August, but cannot exceed one
-                      year.
+                      December to February. Yearly reports are exactly 12 months
+                      and can start from any month, such as September to August.
                     </p>
                   </div>
                   <div className="mt-6 flex justify-end">
