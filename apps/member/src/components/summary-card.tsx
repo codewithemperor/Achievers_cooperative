@@ -9,6 +9,7 @@ interface SummaryCardProps {
   value: string;
   caption?: string;
   ctaLabel?: string;
+  dashboard?: boolean;
   href?: string;
   onCtaClick?: () => void;
   icon?: ReactNode;
@@ -21,6 +22,7 @@ export function SummaryCard({
   value,
   caption,
   ctaLabel,
+  dashboard = false,
   href,
   onCtaClick,
   icon,
@@ -57,7 +59,9 @@ export function SummaryCard({
             {value}
           </p>
           {caption ? (
-            <p className="mt-2 max-w-[16rem] text-sm text-white/76">
+            <p
+              className={`mt-2 max-w-68 text-sm text-white/76 ${dashboard ? "line-clamp-2" : ""}`}
+            >
               {caption}
             </p>
           ) : null}

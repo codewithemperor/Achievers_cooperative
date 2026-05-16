@@ -24,7 +24,7 @@ import { MemberModal } from "@/components/member-modal";
 import { useMemberData } from "@/hooks/use-member-data";
 import { useProfileData } from "@/hooks/use-profile-data";
 import { formatMoney, initialsFromName } from "@/lib/member-format";
-import { Avatar, ScrollShadow } from "@heroui/react";
+import { Avatar, ScrollShadow, Spinner } from "@heroui/react";
 
 interface DashboardPayload {
   profile: {
@@ -191,10 +191,11 @@ const cardMeta = [
 ];
 
 export default function DashboardPage() {
-  const { data, loading, refetch } = useMemberData<DashboardPayload>(
+  const { data, loading, refreshing, hasCachedData, refetch } =
+    useMemberData<DashboardPayload>(
     "/members/me/dashboard",
     fallbackData,
-  );
+    );
   const profile = useProfileData(fallbackProfile);
   const member = profile.data.member;
   const displayName = member?.fullName || data.profile.fullName || "Member";
@@ -227,6 +228,17 @@ export default function DashboardPage() {
       className="space-y-6 -mt-6 -mx-5 overflow-hidden bg-[linear-gradient(180deg,var(--color-primary-600)_0%,var(--color-primary-700)_17rem,var(--color-background-50)_17rem,var(--color-background-50)_100%)] dark:bg-[linear-gradient(180deg,var(--color-primary-200)_0%,var(--color-primary-300)_17rem,var(--color-background-50)_17rem,var(--color-background-50)_100%)]"
       onRefresh={refetch}
     >
+      {(loading || refreshing) && (
+        <div className="pointer-events-none fixed left-0 right-0 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[80] flex justify-center px-5">
+          <div className="flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/90 px-3 py-2 text-xs font-semibold text-text-700 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-background-900/90 dark:text-text-100">
+            <Spinner size="sm" />
+            <span>
+              {hasCachedData ? "Refreshing dashboard..." : "Loading dashboard..."}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <section className="text-white px-5 pt-6">
         <div className="flex items-center justify-between gap-4">
@@ -309,6 +321,7 @@ export default function DashboardPage() {
                 >
                   <SummaryCard
                     eyebrow={card.eyebrow}
+                    dashboard={true}
                     title={card.title}
                     value={cardValues[card.valueKey]}
                     caption={
@@ -336,17 +349,17 @@ export default function DashboardPage() {
 
       {/* Association Account */}
       {cooperativeAccounts.length ? (
-        <section className="-mt-4 px-5">
-          <div className="flex min-h-14 items-center justify-between gap-4 rounded-2xl bg-background-50 px-4 py-3 dark:bg-background-900">
-            <p className="min-w-0 truncate text-sm font-semibold text-text-900 dark:text-text-50">
-              Association account
+        <section className="-mt-3 bg-primary-100/60">
+          <div className="flex min-h-14 items-center justify-between gap-4 rounded-2xl  px-4 py-3 ">
+            <p className="min-w-0 truncate text-base font-semibold text-text-900 dark:text-text-50">
+              Association account details
             </p>
             <button
               className="shrink-0 rounded-full border border-background-200 bg-background-50 px-4 py-2 text-xs font-semibold text-text-700 transition-colors hover:bg-background-100 dark:border-white/10 dark:bg-background-800 dark:text-text-200"
               onClick={() => setIsAccountModalOpen(true)}
               type="button"
             >
-              View details
+              View
             </button>
           </div>
         </section>

@@ -14,10 +14,11 @@ export class SystemConfigService {
   async getAll() {
     await Promise.all(
       [
-        ['MEMBERSHIP_FEE_AMOUNT', '1000'],
+        ['MEMBERSHIP_FEE_AMOUNT', '20000'],
         ['COOPERATIVE_DEDUCTION_DAY', 'MONDAY'],
-        ['COOPERATIVE_DEDUCTION_AMOUNT', '1000'],
+        ['COOPERATIVE_DEDUCTION_AMOUNT', '250'],
         ['COOPERATIVE_DEDUCTION_ENABLED', 'true'],
+        ['MEMBERSHIP_CHARGE_RATE', '0'],
         ['MEMBER_TERMS_HTML', '<p>Welcome to Achievers Cooperative.</p>'],
         ['COOPERATIVE_DEDUCTION_LAST_RUN', ''],
         ['COOPERATIVE_DAILY_DEDUCTION_LAST_RUN', ''],

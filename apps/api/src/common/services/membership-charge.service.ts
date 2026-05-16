@@ -12,7 +12,7 @@ export class MembershipChargeService {
 
     if (!config) {
       config = await this.prisma.systemConfig.create({
-        data: { key: 'MEMBERSHIP_CHARGE_RATE', value: '0.02' },
+        data: { key: 'MEMBERSHIP_CHARGE_RATE', value: '0' },
       });
     }
 

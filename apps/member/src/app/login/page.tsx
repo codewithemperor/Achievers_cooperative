@@ -10,6 +10,7 @@ import { TextInput, PasswordInput } from "@/components/form-input";
 import api from "@/lib/member-api";
 import { clearMemberLocalCache, setMemberSession } from "@/lib/member-session";
 import { useMemberDataStore } from "@/lib/member-data-store";
+import { MySwal } from "@/lib/alert";
 
 const loginSchema = z.object({
   email: z
@@ -49,10 +50,19 @@ export default function MemberLoginPage() {
 
       const { data: payload } = await api.post<LoginResponse>(
         "/auth/login",
-        values,
+        {
+          ...values,
+          email: values.email.trim().toLowerCase(),
+        },
       );
 
       if (!payload || !payload.token || payload.user.role !== "MEMBER") {
+        await MySwal.fire({
+          icon: "error",
+          title: "Sign in failed",
+          text: "This login is for member accounts only.",
+          confirmButtonColor: "#2d5a27",
+        });
         setError("root", {
           message: "This login is for member accounts only.",
         });
@@ -70,12 +80,24 @@ export default function MemberLoginPage() {
         profileImageUrl: payload.user.member?.avatarUrl || undefined,
       });
 
+      await MySwal.fire({
+        icon: "success",
+        title: "Signed in",
+        text: "Welcome back.",
+        confirmButtonColor: "#2d5a27",
+      });
       router.replace("/dashboard");
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
         err?.message ||
         "Unable to sign in right now.";
+      await MySwal.fire({
+        icon: "error",
+        title: "Sign in failed",
+        text: Array.isArray(message) ? message.join(", ") : message,
+        confirmButtonColor: "#2d5a27",
+      });
       setError("root", { message });
     } finally {
       setSubmitting(false);

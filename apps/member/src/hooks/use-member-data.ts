@@ -4,6 +4,37 @@ import { useEffect, useState } from "react";
 import { fetchMemberApi } from "@/lib/member-api";
 import { MEMBER_DATA_TTL_MS, useMemberDataStore } from "@/lib/member-data-store";
 
+type PersistedRecord<T> = {
+  data: T;
+  fetchedAt: number;
+};
+
+function storageKey(path: string) {
+  return `member_data_cache_${encodeURIComponent(path)}`;
+}
+
+function readPersisted<T>(path: string) {
+  if (typeof window === "undefined") return null;
+
+  const raw = window.localStorage.getItem(storageKey(path));
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as PersistedRecord<T>;
+  } catch {
+    window.localStorage.removeItem(storageKey(path));
+    return null;
+  }
+}
+
+function writePersisted<T>(path: string, data: T) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    storageKey(path),
+    JSON.stringify({ data, fetchedAt: Date.now() }),
+  );
+}
+
 export function useMemberData<T>(path: string, fallback: T) {
   const getCached = useMemberDataStore((state) => state.getCached);
   const setCached = useMemberDataStore((state) => state.setCached);
@@ -11,8 +42,12 @@ export function useMemberData<T>(path: string, fallback: T) {
   const endRequest = useMemberDataStore((state) => state.endRequest);
   const activeRequests = useMemberDataStore((state) => state.activeRequests);
   const cached = getCached<T>(path);
-  const [data, setData] = useState<T>(cached?.data ?? fallback);
-  const [loading, setLoading] = useState(true);
+  const persisted =
+    typeof window === "undefined" ? null : readPersisted<T>(path);
+  const [data, setData] = useState<T>(cached?.data ?? persisted?.data ?? fallback);
+  const [loading, setLoading] = useState(!cached && !persisted);
+  const [refreshing, setRefreshing] = useState(Boolean(cached || persisted));
+  const [hasCachedData, setHasCachedData] = useState(Boolean(cached || persisted));
   const [error, setError] = useState<string | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
 
@@ -27,16 +62,21 @@ export function useMemberData<T>(path: string, fallback: T) {
       if (!force && freshEnough) {
         setData(current.data);
         setLoading(false);
+        setRefreshing(false);
+        setHasCachedData(true);
         return;
       }
 
       try {
-        setLoading(true);
+        setLoading(!current && !readPersisted<T>(path));
+        setRefreshing(Boolean(current || readPersisted<T>(path)));
         beginRequest();
         const result = await fetchMemberApi<T>(path);
         if (active) {
           setData(result);
           setCached(path, result);
+          writePersisted(path, result);
+          setHasCachedData(true);
           setError(null);
         }
       } catch (err: any) {
@@ -47,6 +87,7 @@ export function useMemberData<T>(path: string, fallback: T) {
         endRequest();
         if (active) {
           setLoading(false);
+          setRefreshing(false);
         }
       }
     }
@@ -70,6 +111,8 @@ export function useMemberData<T>(path: string, fallback: T) {
   return {
     data,
     loading,
+    refreshing,
+    hasCachedData,
     error,
     refresh: async () => {
       setRefreshIndex((current) => current + 1);

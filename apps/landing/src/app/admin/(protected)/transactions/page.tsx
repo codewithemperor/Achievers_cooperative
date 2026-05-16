@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   CalendarDays,
   CreditCard,
+  FileDown,
   Lock,
   Pencil,
   TrendingDown,
@@ -111,6 +112,10 @@ interface TransactionFiltersForm {
   transactionDateRange: DateRange;
 }
 
+interface ReportFiltersForm {
+  reportDateRange: DateRange;
+}
+
 interface EditTransactionValues {
   amount: number | undefined;
   category: string;
@@ -145,6 +150,29 @@ function isCreditTransaction(type: string) {
   return ["FUNDING", "CREDIT", "REFUND", "INVESTMENT_MATURITY"].some((key) =>
     type.toUpperCase().includes(key),
   );
+}
+
+function daysBetweenInclusive(from: string, to: string) {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
+function isWithinDateRange(createdAt: string, from: string, to: string) {
+  const value = new Date(createdAt).getTime();
+  return (
+    value >= new Date(toIsoBoundary(from, "start")).getTime() &&
+    value <= new Date(toIsoBoundary(to, "end")).getTime()
+  );
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function TransactionEditForm({
@@ -232,6 +260,21 @@ export default function TransactionsPage() {
       },
     },
   });
+  const { control: reportControl } = useForm<ReportFiltersForm>({
+    defaultValues: {
+      reportDateRange: {
+        start: parseDate(currentMonthRange.from),
+        end: parseDate(currentMonthRange.to),
+      },
+    },
+  });
+  const [reportType, setReportType] = useState<"monthly" | "yearly">(
+    "monthly",
+  );
+  const selectedReportRange = useWatch({
+    control: reportControl,
+    name: "reportDateRange",
+  });
   const selectedDateRange = useWatch({
     control: filtersControl,
     name: "transactionDateRange",
@@ -277,6 +320,27 @@ export default function TransactionsPage() {
     () => memberTransactions.data?.items ?? [],
     [memberTransactions.data],
   );
+
+  const reportRows = useMemo(() => {
+    const from = selectedReportRange?.start?.toString() ?? currentMonthRange.from;
+    const to = selectedReportRange?.end?.toString() ?? currentMonthRange.to;
+    return {
+      from,
+      to,
+      member: (allMemberTransactions.data?.items ?? []).filter((item) =>
+        isWithinDateRange(item.createdAt, from, to),
+      ),
+      treasury: allTreasuryRows.filter((item) =>
+        isWithinDateRange(item.createdAt, from, to),
+      ),
+    };
+  }, [
+    allMemberTransactions.data,
+    allTreasuryRows,
+    currentMonthRange.from,
+    currentMonthRange.to,
+    selectedReportRange,
+  ]);
 
   const memberSummary = useMemo(() => {
     if (allMemberTransactions.data?.summary) {
@@ -362,6 +426,131 @@ export default function TransactionsPage() {
     netTreasuryFlow:
       (wallet.data?.totalIncome ?? 0) - (wallet.data?.totalExpense ?? 0),
   };
+
+  function generateTransactionReport() {
+    const days = daysBetweenInclusive(reportRows.from, reportRows.to);
+    if (days < 1) {
+      showErrorToast("Choose a valid report period.");
+      return;
+    }
+    if (days > 366) {
+      showErrorToast("Report period cannot be more than one year.");
+      return;
+    }
+    if (reportType === "yearly" && days < 360) {
+      showErrorToast("A yearly report must cover a full one-year period.");
+      return;
+    }
+
+    const approved = reportRows.member.filter(
+      (item) => item.status === "APPROVED",
+    );
+    const approvedCredits = approved
+      .filter((item) => isCreditTransaction(item.type))
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const approvedDebits = approved
+      .filter((item) => !isCreditTransaction(item.type))
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const pending = reportRows.member.filter(
+      (item) => item.status === "PENDING",
+    ).length;
+    const treasuryTotal = reportRows.treasury.reduce(
+      (sum, item) => sum + Number(item.amount ?? 0),
+      0,
+    );
+    const typeBuckets = reportRows.member.reduce<Record<string, number>>(
+      (acc, item) => {
+        const key = item.type.replaceAll("_", " ");
+        acc[key] = (acc[key] ?? 0) + Number(item.amount ?? 0);
+        return acc;
+      },
+      {},
+    );
+    const statusBuckets = reportRows.member.reduce<Record<string, number>>(
+      (acc, item) => {
+        acc[item.status] = (acc[item.status] ?? 0) + 1;
+        return acc;
+      },
+      {},
+    );
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <title>Transaction Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #17201a; padding: 32px; }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    h2 { margin-top: 28px; font-size: 16px; }
+    .muted { color: #667085; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
+    .card { border: 1px solid #d0d5dd; border-radius: 12px; padding: 14px; }
+    .label { color: #667085; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .value { margin-top: 8px; font-size: 18px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+    th, td { border-bottom: 1px solid #eaecf0; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; font-size: 11px; text-transform: uppercase; color: #667085; }
+    @media print { button { display: none; } body { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <button onclick="window.print()" style="float:right;padding:10px 14px;border-radius:999px;border:0;background:#166534;color:white;font-weight:700;">Download / Save as PDF</button>
+  <h1>Achievers Cooperative Transaction Report</h1>
+  <p class="muted">${escapeHtml(reportType === "yearly" ? "Yearly" : "Monthly")} report: ${escapeHtml(reportRows.from)} to ${escapeHtml(reportRows.to)}</p>
+  <div class="grid">
+    <div class="card"><div class="label">Member Transactions</div><div class="value">${reportRows.member.length}</div></div>
+    <div class="card"><div class="label">Pending</div><div class="value">${pending}</div></div>
+    <div class="card"><div class="label">Approved Credits</div><div class="value">${currency.format(approvedCredits)}</div></div>
+    <div class="card"><div class="label">Approved Debits</div><div class="value">${currency.format(approvedDebits)}</div></div>
+    <div class="card"><div class="label">Treasury Entries</div><div class="value">${reportRows.treasury.length}</div></div>
+    <div class="card"><div class="label">Treasury Movement</div><div class="value">${currency.format(treasuryTotal)}</div></div>
+    <div class="card"><div class="label">Treasury Cash</div><div class="value">${currency.format(treasurySummary.physicalTreasuryCash)}</div></div>
+    <div class="card"><div class="label">Association Available</div><div class="value">${currency.format(treasurySummary.associationAvailableBalance)}</div></div>
+  </div>
+  <h2>Transaction Type Summary</h2>
+  <table><thead><tr><th>Type</th><th>Total Amount</th></tr></thead><tbody>
+    ${Object.entries(typeBuckets)
+      .map(([type, amount]) => `<tr><td>${escapeHtml(type)}</td><td>${currency.format(amount)}</td></tr>`)
+      .join("") || "<tr><td colspan='2'>No member transactions in this period.</td></tr>"}
+  </tbody></table>
+  <h2>Status Summary</h2>
+  <table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody>
+    ${Object.entries(statusBuckets)
+      .map(([status, count]) => `<tr><td>${escapeHtml(status)}</td><td>${count}</td></tr>`)
+      .join("") || "<tr><td colspan='2'>No statuses in this period.</td></tr>"}
+  </tbody></table>
+  <h2>Recent Member Transactions</h2>
+  <table><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Status</th><th>Amount</th></tr></thead><tbody>
+    ${reportRows.member
+      .slice(0, 50)
+      .map(
+        (item) =>
+          `<tr><td>${escapeHtml(formatDateTime(item.createdAt))}</td><td>${escapeHtml(item.wallet.member.fullName)}</td><td>${escapeHtml(item.type.replaceAll("_", " "))}</td><td>${escapeHtml(item.status)}</td><td>${currency.format(item.amount)}</td></tr>`,
+      )
+      .join("") || "<tr><td colspan='5'>No member transactions in this period.</td></tr>"}
+  </tbody></table>
+  <h2>Recent Treasury Ledger</h2>
+  <table><thead><tr><th>Date</th><th>Source</th><th>Description</th><th>Amount</th></tr></thead><tbody>
+    ${reportRows.treasury
+      .slice(0, 50)
+      .map(
+        (item) =>
+          `<tr><td>${escapeHtml(formatDateTime(item.createdAt))}</td><td>${escapeHtml(item.sourceType)}</td><td>${escapeHtml(item.description)}</td><td>${currency.format(item.amount)}</td></tr>`,
+      )
+      .join("") || "<tr><td colspan='4'>No treasury entries in this period.</td></tr>"}
+  </tbody></table>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank", "noopener,noreferrer,width=960,height=720");
+    if (!win) {
+      showErrorToast("Please allow popups to generate the report.");
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+  }
 
   async function updateTransaction(id: string, values: EditTransactionValues) {
     try {
@@ -487,77 +676,138 @@ export default function TransactionsPage() {
         title="Transactions"
         subtitle="Review member wallet activity, auto-generated deductions, and treasury entries in one admin workspace."
         actions={
-          <AdminModal
-            description="Create a treasury income or expense entry and watch the summary cards update immediately."
-            title="Add Treasury Entry"
-            trigger={
-              <button
-                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
-                type="button"
-              >
-                Add transaction
-              </button>
-            }
-          >
-            {({ close }) => (
-              <>
-                <div className="grid gap-4">
-                  <select
-                    className="min-h-12 rounded-2xl border border-[var(--primary-900)/12] bg-white px-4 text-sm text-text-900 outline-none"
-                    onChange={(event) =>
-                      setValue(
-                        "type",
-                        event.target.value as "INCOME" | "EXPENSE",
-                      )
-                    }
-                    value={watch("type")}
-                  >
-                    <option value="INCOME">Income</option>
-                    <option value="EXPENSE">Expense</option>
-                  </select>
-                  <NumberInput
-                    className="rounded-2xl"
-                    control={control}
-                    label="Amount"
-                    name={"amount" as never}
-                    min={0}
-                  />
-                  <TextInput
-                    className="rounded-2xl"
-                    control={control}
-                    label="Category"
-                    name={"category" as never}
-                    placeholder="Operations"
-                  />
-                  <TextareaInput
-                    className="rounded-2xl"
-                    control={control}
-                    label="Description"
-                    name={"description" as never}
-                    placeholder="Describe this entry"
-                    rows={4}
-                  />
-                  <TextInput
-                    className="rounded-2xl"
-                    control={control}
-                    label="Reference"
-                    name={"reference" as never}
-                    placeholder="Optional reference"
-                  />
-                </div>
-                <div className="mt-6 flex justify-end">
-                  <button
-                    className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
-                    disabled={creatingEntry}
-                    onClick={() => void createTreasuryEntry(close)()}
-                    type="button"
-                  >
-                    {creatingEntry ? "Saving..." : "Create entry"}
-                  </button>
-                </div>
-              </>
-            )}
-          </AdminModal>
+          <div className="flex flex-wrap gap-2">
+            <AdminModal
+              description="Choose a monthly range or a one-year period. The report opens in a print-ready PDF view."
+              title="Generate Transaction Report"
+              trigger={
+                <button
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--background-200)] bg-white px-5 py-3 text-sm font-semibold text-text-800 transition hover:bg-[var(--background-50)] dark:border-[var(--background-700)] dark:bg-[var(--background-900)] dark:text-text-100"
+                  type="button"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Generate report
+                </button>
+              }
+            >
+              {() => (
+                <>
+                  <div className="grid gap-4">
+                    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-background-100 p-1 dark:bg-background-900">
+                      {[
+                        ["monthly", "Monthly"],
+                        ["yearly", "Yearly"],
+                      ].map(([id, label]) => (
+                        <button
+                          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                            reportType === id
+                              ? "bg-white text-text-900 shadow-sm dark:bg-background-800 dark:text-text-50"
+                              : "text-text-500"
+                          }`}
+                          key={id}
+                          onClick={() => setReportType(id as "monthly" | "yearly")}
+                          type="button"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <DateRangePicker
+                      control={reportControl}
+                      label=""
+                      name="reportDateRange"
+                    />
+                    <p className="text-xs leading-5 text-text-500 dark:text-text-300">
+                      Monthly reports can cover one month or a range such as
+                      December to February. Yearly reports can start from any
+                      month, such as September to August, but cannot exceed one
+                      year.
+                    </p>
+                  </div>
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+                      onClick={generateTransactionReport}
+                      type="button"
+                    >
+                      Download PDF
+                    </button>
+                  </div>
+                </>
+              )}
+            </AdminModal>
+            <AdminModal
+              description="Create a treasury income or expense entry and watch the summary cards update immediately."
+              title="Add Treasury Entry"
+              trigger={
+                <button
+                  className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
+                  type="button"
+                >
+                  Add transaction
+                </button>
+              }
+            >
+              {({ close }) => (
+                <>
+                  <div className="grid gap-4">
+                    <select
+                      className="min-h-12 rounded-2xl border border-[var(--primary-900)/12] bg-white px-4 text-sm text-text-900 outline-none"
+                      onChange={(event) =>
+                        setValue(
+                          "type",
+                          event.target.value as "INCOME" | "EXPENSE",
+                        )
+                      }
+                      value={watch("type")}
+                    >
+                      <option value="INCOME">Income</option>
+                      <option value="EXPENSE">Expense</option>
+                    </select>
+                    <NumberInput
+                      className="rounded-2xl"
+                      control={control}
+                      label="Amount"
+                      name={"amount" as never}
+                      min={0}
+                    />
+                    <TextInput
+                      className="rounded-2xl"
+                      control={control}
+                      label="Category"
+                      name={"category" as never}
+                      placeholder="Operations"
+                    />
+                    <TextareaInput
+                      className="rounded-2xl"
+                      control={control}
+                      label="Description"
+                      name={"description" as never}
+                      placeholder="Describe this entry"
+                      rows={4}
+                    />
+                    <TextInput
+                      className="rounded-2xl"
+                      control={control}
+                      label="Reference"
+                      name={"reference" as never}
+                      placeholder="Optional reference"
+                    />
+                  </div>
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                      disabled={creatingEntry}
+                      onClick={() => void createTreasuryEntry(close)()}
+                      type="button"
+                    >
+                      {creatingEntry ? "Saving..." : "Create entry"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </AdminModal>
+          </div>
         }
       />
 

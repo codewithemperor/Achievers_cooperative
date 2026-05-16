@@ -68,7 +68,8 @@ export function MemberShell({ children }: PropsWithChildren) {
   }, [isAuthRoute, router]);
 
   const session = getMemberSession();
-  const isTabScreen = tabItems.some((item) => pathname === item.href);
+  const isTabScreen =
+    pathname === "/" || tabItems.some((item) => pathname === item.href);
 
   if (isAuthRoute) {
     return <>{children}</>;
@@ -113,7 +114,9 @@ export function MemberShell({ children }: PropsWithChildren) {
           <div className="relative grid grid-cols-4 rounded-[30px] border border-white/50 dark:border-white/10 bg-white/75 dark:bg-background-100/80 p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-2xl">
             {tabItems.map((item) => {
               const active =
-                pathname === item.href || pathname.startsWith(`${item.href}/`);
+                (item.href === "/dashboard" && pathname === "/") ||
+                pathname === item.href ||
+                pathname.startsWith(`${item.href}/`);
 
               return (
                 <Link

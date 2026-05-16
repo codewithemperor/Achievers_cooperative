@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import Image from "next/image";
+import { Alert } from "@heroui/react";
 import api from "@/lib/api";
 import { setSession } from "@/lib/session";
 import { PasswordInput, TextInput } from "@/components/ui/form-input";
@@ -16,6 +17,11 @@ interface LoginValues {
 export default function AdminLoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [alert, setAlert] = useState<{
+    status: "success" | "danger";
+    title: string;
+    description?: string;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { control, handleSubmit } = useForm<LoginValues>({
     defaultValues: {
@@ -28,11 +34,21 @@ export default function AdminLoginPage() {
     try {
       setSubmitting(true);
       setError(null);
-      const response = await api.post("/auth/login", values);
+      setAlert(null);
+      const response = await api.post("/auth/login", {
+        ...values,
+        email: values.email.trim().toLowerCase(),
+      });
       const user = response.data.user;
 
       if (user.role !== "SUPER_ADMIN") {
-        setError("This login is reserved for super administrators.");
+        const message = "This login is reserved for super administrators.";
+        setAlert({
+          status: "danger",
+          title: "Sign in failed",
+          description: message,
+        });
+        setError(message);
         return;
       }
 
@@ -44,10 +60,23 @@ export default function AdminLoginPage() {
         role: user.role,
       });
 
+      setAlert({
+        status: "success",
+        title: response.data.message || "Signed in successfully.",
+        description: "Opening your admin workspace.",
+      });
+      await new Promise((resolve) => window.setTimeout(resolve, 800));
       router.push("/admin");
       router.refresh();
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Unable to sign in.");
+      const message = err?.response?.data?.message || "Unable to sign in.";
+      const description = Array.isArray(message) ? message.join(", ") : message;
+      setAlert({
+        status: "danger",
+        title: "Sign in failed",
+        description,
+      });
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -97,10 +126,24 @@ export default function AdminLoginPage() {
             placeholder="Enter your password"
           />
 
-          {error ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {error}
-            </div>
+          {alert ? (
+            <Alert status={alert.status}>
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>{alert.title}</Alert.Title>
+                {alert.description ? (
+                  <Alert.Description>{alert.description}</Alert.Description>
+                ) : null}
+              </Alert.Content>
+            </Alert>
+          ) : error ? (
+            <Alert status="danger">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>Sign in failed</Alert.Title>
+                <Alert.Description>{error}</Alert.Description>
+              </Alert.Content>
+            </Alert>
           ) : null}
 
           <button
