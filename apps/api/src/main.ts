@@ -4,6 +4,10 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
+function normalizeOrigin(origin: string) {
+  return origin.trim().replace(/\/+$/, '').toLowerCase();
+}
+
 function resolveCorsOrigins() {
   const configuredOrigins =
     process.env.CORS_ORIGINS ||
@@ -16,16 +20,32 @@ function resolveCorsOrigins() {
     'http://localhost:5000',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
+    'https://achieverscoop.vercel.app',
+    'https://achieversmember.vercel.app',
+    'https://achieverscooperative.com.ng',
+    'https://www.achieverscooperative.com.ng',
+    'https://member.achieverscooperative.com.ng',
+    'https://admin.achieverscooperative.com.ng',
   ];
 
   return Array.from(
     new Set([
       ...defaultOrigins,
       ...configuredOrigins
-        .split(',')
-        .map((origin) => origin.trim())
+        .split(/[\s,]+/)
+        .map((origin) => normalizeOrigin(origin))
         .filter(Boolean),
-    ]),
+    ].map((origin) => normalizeOrigin(origin))),
+  );
+}
+
+function isAllowedCorsOrigin(origin: string | undefined, allowedOrigins: string[]) {
+  if (!origin) return true;
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  return (
+    allowedOrigins.includes(normalizedOrigin) ||
+    /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(normalizedOrigin)
   );
 }
 
@@ -42,7 +62,7 @@ async function bootstrap() {
       origin: string | undefined,
       callback: (error: Error | null, allow?: boolean) => void,
     ) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isAllowedCorsOrigin(origin, allowedOrigins)) {
         callback(null, true);
         return;
       }
