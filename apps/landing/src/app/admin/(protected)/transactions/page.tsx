@@ -63,6 +63,17 @@ interface MemberTransactionsResponse {
   }>;
 }
 
+interface WeeklyDeductionRow {
+  memberName: string;
+  membershipNumber: string;
+  expectedAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  entries: number;
+  latestAt: string;
+  status: "APPROVED" | "PENDING";
+}
+
 interface TreasurySummary {
   balance: number;
   physicalTreasuryCash: number;
@@ -272,7 +283,9 @@ function TransactionEditForm({
 }
 
 export default function TransactionsPage() {
-  const [tab, setTab] = useState<"member" | "treasury">("treasury");
+  const [tab, setTab] = useState<"member" | "treasury" | "weekly">(
+    "treasury",
+  );
   const [selectedTransaction, setSelectedTransaction] = useState<
     MemberTransactionsResponse["items"][number] | null
   >(null);
@@ -342,6 +355,70 @@ export default function TransactionsPage() {
     () => memberTransactions.data?.items ?? [],
     [memberTransactions.data],
   );
+  const weeklyTransactions = useMemo(
+    () => transactionRows.filter((item) => item.type === "WEEKLY_COOPERATIVE"),
+    [transactionRows],
+  );
+  const weeklySummary = useMemo(() => {
+    const expectedAmount = weeklyTransactions.reduce(
+      (sum, item) => sum + Number(item.amount ?? 0),
+      0,
+    );
+    const paidAmount = weeklyTransactions
+      .filter((item) => item.status === "APPROVED")
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const outstandingAmount = weeklyTransactions
+      .filter((item) => item.status !== "APPROVED")
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const members = new Set(
+      weeklyTransactions.map((item) => item.wallet.member.membershipNumber),
+    ).size;
+
+    return {
+      expectedAmount,
+      paidAmount,
+      outstandingAmount,
+      members,
+    };
+  }, [weeklyTransactions]);
+  const weeklyRows = useMemo<WeeklyDeductionRow[]>(() => {
+    const rows = new Map<string, WeeklyDeductionRow>();
+
+    weeklyTransactions.forEach((item) => {
+      const key = item.wallet.member.membershipNumber;
+      const current =
+        rows.get(key) ??
+        ({
+          memberName: item.wallet.member.fullName,
+          membershipNumber: item.wallet.member.membershipNumber,
+          expectedAmount: 0,
+          paidAmount: 0,
+          outstandingAmount: 0,
+          entries: 0,
+          latestAt: item.createdAt,
+          status: "APPROVED",
+        } satisfies WeeklyDeductionRow);
+      const amount = Number(item.amount ?? 0);
+      const paid = item.status === "APPROVED" ? amount : 0;
+      const outstanding = item.status === "APPROVED" ? 0 : amount;
+
+      current.expectedAmount += amount;
+      current.paidAmount += paid;
+      current.outstandingAmount += outstanding;
+      current.entries += 1;
+      current.status = current.outstandingAmount > 0 ? "PENDING" : "APPROVED";
+      current.latestAt =
+        new Date(item.createdAt).getTime() > new Date(current.latestAt).getTime()
+          ? item.createdAt
+          : current.latestAt;
+      rows.set(key, current);
+    });
+
+    return Array.from(rows.values()).sort((left, right) => {
+      if (left.status !== right.status) return left.status === "PENDING" ? -1 : 1;
+      return left.memberName.localeCompare(right.memberName);
+    });
+  }, [weeklyTransactions]);
 
   const reportRows = useMemo(() => {
     const normalizedEndMonth =
@@ -475,37 +552,189 @@ export default function TransactionsPage() {
       return;
     }
 
-    const approved = reportRows.member.filter(
+    const approvedRows = reportRows.member.filter(
       (item) => item.status === "APPROVED",
     );
-    const approvedCredits = approved
-      .filter((item) => isCreditTransaction(item.type))
-      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
-    const approvedDebits = approved
-      .filter((item) => !isCreditTransaction(item.type))
-      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
-    const pending = reportRows.member.filter(
-      (item) => item.status === "PENDING",
-    ).length;
-    const treasuryTotal = reportRows.treasury.reduce(
+    const sumTypes = (types: string[], approvedOnly = true) =>
+      reportRows.member
+        .filter((item) => types.includes(item.type))
+        .filter((item) => !approvedOnly || item.status === "APPROVED")
+        .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const countTypes = (types: string[], approvedOnly = false) =>
+      reportRows.member
+        .filter((item) => types.includes(item.type))
+        .filter((item) => !approvedOnly || item.status === "APPROVED").length;
+    const countStatus = (status: string, types?: string[]) =>
+      reportRows.member.filter(
+        (item) =>
+          item.status === status && (!types || types.includes(item.type)),
+      ).length;
+    const hasLedgerLine = (
+      item: TreasuryLedgerResponse["items"][number],
+      account: string,
+      direction: string,
+    ) =>
+      item.lines.some(
+        (line) => line.account === account && line.direction === direction,
+      );
+    const sumTreasuryRows = (
+      rows: TreasuryLedgerResponse["items"],
+    ) => rows.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+
+    const loanDisbursed = sumTypes(["LOAN_DISBURSEMENT"]);
+    const loanRepaid = sumTypes(["LOAN_REPAYMENT"]);
+    const loanOutstandingMovement = Math.max(loanDisbursed - loanRepaid, 0);
+    const walletFunding = sumTypes(["FUNDING", "WALLET_FUNDING"]);
+    const walletWithdrawals = sumTypes(["WALLET_WITHDRAWAL"]);
+    const savingsContributions = sumTypes(["SAVINGS"]);
+    const membershipFees = sumTypes(["MEMBERSHIP_FEE"]);
+    const membershipCharges = sumTypes(["MEMBERSHIP_CHARGE"]);
+    const packagePayments = sumTypes(["PACKAGE_SUBSCRIPTION"]);
+    const packagePenalties = sumTypes(["PACKAGE_PENALTY"]);
+    const investmentDeposits = sumTypes(["INVESTMENT", "INVESTMENT_DEPOSIT"]);
+    const investmentReturns = sumTypes(["INVESTMENT_RETURN"]);
+    const investmentCancellations = sumTypes([
+      "INVESTMENT_CANCELLATION_REFUND",
+    ]);
+    const weeklyReportRows = reportRows.member.filter(
+      (item) => item.type === "WEEKLY_COOPERATIVE",
+    );
+    const weeklyExpected = weeklyReportRows.reduce(
       (sum, item) => sum + Number(item.amount ?? 0),
       0,
     );
-    const typeBuckets = reportRows.member.reduce<Record<string, number>>(
-      (acc, item) => {
-        const key = item.type.replaceAll("_", " ");
-        acc[key] = (acc[key] ?? 0) + Number(item.amount ?? 0);
-        return acc;
-      },
-      {},
+    const weeklyPaid = weeklyReportRows
+      .filter((item) => item.status === "APPROVED")
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const weeklyOutstanding = weeklyReportRows
+      .filter((item) => item.status !== "APPROVED")
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const weeklyMembers = new Set(
+      weeklyReportRows.map((item) => item.wallet.member.membershipNumber),
+    ).size;
+    const weeklyReportMemberRows = Array.from(
+      weeklyReportRows
+        .reduce((map, item) => {
+          const key = item.wallet.member.membershipNumber;
+          const current =
+            map.get(key) ??
+            ({
+              memberName: item.wallet.member.fullName,
+              membershipNumber: item.wallet.member.membershipNumber,
+              expectedAmount: 0,
+              paidAmount: 0,
+              outstandingAmount: 0,
+              entries: 0,
+              latestAt: item.createdAt,
+              status: "APPROVED",
+            } satisfies WeeklyDeductionRow);
+          const amount = Number(item.amount ?? 0);
+          current.expectedAmount += amount;
+          current.paidAmount += item.status === "APPROVED" ? amount : 0;
+          current.outstandingAmount += item.status === "APPROVED" ? 0 : amount;
+          current.entries += 1;
+          current.status =
+            current.outstandingAmount > 0 ? "PENDING" : "APPROVED";
+          current.latestAt =
+            new Date(item.createdAt).getTime() >
+            new Date(current.latestAt).getTime()
+              ? item.createdAt
+              : current.latestAt;
+          map.set(key, current);
+          return map;
+        }, new Map<string, WeeklyDeductionRow>())
+        .values(),
+    ).sort((left, right) => {
+      if (left.status !== right.status) return left.status === "PENDING" ? -1 : 1;
+      return left.memberName.localeCompare(right.memberName);
+    });
+    const treasuryIncomeRows = reportRows.treasury.filter(
+      (item) =>
+        hasLedgerLine(item, "PHYSICAL_TREASURY_CASH", "DEBIT") &&
+        hasLedgerLine(item, "ASSOCIATION_AVAILABLE", "CREDIT"),
     );
-    const statusBuckets = reportRows.member.reduce<Record<string, number>>(
-      (acc, item) => {
-        acc[item.status] = (acc[item.status] ?? 0) + 1;
-        return acc;
-      },
-      {},
+    const treasuryExpenseRows = reportRows.treasury.filter(
+      (item) =>
+        hasLedgerLine(item, "ASSOCIATION_AVAILABLE", "DEBIT") &&
+        hasLedgerLine(item, "PHYSICAL_TREASURY_CASH", "CREDIT"),
     );
+    const treasuryIncome = sumTreasuryRows(treasuryIncomeRows);
+    const treasuryExpense = sumTreasuryRows(treasuryExpenseRows);
+    const approvedCreditTotal = approvedRows
+      .filter((item) => isCreditTransaction(item.type))
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const approvedDebitTotal = approvedRows
+      .filter((item) => !isCreditTransaction(item.type))
+      .reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+    const reportSections = [
+      {
+        title: "Overall Activity",
+        rows: [
+          ["Member transaction records", String(reportRows.member.length), "All member-side transaction rows in the selected period."],
+          ["Approved credit movement", currency.format(approvedCreditTotal), "Approved member wallet credits such as funding, refunds, and returns."],
+          ["Approved debit movement", currency.format(approvedDebitTotal), "Approved deductions, repayments, withdrawals, and cooperative payments."],
+          ["Pending transaction records", String(countStatus("PENDING")), "Transactions still waiting for approval or settlement."],
+          ["Treasury ledger entries", String(reportRows.treasury.length), "Immutable treasury ledger entries in the selected period."],
+        ],
+      },
+      {
+        title: "Loans",
+        rows: [
+          ["Loan approved records", String(countTypes(["LOAN_DISBURSEMENT"], true)), "Loan approvals become financial movements when money is disbursed."],
+          ["Loan disbursed", currency.format(loanDisbursed), "Approved loan money released to members in this period."],
+          ["Loan repaid", currency.format(loanRepaid), "Loan repayments received from members in this period."],
+          ["Outstanding loan movement", currency.format(loanOutstandingMovement), "Loan disbursements minus repayments inside this report period."],
+        ],
+      },
+      {
+        title: "Wallets And Savings",
+        rows: [
+          ["Wallet funding", currency.format(walletFunding), "Member-owned money paid into the cooperative bank account."],
+          ["Wallet withdrawals", currency.format(walletWithdrawals), "Member-owned wallet money withdrawn from the cooperative bank account."],
+          ["Savings contributions", currency.format(savingsContributions), "Wallet money moved into cooperative-owned savings."],
+          ["Weekly deductions expected", currency.format(weeklyExpected), `${weeklyMembers} member(s) had weekly deduction records in this period.`],
+          ["Weekly deductions paid", currency.format(weeklyPaid), "Weekly deductions successfully collected."],
+          ["Weekly deductions outstanding", currency.format(weeklyOutstanding), "Weekly deductions not yet collected or still pending."],
+        ],
+      },
+      {
+        title: "Packages, Membership, And Investments",
+        rows: [
+          ["Package payments", currency.format(packagePayments), "Package subscription repayments collected."],
+          ["Package penalties", currency.format(packagePenalties), "Package penalty payments collected."],
+          ["Membership fees", currency.format(membershipFees), "New member fee payments collected."],
+          ["Membership charges", currency.format(membershipCharges), "Recurring or configured membership charges collected."],
+          ["Investment deposits", currency.format(investmentDeposits), "Investment subscription money received."],
+          ["Investment returns", currency.format(investmentReturns), "Investment maturity payouts posted."],
+          ["Investment cancellations", currency.format(investmentCancellations), "Approved investment cancellation refunds posted to wallets."],
+        ],
+      },
+      {
+        title: "Income, Expenses, And Treasury",
+        rows: [
+          ["Admin income", currency.format(treasuryIncome), "Treasury entries that increase physical cash and association available funds."],
+          ["Admin expenses", currency.format(treasuryExpense), "Treasury entries that reduce physical cash and association available funds."],
+          ["Net admin treasury movement", currency.format(treasuryIncome - treasuryExpense), "Admin income minus admin expenses for the selected period."],
+          ["Current treasury cash", currency.format(treasurySummary.physicalTreasuryCash), "Current physical cash expected in the cooperative bank account."],
+          ["Current member wallet liability", currency.format(treasurySummary.memberWalletLiability), "Current member-owned wallet funds held by the cooperative."],
+          ["Current association available", currency.format(treasurySummary.associationAvailableBalance), "Current cooperative-owned funds available for loans and spending."],
+        ],
+      },
+    ];
+    const reportSectionsHtml = reportSections
+      .map(
+        (section) => `
+  <h2>${escapeHtml(section.title)}</h2>
+  <table><thead><tr><th>Metric</th><th>Value</th><th>Meaning</th></tr></thead><tbody>
+    ${section.rows
+      .map(
+        ([label, value, meaning]) =>
+          `<tr><td>${escapeHtml(label)}</td><td><strong>${escapeHtml(value)}</strong></td><td>${escapeHtml(meaning)}</td></tr>`,
+      )
+      .join("")}
+  </tbody></table>`,
+      )
+      .join("");
 
     const html = `<!doctype html>
 <html>
@@ -516,10 +745,6 @@ export default function TransactionsPage() {
     h1 { margin: 0 0 4px; font-size: 24px; }
     h2 { margin-top: 28px; font-size: 16px; }
     .muted { color: #667085; font-size: 12px; }
-    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
-    .card { border: 1px solid #d0d5dd; border-radius: 12px; padding: 14px; }
-    .label { color: #667085; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
-    .value { margin-top: 8px; font-size: 18px; font-weight: 700; }
     table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
     th, td { border-bottom: 1px solid #eaecf0; padding: 8px; text-align: left; vertical-align: top; }
     th { background: #f9fafb; font-size: 11px; text-transform: uppercase; color: #667085; }
@@ -530,27 +755,15 @@ export default function TransactionsPage() {
   <button onclick="window.print()" style="float:right;padding:10px 14px;border-radius:999px;border:0;background:#166534;color:white;font-weight:700;">Download / Save as PDF</button>
   <h1>Achievers Cooperative Transaction Report</h1>
   <p class="muted">${escapeHtml(reportType === "yearly" ? "Yearly" : "Monthly")} report: ${escapeHtml(formatMonthLabel(reportRows.startMonth))} to ${escapeHtml(formatMonthLabel(reportRows.endMonth))}</p>
-  <div class="grid">
-    <div class="card"><div class="label">Member Transactions</div><div class="value">${reportRows.member.length}</div></div>
-    <div class="card"><div class="label">Pending</div><div class="value">${pending}</div></div>
-    <div class="card"><div class="label">Approved Credits</div><div class="value">${currency.format(approvedCredits)}</div></div>
-    <div class="card"><div class="label">Approved Debits</div><div class="value">${currency.format(approvedDebits)}</div></div>
-    <div class="card"><div class="label">Treasury Entries</div><div class="value">${reportRows.treasury.length}</div></div>
-    <div class="card"><div class="label">Treasury Movement</div><div class="value">${currency.format(treasuryTotal)}</div></div>
-    <div class="card"><div class="label">Treasury Cash</div><div class="value">${currency.format(treasurySummary.physicalTreasuryCash)}</div></div>
-    <div class="card"><div class="label">Association Available</div><div class="value">${currency.format(treasurySummary.associationAvailableBalance)}</div></div>
-  </div>
-  <h2>Transaction Type Summary</h2>
-  <table><thead><tr><th>Type</th><th>Total Amount</th></tr></thead><tbody>
-    ${Object.entries(typeBuckets)
-      .map(([type, amount]) => `<tr><td>${escapeHtml(type)}</td><td>${currency.format(amount)}</td></tr>`)
-      .join("") || "<tr><td colspan='2'>No member transactions in this period.</td></tr>"}
-  </tbody></table>
-  <h2>Status Summary</h2>
-  <table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody>
-    ${Object.entries(statusBuckets)
-      .map(([status, count]) => `<tr><td>${escapeHtml(status)}</td><td>${count}</td></tr>`)
-      .join("") || "<tr><td colspan='2'>No statuses in this period.</td></tr>"}
+  ${reportSectionsHtml}
+  <h2>Weekly Deduction Members</h2>
+  <table><thead><tr><th>Member</th><th>Expected</th><th>Paid</th><th>Outstanding</th><th>Status</th><th>Latest Date</th></tr></thead><tbody>
+    ${weeklyReportMemberRows
+      .map(
+        (item) =>
+          `<tr><td>${escapeHtml(item.memberName)}<br><span class="muted">${escapeHtml(item.membershipNumber)}</span></td><td>${currency.format(item.expectedAmount)}</td><td>${currency.format(item.paidAmount)}</td><td>${currency.format(item.outstandingAmount)}</td><td>${escapeHtml(item.status)}</td><td>${escapeHtml(formatDateTime(item.latestAt))}</td></tr>`,
+      )
+      .join("") || "<tr><td colspan='6'>No weekly deduction records in this period.</td></tr>"}
   </tbody></table>
   <h2>Recent Member Transactions</h2>
   <table><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Status</th><th>Amount</th></tr></thead><tbody>
@@ -656,6 +869,39 @@ export default function TransactionsPage() {
           icon={<TrendingDown className="h-5 w-5" />}
           title="Approved Debits"
           value={currency.format(memberSummary.totalDebits)}
+        />
+      </div>
+    ) : tab === "weekly" ? (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard
+          description="All weekly deduction rows expected in the selected period."
+          href="/admin/transactions"
+          icon={<CalendarDays className="h-5 w-5" />}
+          title="Expected Amount"
+          tone="green"
+          value={currency.format(weeklySummary.expectedAmount)}
+        />
+        <DashboardMetricCard
+          description="Weekly deductions successfully collected from members."
+          href="/admin/transactions"
+          icon={<TrendingUp className="h-5 w-5" />}
+          title="Amount Paid"
+          value={currency.format(weeklySummary.paidAmount)}
+        />
+        <DashboardMetricCard
+          description="Weekly deductions not yet collected or still pending."
+          href="/admin/transactions"
+          icon={<TrendingDown className="h-5 w-5" />}
+          title="Amount Outstanding"
+          tone={weeklySummary.outstandingAmount ? "amber" : "neutral"}
+          value={currency.format(weeklySummary.outstandingAmount)}
+        />
+        <DashboardMetricCard
+          description="Unique members with weekly deduction records in this period."
+          href="/admin/transactions"
+          icon={<CreditCard className="h-5 w-5" />}
+          title="Members Processed"
+          value={weeklySummary.members}
         />
       </div>
     ) : (
@@ -901,6 +1147,7 @@ export default function TransactionsPage() {
         items={[
           { id: "treasury", label: "Treasury Ledger" },
           { id: "member", label: "Member Transactions" },
+          { id: "weekly", label: "Weekly Deductions" },
         ]}
         onChange={setTab}
         value={tab}
@@ -913,6 +1160,8 @@ export default function TransactionsPage() {
         subtitle={
           tab === "treasury"
             ? "Treasury cards use the cooperative wallet summary and ledger reconciliation."
+            : tab === "weekly"
+              ? "Weekly deduction cards use weekly cooperative transactions in the selected period."
             : "Member transaction cards use the full transaction API summary. Table rows use the selected period."
         }
       >
@@ -921,6 +1170,8 @@ export default function TransactionsPage() {
           title={
             tab === "treasury"
               ? "Treasury Stats Calculation"
+              : tab === "weekly"
+                ? "Weekly Deduction Stats Calculation"
               : "Member Transaction Stats Calculation"
           }
           trigger={
@@ -957,6 +1208,33 @@ export default function TransactionsPage() {
                   Net Treasury Flow:
                 </span>{" "}
                 total treasury income minus total treasury expense.
+              </p>
+            </div>
+          ) : tab === "weekly" ? (
+            <div className="grid gap-3 text-sm text-text-500 dark:text-text-300 md:grid-cols-2">
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Expected Amount:
+                </span>{" "}
+                total weekly deduction rows in the selected period.
+              </p>
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Amount Paid:
+                </span>{" "}
+                weekly deduction rows whose transaction status is approved.
+              </p>
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Amount Outstanding:
+                </span>{" "}
+                weekly deduction rows not yet approved or collected.
+              </p>
+              <p>
+                <span className="font-semibold text-text-900 dark:text-text-50">
+                  Members Processed:
+                </span>{" "}
+                unique members with weekly deduction records in the selected period.
               </p>
             </div>
           ) : (
@@ -1097,6 +1375,88 @@ export default function TransactionsPage() {
             `${item.wallet.member.fullName} ${item.wallet.member.membershipNumber} ${item.type} ${item.status} ${item.reference ?? ""} ${item.createdAt}`
           }
           searchPlaceholder="Search member transactions..."
+          toolbar={dateRangeToolbar}
+        />
+      ) : tab === "weekly" ? (
+        <DataTable
+          columns={[
+            {
+              key: "member",
+              header: "Member",
+              render: (item) => (
+                <div>
+                  <p className="font-semibold text-text-900">
+                    {item.memberName}
+                  </p>
+                  <p className="text-xs text-text-400">
+                    {item.membershipNumber}
+                  </p>
+                </div>
+              ),
+              sortValue: (item) => item.memberName,
+            },
+            {
+              key: "expectedAmount",
+              header: "Expected",
+              render: (item) => currency.format(item.expectedAmount),
+              sortValue: (item) => item.expectedAmount,
+            },
+            {
+              key: "paidAmount",
+              header: "Paid",
+              render: (item) => currency.format(item.paidAmount),
+              sortValue: (item) => item.paidAmount,
+            },
+            {
+              key: "outstandingAmount",
+              header: "Outstanding",
+              render: (item) => (
+                <span
+                  className={
+                    item.outstandingAmount > 0
+                      ? "font-semibold text-red-600 dark:text-red-300"
+                      : "font-semibold text-[var(--primary-700)] dark:text-[var(--primary-300)]"
+                  }
+                >
+                  {currency.format(item.outstandingAmount)}
+                </span>
+              ),
+              sortValue: (item) => item.outstandingAmount,
+            },
+            {
+              key: "entries",
+              header: "Entries",
+              render: (item) => item.entries,
+              sortValue: (item) => item.entries,
+            },
+            {
+              key: "latestAt",
+              header: "Latest Date",
+              render: (item) => formatDateTime(item.latestAt),
+              sortValue: (item) => new Date(item.latestAt),
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (item) => (
+                <StatusBadge
+                  status={item.status}
+                  variant={variantForStatus(item.status) as any}
+                />
+              ),
+            },
+          ]}
+          data={weeklyRows}
+          emptyDescription={
+            memberTransactions.error ||
+            "No weekly deduction records found for this period."
+          }
+          getRowKey={(item) => item.membershipNumber}
+          loading={memberTransactions.loading}
+          searchableText={(item) =>
+            `${item.memberName} ${item.membershipNumber} ${item.status} ${item.latestAt}`
+          }
+          searchPlaceholder="Search weekly deductions..."
           toolbar={dateRangeToolbar}
         />
       ) : (

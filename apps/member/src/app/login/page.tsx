@@ -2,13 +2,18 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { TextInput, PasswordInput } from "@/components/form-input";
 import api from "@/lib/member-api";
-import { clearMemberLocalCache, setMemberSession } from "@/lib/member-session";
+import {
+  clearMemberLocalCache,
+  getMemberSession,
+  isMemberAuthenticated,
+  setMemberSession,
+} from "@/lib/member-session";
 import { useMemberDataStore } from "@/lib/member-data-store";
 import { MySwal } from "@/lib/alert";
 
@@ -43,6 +48,17 @@ export default function MemberLoginPage() {
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
+
+  useEffect(() => {
+    if (isMemberAuthenticated()) {
+      const session = getMemberSession();
+      if (session) {
+        setMemberSession(session);
+      }
+      router.replace("/dashboard");
+      router.refresh();
+    }
+  }, [router]);
 
   async function onSubmit(values: LoginFormValues) {
     try {
@@ -80,13 +96,17 @@ export default function MemberLoginPage() {
         profileImageUrl: payload.user.member?.avatarUrl || undefined,
       });
 
-      await MySwal.fire({
+      void MySwal.fire({
         icon: "success",
         title: "Signed in",
-        text: "Welcome back.",
+        text: "Redirecting to your dashboard.",
+        timer: 900,
+        timerProgressBar: true,
+        showConfirmButton: false,
         confirmButtonColor: "#2d5a27",
       });
       router.replace("/dashboard");
+      router.refresh();
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
