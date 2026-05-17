@@ -1,7 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { json, urlencoded } from 'express';
+import { json, urlencoded, type NextFunction, type Request, type Response } from 'express';
 import { AppModule } from './app.module';
 
 function normalizeOrigin(origin: string) {
@@ -51,13 +51,33 @@ function isAllowedCorsOrigin(origin: string | undefined, allowedOrigins: string[
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const allowedOrigins = resolveCorsOrigins();
 
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const origin = req.headers.origin;
+    if (typeof origin === 'string' && isAllowedCorsOrigin(origin, allowedOrigins)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Vary', 'Origin');
+    }
+    res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.header(
+      'Access-Control-Allow-Headers',
+      'Authorization,Content-Type,Accept,Origin,X-Requested-With,x-cron-secret',
+    );
+    res.header('Access-Control-Max-Age', '86400');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send();
+      return;
+    }
+
+    next();
+  });
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
   app.setGlobalPrefix('api/v1');
-  const allowedOrigins = resolveCorsOrigins();
   app.enableCors({
-    credentials: true,
+    credentials: false,
     origin(
       origin: string | undefined,
       callback: (error: Error | null, allow?: boolean) => void,
