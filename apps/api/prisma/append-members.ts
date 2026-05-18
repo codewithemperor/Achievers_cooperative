@@ -21,6 +21,9 @@ type AppendMember = {
     paid?: number;
     balance?: number;
     remainingMonths?: number;
+    startDate?: string;
+    repaymentFrequency?: "MONTHLY" | "WEEKLY";
+    tenorMonths?: number;
   };
 };
 
@@ -62,7 +65,7 @@ const members: AppendMember[] = [
     identificationType: "NIN",
     identificationNumber: "18797837829",
     savings: 295_000,
-    loan: { amount: 1_800_000, paid: 948_150, balance: 851_850, remainingMonths: 8 },
+    loan: { amount: 1_800_000, paid: 948_150, balance: 851_850, startDate: "2026-01-07", repaymentFrequency: "WEEKLY", tenorMonths: 10 },
   },
   {
     fullName: "Akintola Yusira Aweke",
@@ -76,6 +79,46 @@ const members: AppendMember[] = [
     identificationNumber: "72061981947",
     savings: 73_250,
   },
+  {
+    fullName: "Olatunji Hakeem Ajagbe",
+    phoneNumber: "09025146565",
+    email: "hakeemajagbe20@gmail.com",
+    homeAddress: "Pending address",
+    stateOfOrigin: "Osun",
+    occupation: "Mechanic",
+    dateOfBirth: "1995-05-20",
+    identificationType: "NIN",
+    identificationNumber: "23648815411",
+    referral: "Nafiu Akintola",
+    savings: 356_700,
+  },
+  {
+    fullName: "Adeshiyan Taofeek",
+    phoneNumber: "07030968313",
+    email: "adeshiyantaofeek@gmail.com",
+    homeAddress: "No 16, Behind Bovas Filling Station, IITA, Ibadan",
+    stateOfOrigin: "Oyo",
+    occupation: "Trading",
+    dateOfBirth: "1990-01-01",
+    maritalStatus: "MARRIED",
+    identificationType: "NIN",
+    identificationNumber: "PENDING-TAOFEEK",
+    savings: 0,
+    loan: { amount: 3_600_000, paid: 0, balance: 3_600_000, startDate: "2026-04-12", repaymentFrequency: "MONTHLY", tenorMonths: 10 },
+  },
+  {
+    fullName: "Olaitan Ayotunde Abiodun",
+    phoneNumber: "09064408107",
+    email: "olaitanayotunde6440@gmail.com",
+    homeAddress: "Akinrinlo Community, Olorisaoko, Moniya, Ibadan",
+    stateOfOrigin: "Oyo",
+    occupation: "Trading",
+    dateOfBirth: "1990-01-01",
+    maritalStatus: "MARRIED",
+    identificationType: "NIN",
+    identificationNumber: "PENDING-OLAITAN",
+    savings: 0,
+  },
 ];
 
 function normalizeKey(value: string) {
@@ -86,6 +129,82 @@ function monthsFromNow(months: number) {
   const date = new Date();
   date.setMonth(date.getMonth() + months);
   return date;
+}
+
+function legacyDate(value: string) {
+  return new Date(`${value}T09:00:00+01:00`);
+}
+
+function addLegacyMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function legacyLoanSchedule(loan: NonNullable<AppendMember["loan"]>) {
+  if (!loan.startDate) {
+    const tenorMonths = Math.max(loan.remainingMonths ?? loan.tenorMonths ?? 12, 1);
+    const startDate = new Date();
+    return {
+      startDate,
+      maturityDate: monthsFromNow(tenorMonths),
+      tenorMonths,
+      tenorUnit: "MONTHS" as const,
+      repaymentFrequency: "MONTHLY",
+    };
+  }
+
+  const startDate = legacyDate(loan.startDate);
+  const totalTenorMonths = Math.max(loan.tenorMonths ?? 10, 1);
+  const repaymentFrequency = loan.repaymentFrequency ?? "MONTHLY";
+  const maturityDate = addLegacyMonths(startDate, totalTenorMonths);
+
+  if (repaymentFrequency === "WEEKLY") {
+    const weeks = Math.max(
+      Math.ceil((maturityDate.getTime() - startDate.getTime()) / 604_800_000),
+      1,
+    );
+    return {
+      startDate,
+      maturityDate,
+      tenorMonths: totalTenorMonths,
+      installmentCount: weeks,
+      tenorUnit: "WEEKS" as const,
+      repaymentFrequency,
+    };
+  }
+
+  return {
+    startDate,
+    maturityDate,
+    tenorMonths: totalTenorMonths,
+    installmentCount: totalTenorMonths,
+    tenorUnit: "MONTHS" as const,
+    repaymentFrequency,
+  };
+}
+
+function nextLoanRepaymentDate(
+  loan: NonNullable<AppendMember["loan"]>,
+  schedule: ReturnType<typeof legacyLoanSchedule>,
+  balance: number,
+) {
+  if (balance <= 0) return null;
+
+  const totalAmount = Number(loan.amount);
+  const amountPaidSoFar = Math.max(totalAmount - balance, 0);
+  const installmentAmount = totalAmount / Math.max(schedule.installmentCount, 1);
+  const paidInstallments = installmentAmount > 0 ? Math.floor(amountPaidSoFar / installmentAmount) : 0;
+  const nextStep = Math.min(paidInstallments + 1, Math.max(schedule.installmentCount, 1));
+  const next = new Date(schedule.startDate);
+
+  if (schedule.tenorUnit === "WEEKS") {
+    next.setDate(next.getDate() + nextStep * 7);
+  } else {
+    next.setMonth(next.getMonth() + nextStep);
+  }
+
+  return next;
 }
 
 async function nextMembershipNumber() {
@@ -216,20 +335,22 @@ async function main() {
     if (item.loan && item.loan.amount > 0) {
       const paid = item.loan.paid ?? Math.max(item.loan.amount - (item.loan.balance ?? item.loan.amount), 0);
       const balance = item.loan.balance ?? Math.max(item.loan.amount - paid, 0);
-      const tenorMonths = Math.max(item.loan.remainingMonths ?? 12, 1);
+      const schedule = legacyLoanSchedule(item.loan);
       const loan = await prisma.loanApplication.create({
         data: {
           memberId: member.id,
           amount: item.loan.amount,
           disbursedAmount: item.loan.amount,
           remainingBalance: balance,
-          tenorMonths,
-          tenorUnit: "MONTHS",
+          tenorMonths: schedule.tenorMonths,
+          tenorUnit: schedule.tenorUnit,
           purpose: `Legacy loan for ${item.fullName}`,
           status: balance <= 0 ? "COMPLETED" : "IN_PROGRESS",
-          approvedAt: new Date(),
-          disbursedAt: new Date(),
-          dueDate: monthsFromNow(tenorMonths),
+          submittedAt: schedule.startDate,
+          approvedAt: schedule.startDate,
+          disbursedAt: schedule.startDate,
+          dueDate: schedule.maturityDate,
+          nextRepaymentAt: nextLoanRepaymentDate(item.loan, schedule, balance),
         },
       });
 
@@ -241,7 +362,14 @@ async function main() {
           newAmount: item.loan.amount,
           deltaAmount: item.loan.amount,
           note: "Opening loan disbursement imported during append-only member import.",
-          metadata: { memberName: item.fullName, membershipNumber },
+          createdAt: schedule.startDate,
+          metadata: {
+            memberName: item.fullName,
+            membershipNumber,
+            legacyStartDate: item.loan.startDate ?? null,
+            repaymentFrequency: schedule.repaymentFrequency,
+            maturityDate: schedule.maturityDate.toISOString(),
+          },
         },
       });
 
@@ -273,6 +401,8 @@ async function main() {
             editable: false,
             lockReason: "Opening balance imported during append-only member import.",
             metadata: { memberId: member.id, memberName: item.fullName, membershipNumber, loanId: loan.id, loanName: loan.purpose },
+            createdAt: schedule.startDate,
+            updatedAt: schedule.startDate,
           },
         });
       }

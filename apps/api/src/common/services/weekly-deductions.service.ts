@@ -254,18 +254,39 @@ export class WeeklyDeductionsService {
   }
 
   private async runDueObligations() {
-    const activeMembers = await this.prisma.member.findMany({
-      where: { status: 'ACTIVE' },
-      select: { id: true },
-      orderBy: { joinedAt: 'asc' },
-    });
+    const now = new Date();
+    const [duePackages, dueLoans] = await Promise.all([
+      this.prisma.packageSubscription.findMany({
+        where: {
+          member: { status: 'ACTIVE' },
+          status: { in: ['APPROVED', 'DISBURSED', 'IN_PROGRESS'] },
+          nextDueAt: { lte: now },
+          OR: [{ amountRemaining: { gt: 0 } }, { penaltyAccrued: { gt: 0 } }],
+        },
+        select: { memberId: true },
+        distinct: ['memberId'],
+      }),
+      this.prisma.loanApplication.findMany({
+        where: {
+          member: { status: 'ACTIVE' },
+          status: { in: ['DISBURSED', 'IN_PROGRESS', 'OVERDUE'] },
+          remainingBalance: { gt: 0 },
+          nextRepaymentAt: { lte: now },
+        },
+        select: { memberId: true },
+        distinct: ['memberId'],
+      } as any),
+    ]);
+    const dueMemberIds = Array.from(
+      new Set([...duePackages, ...dueLoans].map((item) => item.memberId)),
+    );
 
     let processedMembers = 0;
     let settlementCount = 0;
     let totalSettled = 0;
 
-    for (const member of activeMembers) {
-      const settlements = await this.walletService.settleOutstandingObligations(member.id);
+    for (const memberId of dueMemberIds) {
+      const settlements = await this.walletService.settleOutstandingObligations(memberId);
       if (!settlements.length) {
         continue;
       }
@@ -276,7 +297,9 @@ export class WeeklyDeductionsService {
     }
 
     return {
-      checkedMembers: activeMembers.length,
+      checkedMembers: dueMemberIds.length,
+      duePackageMembers: duePackages.length,
+      dueLoanMembers: dueLoans.length,
       processedMembers,
       settlementCount,
       totalSettled,

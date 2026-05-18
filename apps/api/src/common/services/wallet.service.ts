@@ -314,6 +314,7 @@ export class WalletService {
         memberId,
         status: { in: ['APPROVED', 'DISBURSED', 'IN_PROGRESS'] },
         OR: [{ amountRemaining: { gt: 0 } }, { penaltyAccrued: { gt: 0 } }],
+        nextDueAt: { lte: new Date() },
       },
       include: {
         package: true,
@@ -349,9 +350,10 @@ export class WalletService {
         memberId,
         status: { in: ['DISBURSED', 'IN_PROGRESS', 'OVERDUE'] },
         remainingBalance: { gt: 0 },
+        nextRepaymentAt: { lte: new Date() },
       },
       orderBy: { submittedAt: 'asc' },
-    });
+    } as any);
 
     for (const loan of activeLoans) {
       if (availableBalance <= 0) break;
@@ -399,9 +401,29 @@ export class WalletService {
       throw new BadRequestException(`Repayment amount cannot exceed the outstanding balance of ₦${repayableBalance.toLocaleString()}.`);
     }
 
+    const dueKey =
+      mode === 'AUTO'
+        ? ((loan as any).nextRepaymentAt ?? loan.dueDate ?? new Date()).toISOString().slice(0, 10)
+        : String(Date.now());
     const referencePrefix = mode === 'AUTO' ? 'AUTO-LOAN' : mode === 'ADMIN' ? 'ADMIN-LOAN' : 'REPAY';
-    const reference = `${referencePrefix}-${loan.id}-${Date.now()}`;
+    const reference = `${referencePrefix}-${loan.id}-${dueKey}`;
     const loanName = loan.purpose || `loan for ${loan.member.fullName}`;
+
+    if (mode === 'AUTO') {
+      const existingAutoPayment = await this.prisma.transaction.findUnique({ where: { reference } });
+      if (existingAutoPayment) {
+        const wallet = await this.getMemberWallet(memberId);
+        return {
+          wallet,
+          reference,
+          settlement: {
+            type: 'LOAN_REPAYMENT',
+            amount: 0,
+            targetId: loan.id,
+          },
+        };
+      }
+    }
 
     await this.debitWallet(memberId, amount, 'LOAN_REPAYMENT', reference, {
       category: mode === 'AUTO' ? 'automatic loan repayment' : 'loan repayment',
@@ -432,7 +454,8 @@ export class WalletService {
       data: {
         remainingBalance: nextRemaining,
         status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
-      },
+        nextRepaymentAt: isFullyRepaid ? null : this.getNextLoanRepaymentDate({ ...loan, remainingBalance: nextRemaining } as any),
+      } as any,
     });
 
     const wallet = await this.getMemberWallet(memberId);
@@ -671,21 +694,29 @@ export class WalletService {
 
   private getLoanDueAmount(loan: {
     amount: any;
+    disbursedAmount?: any;
     remainingBalance: any;
     tenorMonths: number;
     tenorUnit?: LoanTenorUnit;
     disbursedAt?: Date | null;
+    dueDate?: Date | null;
+    nextRepaymentAt?: Date | null;
     submittedAt: Date;
   }) {
     if (!loan.disbursedAt || loan.tenorMonths <= 0) {
       return 0;
     }
+    if (!loan.nextRepaymentAt || loan.nextRepaymentAt.getTime() > Date.now()) {
+      return 0;
+    }
 
-    const totalAmount = Number(loan.amount);
+    const explicitDisbursedAmount = Number(loan.disbursedAmount ?? 0);
+    const totalAmount = explicitDisbursedAmount > 0 ? explicitDisbursedAmount : Number(loan.amount);
+    const totalInstallments = this.getLoanInstallmentCount(loan);
     const amountPaidSoFar = Math.max(totalAmount - Number(loan.remainingBalance), 0);
-    const installmentAmount = totalAmount / loan.tenorMonths;
+    const installmentAmount = totalAmount / totalInstallments;
     const dueInstallments = Math.min(
-      loan.tenorMonths,
+      totalInstallments,
       (loan.tenorUnit ?? 'MONTHS') === 'WEEKS'
         ? this.fullWeeksBetween(loan.disbursedAt, new Date())
         : this.fullMonthsBetween(loan.disbursedAt, new Date()),
@@ -693,6 +724,52 @@ export class WalletService {
     const dueAmount = installmentAmount * dueInstallments;
 
     return Math.max(dueAmount - amountPaidSoFar, 0);
+  }
+
+  private getNextLoanRepaymentDate(loan: {
+    amount: any;
+    disbursedAmount?: any;
+    remainingBalance: any;
+    tenorMonths: number;
+    tenorUnit?: LoanTenorUnit;
+    disbursedAt?: Date | null;
+    dueDate?: Date | null;
+    submittedAt: Date;
+  }) {
+    if (!loan.disbursedAt || loan.tenorMonths <= 0 || Number(loan.remainingBalance) <= 0) {
+      return null;
+    }
+
+    const explicitDisbursedAmount = Number(loan.disbursedAmount ?? 0);
+    const totalAmount = explicitDisbursedAmount > 0 ? explicitDisbursedAmount : Number(loan.amount);
+    const totalInstallments = this.getLoanInstallmentCount(loan);
+    const amountPaidSoFar = Math.max(totalAmount - Number(loan.remainingBalance), 0);
+    const installmentAmount = totalAmount / totalInstallments;
+    const paidInstallments = Math.floor(amountPaidSoFar / installmentAmount);
+    const nextStep = Math.min(paidInstallments + 1, totalInstallments);
+    const nextDueAt = new Date(loan.disbursedAt);
+    if ((loan.tenorUnit ?? 'MONTHS') === 'WEEKS') {
+      nextDueAt.setDate(nextDueAt.getDate() + nextStep * 7);
+    } else {
+      nextDueAt.setMonth(nextDueAt.getMonth() + nextStep);
+    }
+    return nextDueAt;
+  }
+
+  private getLoanInstallmentCount(loan: {
+    tenorMonths: number;
+    tenorUnit?: LoanTenorUnit;
+    disbursedAt?: Date | null;
+    dueDate?: Date | null;
+  }) {
+    const tenorMonths = Math.max(Math.ceil(Number(loan.tenorMonths) || 1), 1);
+    if ((loan.tenorUnit ?? 'MONTHS') !== 'WEEKS') {
+      return tenorMonths;
+    }
+
+    const start = loan.disbursedAt ?? new Date();
+    const maturity = loan.dueDate ?? this.addCalendarMonths(start, tenorMonths);
+    return Math.max(Math.ceil((maturity.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000)), 1);
   }
 
   private getPackageDueAmount(subscription: {
@@ -798,5 +875,11 @@ export class WalletService {
     }
 
     return Math.max(Math.floor((end.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000)), 0);
+  }
+
+  private addCalendarMonths(date: Date, months: number) {
+    const next = new Date(date);
+    next.setMonth(next.getMonth() + months);
+    return next;
   }
 }

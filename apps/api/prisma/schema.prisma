@@ -213,6 +213,7 @@ model LoanApplication {
   rejectedAt       DateTime?
   disbursedAt      DateTime?
   dueDate          DateTime?
+  nextRepaymentAt  DateTime?
   disbursedAmount  Decimal        @default(0)
   remainingBalance Decimal        @default(0)
   bankAccountId    String?
@@ -221,6 +222,8 @@ model LoanApplication {
   guarantorTwo     Member?        @relation("LoanGuarantorTwo", fields: [guarantorTwoId], references: [id])
   bankAccount      BankAccount?   @relation(fields: [bankAccountId], references: [id])
   activities       LoanActivity[]
+
+  @@index([nextRepaymentAt])
 }
 
 model LoanActivity {

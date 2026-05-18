@@ -425,7 +425,7 @@ export default function LoansPage() {
           setEditingLoan(null);
         }}
         title={editingLoan ? "Edit loan application" : "New loan application"}
-        description="Fill in the amount, repayment period, purpose, and the account you want the funds sent to."
+        description="Fill in the amount, loan tenor in months, repayment frequency, purpose, and the account you want the funds sent to."
       >
         <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
           <SelectInput
@@ -452,8 +452,8 @@ export default function LoansPage() {
           <NumberInput
             control={control}
             name="tenorMonths"
-            label="Tenor value"
-            placeholder="e.g. 12"
+            label="Loan tenor in months"
+            placeholder="e.g. 10"
             isRequired
             min={1}
             max={60}
@@ -461,12 +461,12 @@ export default function LoansPage() {
           <SelectInput
             control={control}
             name="tenorUnit"
-            label="Tenor unit"
-            placeholder="Select tenor unit"
+            label="Repayment frequency"
+            placeholder="Select repayment frequency"
             isRequired
             options={[
-              { id: "MONTHS", label: "Months" },
-              { id: "WEEKS", label: "Weeks" },
+              { id: "MONTHS", label: "Monthly repayment" },
+              { id: "WEEKS", label: "Weekly repayment" },
             ]}
           />
           <TextareaInput

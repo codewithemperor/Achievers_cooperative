@@ -20,6 +20,7 @@ interface LoanDetail {
   repaymentProgress: number;
   submittedAt: string;
   dueDate?: string;
+  nextRepaymentAt?: string | null;
   bankAccount?: {
     bankName: string;
     accountNumber: string;
@@ -283,10 +284,14 @@ export default function LoanDetailPage() {
               <DetailRow label="Paid so far" value={money.format(loan.amountPaidSoFar ?? 0)} />
               <DetailRow label="Repayment outstanding" value={money.format(loan.remainingBalance ?? 0)} />
               <DetailRow
-                label="Tenor"
-                value={`${loan.tenorMonths} ${loan.tenorUnit === "WEEKS" ? "weeks" : "months"}`}
+                label="Loan tenor"
+                value={`${loan.tenorMonths} month${loan.tenorMonths === 1 ? "" : "s"}`}
               />
-              <DetailRow label="Due date" value={formatDate(loan.dueDate)} />
+              <DetailRow
+                label="Repayment frequency"
+                value={loan.tenorUnit === "WEEKS" ? "Weekly" : "Monthly"}
+              />
+              <DetailRow label="Next repayment" value={formatDate(loan.nextRepaymentAt ?? loan.dueDate)} />
               <DetailRow label="Applied on" value={formatDate(loan.submittedAt)} />
               <DetailRow label="Progress" value={`${progress >= 100 ? "100" : progress.toFixed(1)}%`} />
             </div>

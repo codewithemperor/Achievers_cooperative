@@ -24,6 +24,7 @@ type LoanLike = {
   disbursedAt?: Date | null;
   rejectedAt?: Date | null;
   dueDate?: Date | null;
+  nextRepaymentAt?: Date | null;
   status: LoanStatus;
 };
 
@@ -89,14 +90,20 @@ export class LoansService {
       }
     }
 
+    const repaymentSchedule = this.resolveRepaymentSchedule(
+      dto.tenorMonths,
+      (dto.tenorUnit ?? 'MONTHS') as LoanTenorUnit,
+      new Date(),
+    );
+
     const loan = await this.prisma.loanApplication.create({
       data: {
         memberId: member.id,
         guarantorOneId: dto.guarantorOneId,
         guarantorTwoId: dto.guarantorTwoId,
         amount: dto.amount,
-        tenorMonths: dto.tenorMonths,
-        tenorUnit: dto.tenorUnit ?? 'MONTHS',
+        tenorMonths: repaymentSchedule.tenorMonths,
+        tenorUnit: repaymentSchedule.tenorUnit,
         purpose: dto.purpose,
         disbursedAmount: 0,
         remainingBalance: 0,
@@ -108,6 +115,7 @@ export class LoansService {
       amount: dto.amount,
       tenorMonths: dto.tenorMonths,
       tenorUnit: dto.tenorUnit ?? 'MONTHS',
+      repaymentInstallments: repaymentSchedule.installments,
     });
 
     return {
@@ -236,10 +244,17 @@ export class LoansService {
     const amountPaidSoFar = this.shouldExposeRemainingBalance(loan.status) ? Math.max(disbursedAmount - remainingBalance, 0) : 0;
     const repaymentProgress = this.calculateRepaymentProgress(loan);
     const schedulePrincipal = disbursedAmount > 0 ? disbursedAmount : amount;
-    const installmentAmount = loan.tenorMonths > 0 ? schedulePrincipal / loan.tenorMonths : schedulePrincipal;
-    const paymentSchedule = Array.from({ length: Math.max(loan.tenorMonths, 1) }).map((_, index) => {
-      const anchorDate = loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt;
-      const dueDate = this.addTenorStep(anchorDate, ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, index + 1);
+    const scheduleAnchorDate = loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt;
+    const scheduleMaturityDate = loan.dueDate ?? this.addCalendarMonths(scheduleAnchorDate, Math.max(loan.tenorMonths, 1));
+    const installmentCount = this.resolveInstallmentCount(
+      scheduleAnchorDate,
+      scheduleMaturityDate,
+      loan.tenorMonths,
+      ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit,
+    );
+    const installmentAmount = installmentCount > 0 ? schedulePrincipal / installmentCount : schedulePrincipal;
+    const paymentSchedule = Array.from({ length: installmentCount }).map((_, index) => {
+      const dueDate = this.addTenorStep(scheduleAnchorDate, ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, index + 1);
       const dueAmount = Math.round(installmentAmount * 100) / 100;
       const cumulativeDue = dueAmount * (index + 1);
       const isLoanLive = ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(loan.status);
@@ -260,6 +275,10 @@ export class LoansService {
         status,
       };
     });
+    const nextRepaymentAt =
+      (loan as any).nextRepaymentAt ??
+      paymentSchedule.find((item) => item.status === 'PENDING' || item.status === 'OVERDUE')?.dueDate ??
+      null;
 
     const timeline = this.buildTimeline(loan, relatedTransactions);
 
@@ -273,6 +292,7 @@ export class LoansService {
       remainingBalance,
       amountPaidSoFar,
       repaymentProgress,
+      nextRepaymentAt,
       paymentSchedule,
       timeline,
       relatedTransactions: relatedTransactions.map((item) => ({
@@ -386,19 +406,30 @@ export class LoansService {
 
     const deltaAmount = newAmount - previousAmount;
     const currentDisbursedAmount = this.resolveDisbursedAmount(loan);
-    const nextTenorMonths = dto.tenorMonths && dto.tenorMonths > loan.tenorMonths ? dto.tenorMonths : loan.tenorMonths;
     const nextTenorUnit = dto.tenorUnit ?? ((loan as any).tenorUnit ?? 'MONTHS');
+    const scheduleAnchorDate = loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt;
+    const repaymentSchedule = dto.tenorMonths
+      ? this.resolveRepaymentSchedule(dto.tenorMonths, nextTenorUnit as LoanTenorUnit, scheduleAnchorDate)
+      : {
+          installments: this.resolveInstallmentCount(
+            scheduleAnchorDate,
+            loan.dueDate ?? this.addCalendarMonths(scheduleAnchorDate, Math.max(loan.tenorMonths, 1)),
+            loan.tenorMonths,
+            nextTenorUnit as LoanTenorUnit,
+          ),
+          tenorMonths: loan.tenorMonths,
+          tenorUnit: nextTenorUnit as LoanTenorUnit,
+          maturityDate: loan.dueDate,
+        };
     const updated = await this.prisma.$transaction(async (tx) => {
       const next = await tx.loanApplication.update({
         where: { id },
         data: {
           amount: newAmount,
           disbursedAmount: currentDisbursedAmount,
-          tenorMonths: nextTenorMonths,
-          tenorUnit: nextTenorUnit,
-          ...(loan.dueDate && nextTenorMonths !== loan.tenorMonths
-            ? { dueDate: this.addTenorStep(loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt, nextTenorUnit as LoanTenorUnit, nextTenorMonths) }
-            : {}),
+          tenorMonths: repaymentSchedule.tenorMonths,
+          tenorUnit: repaymentSchedule.tenorUnit,
+          ...(dto.tenorMonths ? { dueDate: repaymentSchedule.maturityDate } : {}),
         } as any,
       });
 
@@ -415,9 +446,10 @@ export class LoansService {
             memberId: loan.memberId,
             previousStatus: loan.status,
             previousTenorMonths: loan.tenorMonths,
-            newTenorMonths: nextTenorMonths,
+            newTenorMonths: repaymentSchedule.tenorMonths,
             previousTenorUnit: (loan as any).tenorUnit ?? 'MONTHS',
-            newTenorUnit: nextTenorUnit,
+            newTenorUnit: repaymentSchedule.tenorUnit,
+            requestedTenorMonths: dto.tenorMonths ?? null,
           },
         } as any,
       });
@@ -431,8 +463,9 @@ export class LoansService {
       deltaAmount,
       reason: dto.reason,
       previousTenorMonths: loan.tenorMonths,
-      newTenorMonths: nextTenorMonths,
-      tenorUnit: nextTenorUnit,
+      newTenorMonths: repaymentSchedule.tenorMonths,
+      tenorUnit: repaymentSchedule.tenorUnit,
+      requestedTenorMonths: dto.tenorMonths ?? null,
     });
 
     await this.notifications.notifyMember(
@@ -483,7 +516,7 @@ export class LoansService {
     await this.assertAssociationCanFundLoan(disbursementAmount, 'disburse');
 
     const now = new Date();
-    const dueDate = loan.dueDate ?? this.addTenorStep(now, ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, loan.tenorMonths);
+    const dueDate = loan.dueDate ?? this.addCalendarMonths(now, Math.max(loan.tenorMonths, 1));
 
     // Create a LOAN_DISBURSEMENT transaction for record-keeping only (no wallet credit)
     const reference = `LOAN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -549,9 +582,12 @@ export class LoansService {
           status: loan.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'DISBURSED',
           disbursedAt: loan.disbursedAt ?? now,
           dueDate,
+          nextRepaymentAt:
+            (loan as any).nextRepaymentAt ??
+            this.addTenorStep(loan.disbursedAt ?? now, ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, 1),
           disbursedAmount: { increment: disbursementAmount },
           remainingBalance: { increment: disbursementAmount },
-        },
+        } as any,
       });
     });
 
@@ -623,14 +659,19 @@ export class LoansService {
       throw new BadRequestException('Only pending loan applications can be edited.');
     }
 
+    const nextTenorUnit = (dto.tenorUnit ?? (loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit;
+    const repaymentSchedule = dto.tenorMonths
+      ? this.resolveRepaymentSchedule(dto.tenorMonths, nextTenorUnit, loan.submittedAt)
+      : null;
+
     const updated = await this.prisma.loanApplication.update({
       where: { id },
       data: {
         ...(dto.guarantorOneId !== undefined && { guarantorOneId: dto.guarantorOneId || null }),
         ...(dto.guarantorTwoId !== undefined && { guarantorTwoId: dto.guarantorTwoId || null }),
         ...(dto.amount !== undefined && { amount: dto.amount, remainingBalance: 0 }),
-        ...(dto.tenorMonths !== undefined && { tenorMonths: dto.tenorMonths }),
-        tenorUnit: dto.tenorUnit ?? (loan as any).tenorUnit ?? 'MONTHS',
+        ...(repaymentSchedule && { tenorMonths: repaymentSchedule.tenorMonths }),
+        tenorUnit: repaymentSchedule?.tenorUnit ?? nextTenorUnit,
         ...(dto.purpose !== undefined && { purpose: dto.purpose }),
         ...(dto.bankAccountId !== undefined && { bankAccountId: dto.bankAccountId || null }),
       } as any,
@@ -639,7 +680,8 @@ export class LoansService {
     await this.audit.log(userId, 'UPDATE_PENDING_LOAN', 'LoanApplication', id, {
       amount: dto.amount,
       tenorMonths: dto.tenorMonths,
-      tenorUnit: dto.tenorUnit ?? (loan as any).tenorUnit ?? 'MONTHS',
+      tenorUnit: nextTenorUnit,
+      repaymentInstallments: repaymentSchedule?.installments ?? loan.tenorMonths,
     });
 
     return {
@@ -776,11 +818,11 @@ export class LoansService {
     await this.prisma.loanApplication.updateMany({
       where: {
         status: { in: ['DISBURSED', 'IN_PROGRESS'] },
-        dueDate: { lt: now },
+        nextRepaymentAt: { lt: now },
         remainingBalance: { gt: 0 },
       },
       data: { status: 'OVERDUE' },
-    });
+    } as any);
   }
 
   private shouldExposeRemainingBalance(status: LoanStatus) {
@@ -813,6 +855,40 @@ export class LoansService {
     const paid = Math.max(amount - remaining, 0);
     const raw = Math.min((paid / amount) * 100, 99.9);
     return Math.round(raw * 10) / 10;
+  }
+
+  private resolveRepaymentSchedule(tenorMonths: number, tenorUnit: LoanTenorUnit, anchorDate: Date) {
+    const requestedMonths = Math.max(Math.ceil(Number(tenorMonths) || 1), 1);
+    const normalizedTenorUnit = tenorUnit === 'WEEKS' ? 'WEEKS' : 'MONTHS';
+    const maturityDate = this.addCalendarMonths(anchorDate, requestedMonths);
+
+    if (normalizedTenorUnit === 'WEEKS') {
+      const installments = Math.max(
+        Math.ceil((maturityDate.getTime() - anchorDate.getTime()) / 604_800_000),
+        1,
+      );
+      return {
+        installments,
+        tenorMonths: requestedMonths,
+        tenorUnit: 'WEEKS' as LoanTenorUnit,
+        maturityDate,
+      };
+    }
+
+    return {
+      installments: requestedMonths,
+      tenorMonths: requestedMonths,
+      tenorUnit: 'MONTHS' as LoanTenorUnit,
+      maturityDate,
+    };
+  }
+
+  private resolveInstallmentCount(anchorDate: Date, maturityDate: Date, tenorMonths: number, tenorUnit: LoanTenorUnit) {
+    if (tenorUnit === 'WEEKS') {
+      return Math.max(Math.ceil((maturityDate.getTime() - anchorDate.getTime()) / 604_800_000), 1);
+    }
+
+    return Math.max(Math.ceil(Number(tenorMonths) || 1), 1);
   }
 
   private async assertAssociationCanFundLoan(amount: number, action: 'approve' | 'disburse') {
@@ -859,7 +935,7 @@ export class LoansService {
       },
       {
         label: 'Repayment',
-        date: loan.dueDate ?? loan.disbursedAt ?? null,
+        date: loan.nextRepaymentAt ?? loan.dueDate ?? loan.disbursedAt ?? null,
         status:
           loan.status === 'COMPLETED'
             ? 'COMPLETED'
@@ -921,6 +997,12 @@ export class LoansService {
     }
 
     next.setMonth(next.getMonth() + steps);
+    return next;
+  }
+
+  private addCalendarMonths(date: Date, months: number) {
+    const next = new Date(date);
+    next.setMonth(next.getMonth() + months);
     return next;
   }
 }

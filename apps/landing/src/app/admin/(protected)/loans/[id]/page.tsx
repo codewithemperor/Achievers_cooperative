@@ -41,9 +41,11 @@ interface LoanDetail {
   amountPaidSoFar: number;
   repaymentProgress: number;
   tenorMonths: number;
+  tenorUnit?: "MONTHS" | "WEEKS";
   purpose: string;
   status: string;
   dueDate?: string | null;
+  nextRepaymentAt?: string | null;
   submittedAt: string;
   approvedAt?: string | null;
   disbursedAt?: string | null;
@@ -288,7 +290,7 @@ export default function LoanDetailPage() {
                         amount: undefined,
                         newAmount: approvedAmount,
                         tenorMonths: loan.data?.tenorMonths,
-                        tenorUnit: "MONTHS",
+                        tenorUnit: loan.data?.tenorUnit ?? "MONTHS",
                         disburseAmount: undefined,
                       })
                     }
@@ -314,12 +316,12 @@ export default function LoanDetailPage() {
                       <div className="mt-4">
                         <NumberInput
                           control={control}
-                          label="Repayment tenor"
+                          label="Loan tenor in months"
                           name="tenorMonths"
                           min={loan.data?.tenorMonths ?? 1}
                         />
                         <div className="mt-2 rounded-2xl bg-background-50 p-4 text-sm text-text-500 dark:bg-[var(--background-800)] dark:text-text-300">
-                          Current tenor is {loan.data?.tenorMonths ?? 0} months. Enter a higher value to extend the repayment period.
+                          Enter the total loan tenor in months. If repayment is weekly, the system converts those months into weekly installments.
                         </div>
                       </div>
                       <div className="mt-4">
@@ -645,10 +647,10 @@ export default function LoanDetailPage() {
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-400">
-                    Due Date
+                    Next Repayment
                   </p>
                   <p className="mt-1 font-semibold text-text-900 dark:text-text-50">
-                    {formatLoanDate(loan.data?.dueDate)}
+                    {formatLoanDate(loan.data?.nextRepaymentAt ?? loan.data?.dueDate)}
                   </p>
                 </div>
                 <div>

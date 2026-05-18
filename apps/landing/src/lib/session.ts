@@ -11,6 +11,7 @@ export interface SessionData {
 
 const SESSION_KEY = "cms_session";
 const COOKIE_NAME = "cms_session";
+const ADMIN_DATA_CACHE_KEY = "achievers-admin-data-cache";
 
 function encodeSession(data: SessionData) {
   return encodeURIComponent(JSON.stringify(data));
@@ -40,6 +41,11 @@ function readCookie(name: string) {
 export function setSession(data: SessionData): void {
   if (typeof window === "undefined") {
     return;
+  }
+
+  const previous = getSession();
+  if (previous?.userId && previous.userId !== data.userId) {
+    window.localStorage.removeItem(ADMIN_DATA_CACHE_KEY);
   }
 
   const encoded = encodeSession(data);
@@ -75,6 +81,7 @@ export function clearSession(): void {
   }
 
   window.localStorage.removeItem(SESSION_KEY);
+  window.localStorage.removeItem(ADMIN_DATA_CACHE_KEY);
   document.cookie = `${COOKIE_NAME}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax`;
 }
 
