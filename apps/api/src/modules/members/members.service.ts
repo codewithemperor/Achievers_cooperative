@@ -422,6 +422,7 @@ export class MembersService {
     const passwordHash = await bcrypt.hash(dto.phoneNumber, 12);
     const membershipCount = await this.prisma.member.count();
     const membershipNumber = `ACH-${String(membershipCount + 1).padStart(6, '0')}`;
+    const joinedAt = new Date();
 
     const created = await this.prisma.user.create({
       data: {
@@ -446,6 +447,8 @@ export class MembersService {
             referrerId: dto.referrerId,
             membershipNumber,
             status: dto.status ?? 'ACTIVE',
+            joinedAt,
+            weeklyDeductionStartsAt: joinedAt,
             wallet: {
               create: {},
             },

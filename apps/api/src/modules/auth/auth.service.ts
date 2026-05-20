@@ -27,6 +27,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.phoneNumber, 12);
+    const joinedAt = new Date();
 
     const user = await this.prisma.user.create({
       data: {
@@ -49,6 +50,8 @@ export class AuthService {
             referrerId: dto.referrerId,
             membershipNumber: `ACH-${Date.now().toString(36).toUpperCase()}`,
             status: 'ACTIVE',
+            joinedAt,
+            weeklyDeductionStartsAt: joinedAt,
             wallet: {
               create: {},
             },

@@ -15,7 +15,7 @@ export class SystemConfigService {
     await Promise.all(
       [
         ['MEMBERSHIP_FEE_AMOUNT', '20000'],
-        ['COOPERATIVE_DEDUCTION_DAY', 'MONDAY'],
+        ['COOPERATIVE_DEDUCTION_DAY', 'SUNDAY'],
         ['COOPERATIVE_DEDUCTION_AMOUNT', '250'],
         ['COOPERATIVE_DEDUCTION_ENABLED', 'true'],
         ['MEMBERSHIP_CHARGE_RATE', '0'],
@@ -44,28 +44,37 @@ export class SystemConfigService {
 
   async update(key: string, value: string, actorId: string) {
     const config = await this.prisma.systemConfig.findUnique({ where: { key } });
+    const normalizedValue = key === 'COOPERATIVE_DEDUCTION_DAY' ? value.toUpperCase() : value;
 
     if (config) {
       const updated = await this.prisma.systemConfig.update({
         where: { key },
-        data: { value },
+        data: { value: normalizedValue },
       });
 
       await this.audit.log(actorId, 'UPDATE_SYSTEM_CONFIG', 'SystemConfig', key, {
         oldValue: config.value,
-        newValue: value,
+        newValue: normalizedValue,
       });
+
+      if (key === 'COOPERATIVE_DEDUCTION_DAY' && config.value !== normalizedValue) {
+        await this.weeklyDeductions.realignFutureCyclesForDayChange(normalizedValue);
+      }
 
       return updated;
     }
 
     const created = await this.prisma.systemConfig.create({
-      data: { key, value },
+      data: { key, value: normalizedValue },
     });
 
     await this.audit.log(actorId, 'CREATE_SYSTEM_CONFIG', 'SystemConfig', key, {
-      value,
+      value: normalizedValue,
     });
+
+    if (key === 'COOPERATIVE_DEDUCTION_DAY') {
+      await this.weeklyDeductions.realignFutureCyclesForDayChange(normalizedValue);
+    }
 
     return created;
   }

@@ -141,6 +141,7 @@ model Member {
   avatarUrl             String?
   status                MemberStatus           @default(ACTIVE)
   joinedAt              DateTime               @default(now())
+  weeklyDeductionStartsAt DateTime?
   user                  User                   @relation(fields: [userId], references: [id])
   referrer              Member?                @relation("MemberReferrals", fields: [referrerId], references: [id])
   referredMembers       Member[]               @relation("MemberReferrals")

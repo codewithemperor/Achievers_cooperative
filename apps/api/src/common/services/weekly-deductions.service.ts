@@ -11,8 +11,6 @@ const ENABLED_KEY = 'COOPERATIVE_DEDUCTION_ENABLED';
 const LAST_STATUS_KEY = 'COOPERATIVE_DEDUCTION_LAST_STATUS';
 const LAST_ERROR_KEY = 'COOPERATIVE_DEDUCTION_LAST_ERROR';
 const LAST_CHECKED_AT_KEY = 'COOPERATIVE_DEDUCTION_LAST_CHECKED_AT';
-const WEEKLY_DUES_START_DATE = new Date(Date.UTC(2026, 4, 17));
-
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 const OPEN_STATUSES = ['OUTSTANDING', 'PARTIAL', 'UPCOMING'];
 
@@ -298,6 +296,76 @@ export class WeeklyDeductionsService {
     return {
       items: payments.map((payment: any) => this.serializePayment(payment)),
     };
+  }
+
+  async realignFutureCyclesForDayChange(day: string) {
+    const normalizedDay = day.toUpperCase();
+    if (!DAYS.includes(normalizedDay)) {
+      throw new BadRequestException('Select a valid weekly deduction day.');
+    }
+
+    const settings = await this.getSettings();
+    const nextSettings = { ...settings, day: normalizedDay };
+    const today = startOfIsoDay(new Date());
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        const members = await tx.member.findMany({
+          where: { status: 'ACTIVE' },
+          select: { id: true, joinedAt: true, weeklyDeductionStartsAt: true } as any,
+        });
+
+        let deletedCycles = 0;
+        let reallocatedAmount = 0;
+
+        for (const member of members as any[]) {
+          const futureCycles = await (tx as any).weeklyDeductionCycle.findMany({
+            where: {
+              memberId: member.id,
+              dueDate: { gt: today },
+              status: { in: ['UPCOMING', 'OUTSTANDING', 'PREPAID'] },
+            },
+            include: { allocations: { include: { payment: true } } },
+          });
+
+          if (futureCycles.length) {
+            const allocationByPayment = new Map<string, { payment: any; amount: number }>();
+            for (const cycle of futureCycles) {
+              for (const allocation of cycle.allocations ?? []) {
+                const existing = allocationByPayment.get(allocation.paymentId);
+                allocationByPayment.set(allocation.paymentId, {
+                  payment: allocation.payment,
+                  amount: (existing?.amount ?? 0) + toNumber(allocation.amount),
+                });
+              }
+            }
+
+            const cycleIds = futureCycles.map((cycle: any) => cycle.id);
+            await (tx as any).weeklyDeductionAllocation.deleteMany({
+              where: { cycleId: { in: cycleIds } },
+            });
+            await (tx as any).weeklyDeductionCycle.deleteMany({
+              where: { id: { in: cycleIds } },
+            });
+            deletedCycles += cycleIds.length;
+
+            await this.ensureCyclesForMemberWithClient(tx, member, endOfMonth(), nextSettings);
+
+            for (const { payment, amount } of allocationByPayment.values()) {
+              await this.allocateExistingPaymentAmount(tx, member, payment, amount, nextSettings, {
+                futureOnly: true,
+              });
+              reallocatedAmount += amount;
+            }
+          } else {
+            await this.ensureCyclesForMemberWithClient(tx, member, endOfMonth(), nextSettings);
+          }
+        }
+
+        return { day: normalizedDay, deletedCycles, reallocatedAmount };
+      },
+      { maxWait: 300000, timeout: 300000 },
+    );
   }
 
   async runIfDue() {
@@ -600,45 +668,94 @@ export class WeeklyDeductionsService {
 
       let remaining = amount;
       while (remaining > 0.0001) {
-        let cycle = await (tx as any).weeklyDeductionCycle.findFirst({
-          where: {
-            memberId,
-            status: { in: OPEN_STATUSES },
-          },
-          orderBy: { dueDate: 'asc' },
-        });
-
-        if (!cycle) {
-          cycle = await this.createNextCycle(tx, member, settings);
-        }
-
-        const cycleAmount = toNumber(cycle.amount);
-        const currentPaid = toNumber(cycle.amountPaid);
-        const openAmount = Math.max(cycleAmount - currentPaid, 0);
-        const allocationAmount = Math.min(openAmount, remaining);
-        const nextPaid = currentPaid + allocationAmount;
-        const nextStatus = statusForCycle(cycle.dueDate, cycleAmount, nextPaid, input.paidAt ?? new Date());
-
-        await (tx as any).weeklyDeductionAllocation.create({
-          data: {
-            paymentId: payment.id,
-            cycleId: cycle.id,
-            amount: allocationAmount,
-          },
-        });
-        await (tx as any).weeklyDeductionCycle.update({
-          where: { id: cycle.id },
-          data: {
-            amountPaid: nextPaid,
-            status: nextStatus,
-          },
-        });
-
-        remaining -= allocationAmount;
+        remaining -= await this.allocateOneCycle(tx, member, payment, remaining, settings, input.paidAt ?? new Date());
       }
 
       return payment;
     });
+  }
+
+  private async allocateExistingPaymentAmount(
+    client: any,
+    member: { id: string; joinedAt: Date; weeklyDeductionStartsAt?: Date | null },
+    payment: any,
+    amount: number,
+    settings: Awaited<ReturnType<WeeklyDeductionsService['getSettings']>>,
+    options: { futureOnly?: boolean } = {},
+  ) {
+    let remaining = amount;
+    while (remaining > 0.0001) {
+      const allocated = await this.allocateOneCycle(
+        client,
+        member,
+        payment,
+        remaining,
+        settings,
+        payment.paidAt ?? new Date(),
+        options,
+      );
+      if (allocated <= 0) break;
+      remaining -= allocated;
+    }
+  }
+
+  private async allocateOneCycle(
+    client: any,
+    member: { id: string; joinedAt: Date; weeklyDeductionStartsAt?: Date | null },
+    payment: any,
+    amount: number,
+    settings: Awaited<ReturnType<WeeklyDeductionsService['getSettings']>>,
+    paidAt = new Date(),
+    options: { futureOnly?: boolean } = {},
+  ) {
+    const today = startOfIsoDay(new Date());
+    let cycle = await (client as any).weeklyDeductionCycle.findFirst({
+      where: {
+        memberId: member.id,
+        status: { in: OPEN_STATUSES },
+        ...(options.futureOnly ? { dueDate: { gt: today } } : {}),
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    if (!cycle) {
+      cycle = await this.createNextCycle(client, member, settings);
+      while (options.futureOnly && cycle.dueDate.getTime() <= today.getTime()) {
+        cycle = await this.createNextCycle(client, member, settings);
+      }
+    }
+
+    const cycleAmount = toNumber(cycle.amount);
+    const currentPaid = toNumber(cycle.amountPaid);
+    const openAmount = Math.max(cycleAmount - currentPaid, 0);
+    const allocationAmount = Math.min(openAmount, amount);
+    if (allocationAmount <= 0) {
+      await (client as any).weeklyDeductionCycle.update({
+        where: { id: cycle.id },
+        data: { status: statusForCycle(cycle.dueDate, cycleAmount, currentPaid, paidAt) },
+      });
+      return 0;
+    }
+
+    const nextPaid = currentPaid + allocationAmount;
+    const nextStatus = statusForCycle(cycle.dueDate, cycleAmount, nextPaid, paidAt);
+
+    await (client as any).weeklyDeductionAllocation.create({
+      data: {
+        paymentId: payment.id,
+        cycleId: cycle.id,
+        amount: allocationAmount,
+      },
+    });
+    await (client as any).weeklyDeductionCycle.update({
+      where: { id: cycle.id },
+      data: {
+        amountPaid: nextPaid,
+        status: nextStatus,
+      },
+    });
+
+    return allocationAmount;
   }
 
   private async getDueOutstandingForMember(memberId: string, dueDate: Date) {
@@ -656,23 +773,41 @@ export class WeeklyDeductionsService {
   private async ensureCyclesForAll(throughDate = new Date(), settings?: Awaited<ReturnType<WeeklyDeductionsService['getSettings']>>) {
     const members = await this.prisma.member.findMany({
       where: { status: 'ACTIVE' },
-      select: { id: true, joinedAt: true },
+      select: { id: true, joinedAt: true, weeklyDeductionStartsAt: true } as any,
     });
     const resolvedSettings = settings ?? (await this.getSettings());
-    for (const member of members) {
+    for (const member of members as any[]) {
       await this.ensureCyclesForMember(member, throughDate, resolvedSettings);
     }
   }
 
   private async ensureCyclesForMember(
-    member: { id: string; joinedAt: Date },
+    member: { id: string; joinedAt: Date; weeklyDeductionStartsAt?: Date | null },
     throughDate = new Date(),
     settings?: Awaited<ReturnType<WeeklyDeductionsService['getSettings']>>,
   ) {
     const resolvedSettings = settings ?? (await this.getSettings());
     if (!resolvedSettings.amount || resolvedSettings.amount <= 0) return;
 
-    const startDate = this.firstDueOnOrAfter(this.cycleStartDate(member.joinedAt), resolvedSettings.day);
+    await this.ensureCyclesForMemberWithClient(this.prisma, member, throughDate, resolvedSettings);
+  }
+
+  private async ensureCyclesForMemberWithClient(
+    client: any,
+    member: { id: string; joinedAt: Date; weeklyDeductionStartsAt?: Date | null },
+    throughDate = new Date(),
+    settings: Awaited<ReturnType<WeeklyDeductionsService['getSettings']>>,
+  ) {
+    if (!settings.amount || settings.amount <= 0) return;
+
+    const lastCycle = await (client as any).weeklyDeductionCycle.findFirst({
+      where: { memberId: member.id },
+      orderBy: { dueDate: 'desc' },
+    });
+    const startDate = this.firstDueOnOrAfter(
+      lastCycle ? addDays(lastCycle.dueDate, 1) : this.cycleStartDate(member),
+      settings.day,
+    );
     const endDate = startOfIsoDay(throughDate);
     if (startDate.getTime() > endDate.getTime()) return;
 
@@ -681,25 +816,32 @@ export class WeeklyDeductionsService {
       data.push({
         memberId: member.id,
         dueDate,
-        amount: resolvedSettings.amount,
-        status: 'OUTSTANDING',
+        amount: settings.amount,
+        amountPaid: 0,
+        status: statusForCycle(dueDate, settings.amount, 0),
       });
     }
 
     if (data.length) {
-      await (this.prisma as any).weeklyDeductionCycle.createMany({
+      await (client as any).weeklyDeductionCycle.createMany({
         data,
         skipDuplicates: true,
       });
     }
   }
 
-  private async createNextCycle(client: any, member: { id: string; joinedAt: Date }, settings: Awaited<ReturnType<WeeklyDeductionsService['getSettings']>>) {
+  private async createNextCycle(
+    client: any,
+    member: { id: string; joinedAt: Date; weeklyDeductionStartsAt?: Date | null },
+    settings: Awaited<ReturnType<WeeklyDeductionsService['getSettings']>>,
+  ) {
     const lastCycle = await (client as any).weeklyDeductionCycle.findFirst({
       where: { memberId: member.id },
       orderBy: { dueDate: 'desc' },
     });
-    const dueDate = lastCycle ? addDays(lastCycle.dueDate, 7) : this.firstDueOnOrAfter(this.cycleStartDate(member.joinedAt), settings.day);
+    const dueDate = lastCycle
+      ? this.firstDueOnOrAfter(addDays(lastCycle.dueDate, 1), settings.day)
+      : this.firstDueOnOrAfter(this.cycleStartDate(member), settings.day);
     const existing = await (client as any).weeklyDeductionCycle.findUnique({
       where: { memberId_dueDate: { memberId: member.id, dueDate } },
     });
@@ -714,14 +856,18 @@ export class WeeklyDeductionsService {
     });
   }
 
-  private nextDueAfterLastCycle(member: { id: string; joinedAt: Date }, cycles: any[], settings: Awaited<ReturnType<WeeklyDeductionsService['getSettings']>>) {
+  private nextDueAfterLastCycle(
+    member: { id: string; joinedAt: Date; weeklyDeductionStartsAt?: Date | null },
+    cycles: any[],
+    settings: Awaited<ReturnType<WeeklyDeductionsService['getSettings']>>,
+  ) {
     const last = cycles[cycles.length - 1];
-    if (last) return addDays(last.dueDate, 7);
-    return this.firstDueOnOrAfter(this.cycleStartDate(member.joinedAt), settings.day);
+    if (last) return this.firstDueOnOrAfter(addDays(last.dueDate, 1), settings.day);
+    return this.firstDueOnOrAfter(this.cycleStartDate(member), settings.day);
   }
 
-  private cycleStartDate(joinedAt: Date) {
-    return startOfIsoDay(WEEKLY_DUES_START_DATE);
+  private cycleStartDate(member: { joinedAt: Date; weeklyDeductionStartsAt?: Date | null }) {
+    return startOfIsoDay(member.weeklyDeductionStartsAt ?? member.joinedAt);
   }
 
   private firstDueOnOrAfter(startDate: Date, day: string) {

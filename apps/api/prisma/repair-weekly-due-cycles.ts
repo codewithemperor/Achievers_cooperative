@@ -8,6 +8,7 @@ const DEDUCTION_DAY_KEY = "COOPERATIVE_DEDUCTION_DAY";
 const DEDUCTION_AMOUNT_KEY = "COOPERATIVE_DEDUCTION_AMOUNT";
 const WEEKLY_DUES_START_DATE = new Date(Date.UTC(2026, 4, 17));
 const OPEN_STATUSES = ["OUTSTANDING", "PARTIAL", "UPCOMING"];
+const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 
 function startOfIsoDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -35,10 +36,24 @@ function statusForCycle(dueDate: Date, amount: number, amountPaid: number, asOf 
   return dueDate.getTime() > startOfIsoDay(asOf).getTime() ? "UPCOMING" : "OUTSTANDING";
 }
 
-function cycleDatesThrough(throughDate: Date) {
+function firstDueOnOrAfter(startDate: Date, day: string) {
+  const targetDay = Math.max(DAYS.indexOf(day.toUpperCase()), 0);
+  const first = startOfIsoDay(startDate);
+  const offset = (targetDay - first.getUTCDay() + 7) % 7;
+  return addDays(first, offset);
+}
+
+function memberWeeklyStart(member: { joinedAt: Date; weeklyDeductionStartsAt?: Date | null }) {
+  if (member.weeklyDeductionStartsAt) return startOfIsoDay(member.weeklyDeductionStartsAt);
+  const joined = startOfIsoDay(member.joinedAt);
+  const opening = startOfIsoDay(WEEKLY_DUES_START_DATE);
+  return joined.getTime() > opening.getTime() ? joined : opening;
+}
+
+function cycleDatesThrough(startDate: Date, throughDate: Date, day = "SUNDAY") {
   const dates: Date[] = [];
   for (
-    let dueDate = startOfIsoDay(WEEKLY_DUES_START_DATE);
+    let dueDate = firstDueOnOrAfter(startDate, day);
     dueDate.getTime() <= startOfIsoDay(throughDate).getTime();
     dueDate = addDays(dueDate, 7)
   ) {
@@ -54,7 +69,7 @@ async function readPlan() {
       prisma.systemConfig.findUnique({ where: { key: DEDUCTION_DAY_KEY } }),
       prisma.member.findMany({
         where: { status: "ACTIVE" },
-        select: { id: true, fullName: true, membershipNumber: true },
+        select: { id: true, fullName: true, membershipNumber: true, joinedAt: true, weeklyDeductionStartsAt: true },
         orderBy: { fullName: "asc" },
       }),
       prisma.weeklyDeductionCycle.count(),
@@ -71,28 +86,36 @@ async function readPlan() {
     ]);
 
   const amount = Number(amountConfig?.value ?? 250);
+  const day = "SUNDAY";
   const linkedTransactionIds = new Set(linkedPayments.map((payment) => payment.transactionId).filter(Boolean));
   const missingPayments = weeklyTransactions.filter((transaction) => !linkedTransactionIds.has(transaction.id));
-  const cycleDates = cycleDatesThrough(endOfMonth());
+  const cycleDatesByMember = activeMembers.map((member) => ({
+    member,
+    startDate: memberWeeklyStart(member),
+    dates: cycleDatesThrough(memberWeeklyStart(member), endOfMonth(), day),
+  }));
+  const cycleCount = cycleDatesByMember.reduce((sum, item) => sum + item.dates.length, 0);
 
   return {
     amount,
+    day,
     currentDay: dayConfig?.value ?? "(missing)",
     activeMembers,
+    cycleDatesByMember,
+    cycleCount,
     existingCycles,
     existingAllocations,
     weeklyTransactions,
     missingPayments,
-    cycleDates,
   };
 }
 
-async function createCyclesForMember(client: any, memberId: string, amount: number, throughDate = endOfMonth()) {
-  const dates = cycleDatesThrough(throughDate);
+async function createCyclesForMember(client: any, member: any, amount: number, day: string, throughDate = endOfMonth()) {
+  const dates = cycleDatesThrough(memberWeeklyStart(member), throughDate, day);
   if (!dates.length) return;
   await client.weeklyDeductionCycle.createMany({
     data: dates.map((dueDate) => ({
-      memberId,
+      memberId: member.id,
       dueDate,
       amount,
       amountPaid: 0,
@@ -102,20 +125,22 @@ async function createCyclesForMember(client: any, memberId: string, amount: numb
   });
 }
 
-async function createNextCycle(client: any, memberId: string, amount: number) {
+async function createNextCycle(client: any, member: any, amount: number, day: string) {
   const lastCycle = await client.weeklyDeductionCycle.findFirst({
-    where: { memberId },
+    where: { memberId: member.id },
     orderBy: { dueDate: "desc" },
   });
-  const dueDate = lastCycle ? addDays(lastCycle.dueDate, 7) : startOfIsoDay(WEEKLY_DUES_START_DATE);
+  const dueDate = lastCycle
+    ? firstDueOnOrAfter(addDays(lastCycle.dueDate, 1), day)
+    : firstDueOnOrAfter(memberWeeklyStart(member), day);
   const existing = await client.weeklyDeductionCycle.findUnique({
-    where: { memberId_dueDate: { memberId, dueDate } },
+    where: { memberId_dueDate: { memberId: member.id, dueDate } },
   });
   if (existing) return existing;
 
   return client.weeklyDeductionCycle.create({
     data: {
-      memberId,
+      memberId: member.id,
       dueDate,
       amount,
       amountPaid: 0,
@@ -124,19 +149,19 @@ async function createNextCycle(client: any, memberId: string, amount: number) {
   });
 }
 
-async function allocatePayment(client: any, payment: any, amount: number, cycleAmount: number) {
+async function allocatePayment(client: any, member: any, payment: any, amount: number, cycleAmount: number, day: string) {
   let remaining = amount;
   while (remaining > 0.0001) {
     let cycle = await client.weeklyDeductionCycle.findFirst({
       where: {
-        memberId: payment.memberId,
+        memberId: member.id,
         status: { in: OPEN_STATUSES },
       },
       orderBy: { dueDate: "asc" },
     });
 
     if (!cycle) {
-      cycle = await createNextCycle(client, payment.memberId, cycleAmount);
+      cycle = await createNextCycle(client, member, cycleAmount, day);
     }
 
     const cycleAmount = toNumber(cycle.amount);
@@ -174,6 +199,13 @@ async function applyRepair(plan: Awaited<ReturnType<typeof readPlan>>) {
         create: { key: DEDUCTION_DAY_KEY, value: "SUNDAY" },
       });
 
+      for (const member of plan.activeMembers) {
+        await client.member.update({
+          where: { id: member.id },
+          data: { weeklyDeductionStartsAt: memberWeeklyStart(member) },
+        });
+      }
+
       await client.weeklyDeductionAllocation.deleteMany();
       await client.weeklyDeductionCycle.deleteMany();
 
@@ -194,15 +226,19 @@ async function applyRepair(plan: Awaited<ReturnType<typeof readPlan>>) {
       }
 
       for (const member of plan.activeMembers) {
-        await createCyclesForMember(client, member.id, plan.amount);
+        await createCyclesForMember(client, member, plan.amount, plan.day);
       }
 
+      const memberById = new Map(plan.activeMembers.map((member) => [member.id, member]));
       const payments = await client.weeklyDeductionPayment.findMany({
         orderBy: [{ memberId: "asc" }, { paidAt: "asc" }, { createdAt: "asc" }],
       });
 
       for (const payment of payments) {
-        await allocatePayment(client, payment, toNumber(payment.amount), plan.amount);
+        const member = memberById.get(payment.memberId);
+        if (member) {
+          await allocatePayment(client, member, payment, toNumber(payment.amount), plan.amount, plan.day);
+        }
       }
     },
     { maxWait: 300000, timeout: 300000 },
@@ -211,19 +247,21 @@ async function applyRepair(plan: Awaited<ReturnType<typeof readPlan>>) {
 
 async function main() {
   const plan = await readPlan();
-  const recreatedCycles = plan.activeMembers.length * plan.cycleDates.length;
 
   console.log(`Mode: ${DRY_RUN ? "DRY RUN" : "APPLY"}`);
-  console.log(`Weekly dues start date: ${WEEKLY_DUES_START_DATE.toISOString().slice(0, 10)}`);
+  console.log(`Legacy weekly dues start date: ${WEEKLY_DUES_START_DATE.toISOString().slice(0, 10)}`);
   console.log(`Current configured day: ${plan.currentDay}`);
+  console.log(`Configured day after repair: ${plan.day}`);
   console.log(`Configured amount: ${plan.amount}`);
   console.log(`Active members: ${plan.activeMembers.length}`);
   console.log(`Existing cycles to rebuild: ${plan.existingCycles}`);
   console.log(`Existing allocations to rebuild: ${plan.existingAllocations}`);
-  console.log(`Cycle dates through current month: ${plan.cycleDates.map((date) => date.toISOString().slice(0, 10)).join(", ") || "none"}`);
-  console.log(`Cycles to recreate before prepayments: ${recreatedCycles}`);
+  console.log(`Cycles to recreate before prepayments: ${plan.cycleCount}`);
   console.log(`Approved weekly transactions: ${plan.weeklyTransactions.length}`);
   console.log(`Missing payment records to backfill: ${plan.missingPayments.length}`);
+  console.log(
+    `Member weekly starts to set: ${plan.activeMembers.filter((member) => !member.weeklyDeductionStartsAt || startOfIsoDay(member.weeklyDeductionStartsAt).getTime() !== memberWeeklyStart(member).getTime()).length}`,
+  );
 
   if (plan.missingPayments.length) {
     console.log("\nMissing weekly payment records:");

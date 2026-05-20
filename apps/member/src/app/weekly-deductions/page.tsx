@@ -82,7 +82,7 @@ function statusClass(status: string) {
   if (["PAID", "PREPAID", "APPROVED"].includes(status)) {
     return "bg-primary-50 text-primary-700 dark:bg-primary-500/15 dark:text-primary-300";
   }
-  if (status === "PARTIAL") {
+  if (["PARTIAL", "UPCOMING"].includes(status)) {
     return "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300";
   }
   return "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300";
