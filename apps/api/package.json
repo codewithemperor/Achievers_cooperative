@@ -22,7 +22,8 @@
     "db:seed:members": "tsx prisma/seed-members.ts",
     "db:append:members": "tsx prisma/append-members.ts",
     "db:repair:legacy-loans": "tsx prisma/repair-legacy-loan-schedules.ts",
-    "db:reconcile:financials": "tsx prisma/reconcile-financials.ts"
+    "db:reconcile:financials": "tsx prisma/reconcile-financials.ts",
+    "db:patch:weekly-members": "tsx prisma/patch-weekly-member-repair.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.18",

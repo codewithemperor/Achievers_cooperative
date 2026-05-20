@@ -25,6 +25,18 @@ function isUniqueConstraintError(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002';
 }
 
+function startOfIsoDay(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function weeklyCycleStatus(dueDate: Date, amount: number, amountPaid: number, asOf = new Date()) {
+  if (amountPaid >= amount) {
+    return dueDate.getTime() > startOfIsoDay(asOf).getTime() ? 'PREPAID' : 'PAID';
+  }
+  if (amountPaid > 0) return 'PARTIAL';
+  return dueDate.getTime() > startOfIsoDay(asOf).getTime() ? 'UPCOMING' : 'OUTSTANDING';
+}
+
 @Injectable()
 export class WalletService {
   constructor(
@@ -280,6 +292,8 @@ export class WalletService {
           tx,
         );
 
+        await this.allocateWeeklySettlement(tx, wallet.memberId, transaction.id, newlyCovered);
+
         return updatedTransaction;
       });
 
@@ -294,6 +308,58 @@ export class WalletService {
     });
 
     return { wallet: syncedWallet, transactions: settledTransactions };
+  }
+
+  private async allocateWeeklySettlement(client: any, memberId: string, transactionId: string, amount: number) {
+    if (amount <= 0) return;
+
+    const payment = await client.weeklyDeductionPayment.create({
+      data: {
+        memberId,
+        transactionId,
+        amount,
+        mode: 'SETTLEMENT',
+        metadata: {
+          transactionId,
+          settledFromPendingWeeklyDeduction: true,
+        },
+      },
+    });
+
+    let remaining = amount;
+    while (remaining > 0.0001) {
+      const cycle = await client.weeklyDeductionCycle.findFirst({
+        where: {
+          memberId,
+          status: { in: ['OUTSTANDING', 'PARTIAL', 'UPCOMING'] },
+        },
+        orderBy: { dueDate: 'asc' },
+      });
+      if (!cycle) break;
+
+      const cycleAmount = Number(cycle.amount);
+      const currentPaid = Number(cycle.amountPaid);
+      const openAmount = Math.max(cycleAmount - currentPaid, 0);
+      const allocationAmount = Math.min(openAmount, remaining);
+      const nextPaid = currentPaid + allocationAmount;
+
+      await client.weeklyDeductionAllocation.create({
+        data: {
+          paymentId: payment.id,
+          cycleId: cycle.id,
+          amount: allocationAmount,
+        },
+      });
+      await client.weeklyDeductionCycle.update({
+        where: { id: cycle.id },
+        data: {
+          amountPaid: nextPaid,
+          status: weeklyCycleStatus(cycle.dueDate, cycleAmount, nextPaid),
+        },
+      });
+
+      remaining -= allocationAmount;
+    }
   }
 
   async settleOutstandingObligations(memberId: string) {

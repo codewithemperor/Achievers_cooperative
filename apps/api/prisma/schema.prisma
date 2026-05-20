@@ -148,6 +148,8 @@ model Member {
   savingsAccounts       SavingsAccount[]
   savingsWithdrawalRequests SavingsWithdrawalRequest[]
   walletWithdrawalRequests WalletWithdrawalRequest[]
+  weeklyDeductionCycles WeeklyDeductionCycle[]
+  weeklyDeductionPayments WeeklyDeductionPayment[]
   loanApplications      LoanApplication[]
   investments           InvestmentSubscription[]
   investmentCancellationRequests InvestmentCancellationRequest[]
@@ -187,6 +189,56 @@ model Transaction {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   wallet      Wallet          @relation(fields: [walletId], references: [id])
+  weeklyDeductionPayments WeeklyDeductionPayment[]
+}
+
+model WeeklyDeductionCycle {
+  id          String                      @id @default(cuid())
+  memberId    String
+  dueDate     DateTime
+  amount      Decimal
+  amountPaid  Decimal                     @default(0)
+  status      String                      @default("OUTSTANDING")
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+  member      Member                      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  allocations WeeklyDeductionAllocation[]
+
+  @@unique([memberId, dueDate])
+  @@index([dueDate])
+  @@index([status])
+  @@index([memberId, status])
+}
+
+model WeeklyDeductionPayment {
+  id            String                      @id @default(cuid())
+  memberId      String
+  transactionId String?
+  amount        Decimal
+  mode          String
+  paidAt        DateTime                    @default(now())
+  createdAt     DateTime                    @default(now())
+  metadata      Json?
+  member        Member                      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  transaction   Transaction?                @relation(fields: [transactionId], references: [id])
+  allocations   WeeklyDeductionAllocation[]
+
+  @@index([memberId, paidAt])
+  @@index([transactionId])
+  @@index([mode])
+}
+
+model WeeklyDeductionAllocation {
+  id        String                 @id @default(cuid())
+  paymentId String
+  cycleId   String
+  amount    Decimal
+  createdAt DateTime               @default(now())
+  payment   WeeklyDeductionPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  cycle     WeeklyDeductionCycle   @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentId, cycleId])
+  @@index([cycleId])
 }
 
 model SavingsAccount {

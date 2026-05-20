@@ -25,26 +25,6 @@ export class CronController {
     return this.weeklyDeductions.runFromCron(force === 'true');
   }
 
-  @Get('weekly-deductions')
-  runWeeklyDeductionsGet(
-    @Headers('x-cron-secret') headerSecret?: string,
-    @Query('secret') querySecret?: string,
-    @Query('force') force?: string,
-  ) {
-    this.assertCronSecret(headerSecret, querySecret);
-    return this.weeklyDeductions.runFromCron(force === 'true');
-  }
-
-  @Post('weekly-deductions')
-  runWeeklyDeductionsPost(
-    @Headers('x-cron-secret') headerSecret?: string,
-    @Query('secret') querySecret?: string,
-    @Query('force') force?: string,
-  ) {
-    this.assertCronSecret(headerSecret, querySecret);
-    return this.weeklyDeductions.runFromCron(force === 'true');
-  }
-
   private assertCronSecret(headerSecret?: string, querySecret?: string) {
     const expected = process.env.CRON_SECRET;
     if (!expected || (headerSecret !== expected && querySecret !== expected)) {

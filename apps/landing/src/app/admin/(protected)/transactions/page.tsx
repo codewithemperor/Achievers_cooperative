@@ -1147,7 +1147,6 @@ export default function TransactionsPage() {
         items={[
           { id: "treasury", label: "Treasury Ledger" },
           { id: "member", label: "Member Transactions" },
-          { id: "weekly", label: "Weekly Deductions" },
         ]}
         onChange={setTab}
         value={tab}

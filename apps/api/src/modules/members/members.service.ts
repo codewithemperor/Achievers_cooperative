@@ -249,7 +249,7 @@ export class MembersService {
       throw new NotFoundException('Member dashboard not found');
     }
 
-    const [recentTransactions, pendingPayments, transactionCount, savingsTotal, termsConfig, bankName, bankAccountName, bankAccountNumber] = await Promise.all([
+    const [recentTransactions, pendingPayments, transactionCount, savingsTotal, termsConfig, bankName, bankAccountName, bankAccountNumber, weeklyDeduction] = await Promise.all([
       this.prisma.transaction.findMany({
         where: { walletId: member.wallet.id },
         orderBy: { createdAt: 'desc' },
@@ -272,6 +272,7 @@ export class MembersService {
       this.prisma.systemConfig.findUnique({ where: { key: 'BANK_NAME' } }),
       this.prisma.systemConfig.findUnique({ where: { key: 'BANK_ACCOUNT_NAME' } }),
       this.prisma.systemConfig.findUnique({ where: { key: 'BANK_ACCOUNT_NUMBER' } }),
+      this.weeklyDeductions.getMemberSummary(member.id, { includeCycles: false, includePayments: false }),
     ]);
 
     const activeLoan = member.loanApplications.find((loan) =>
@@ -379,8 +380,16 @@ export class MembersService {
               amountPaid: Number(activePackage.amountPaid),
               amountRemaining: Number(activePackage.amountRemaining),
               status: activePackage.status,
-            }
+          }
           : null,
+        weeklyDeduction: {
+          weeklyAmount: weeklyDeduction.weeklyAmount,
+          outstandingAmount: weeklyDeduction.outstandingAmount,
+          prepaidAmount: weeklyDeduction.prepaidAmount,
+          totalPaid: weeklyDeduction.totalPaid,
+          paidThisMonth: weeklyDeduction.paidThisMonth,
+          nextDueAt: weeklyDeduction.nextDueAt,
+        },
       },
       recentTransactions: mergedActivity,
       cooperativeAccount: {

@@ -6,6 +6,7 @@ import {
   ArrowRightLeft,
   BellRing,
   BriefcaseBusiness,
+  CalendarDays,
   Copy,
   Landmark,
   PiggyBank,
@@ -64,6 +65,14 @@ interface DashboardPayload {
       packageName: string;
       status: string;
     } | null;
+    weeklyDeduction?: {
+      weeklyAmount: number;
+      outstandingAmount: number;
+      prepaidAmount: number;
+      totalPaid: number;
+      paidThisMonth: number;
+      nextDueAt?: string | null;
+    };
   };
   recentTransactions: Array<{
     id: string;
@@ -104,8 +113,16 @@ const fallbackData: DashboardPayload = {
     transactionCount: 0,
     pendingPaymentsTotal: 0,
     pendingPaymentsCount: 0,
-    activeLoan: null,
-    activePackage: null,
+        activeLoan: null,
+        activePackage: null,
+        weeklyDeduction: {
+          weeklyAmount: 0,
+          outstandingAmount: 0,
+          prepaidAmount: 0,
+          totalPaid: 0,
+          paidThisMonth: 0,
+          nextDueAt: null,
+        },
   },
   recentTransactions: [],
   cooperativeAccounts: [],
@@ -131,6 +148,7 @@ const quickActions = [
   { label: "Loans", href: "/loans", icon: Wallet },
   { label: "Packages", href: "/packages", icon: Landmark },
   { label: "Invest", href: "/investments", icon: TrendingUp },
+  { label: "Weekly", href: "/weekly-deductions", icon: CalendarDays },
   { label: "Alerts", href: "/notifications", icon: BellRing },
 ];
 
@@ -188,6 +206,16 @@ const cardMeta = [
     icon: <Landmark className="h-5 w-5" />,
     gradient: "from-[#5b0b12] via-[#43080d] to-[#260406]",
   },
+  {
+    title: "Weekly dues",
+    valueKey: "weekly" as const,
+    eyebrow: "Association",
+    caption: "Track your weekly cooperative contribution and prepayments.",
+    href: "/weekly-deductions",
+    ctaLabel: "Pay dues",
+    icon: <CalendarDays className="h-5 w-5" />,
+    gradient: "from-[#0f4f46] via-[#0d3d37] to-[#082622]",
+  },
 ];
 
 export default function DashboardPage() {
@@ -215,6 +243,7 @@ export default function DashboardPage() {
     investments: formatMoney(data.summary.totalInvestments),
     packages: formatMoney(data.summary.activePackage?.amountRemaining ?? 0),
     loans: formatMoney(data.summary.activeLoan?.remainingBalance ?? 0),
+    weekly: formatMoney(data.summary.weeklyDeduction?.outstandingAmount ?? 0),
   };
 
   async function copyAccountDetail(value: string) {
@@ -333,6 +362,8 @@ export default function DashboardPage() {
                           ? data.summary.activeLoan
                             ? `Your approved loan is ${formatMoney(data.summary.activeLoan.approvedAmount ?? data.summary.activeLoan.amount ?? 0)}. ${formatMoney(data.summary.activeLoan.disbursedAmount ?? 0)} has been disbursed, ${formatMoney(data.summary.activeLoan.remainingToDisburse ?? 0)} is still available for disbursement, and ${formatMoney(data.summary.activeLoan.remainingBalance)} is outstanding.`
                             : `You have ${formatMoney(data.summary.pendingLoansTotal ?? 0)} in loan requests waiting for approval.`
+                          : card.valueKey === "weekly"
+                            ? `Weekly due is ${formatMoney(data.summary.weeklyDeduction?.weeklyAmount ?? 0)}. You have prepaid ${formatMoney(data.summary.weeklyDeduction?.prepaidAmount ?? 0)} and paid ${formatMoney(data.summary.weeklyDeduction?.paidThisMonth ?? 0)} this month.`
                           : card.caption
                     }
                     href={card.href}
