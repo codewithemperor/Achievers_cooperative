@@ -11,7 +11,7 @@ const ENABLED_KEY = 'COOPERATIVE_DEDUCTION_ENABLED';
 const LAST_STATUS_KEY = 'COOPERATIVE_DEDUCTION_LAST_STATUS';
 const LAST_ERROR_KEY = 'COOPERATIVE_DEDUCTION_LAST_ERROR';
 const LAST_CHECKED_AT_KEY = 'COOPERATIVE_DEDUCTION_LAST_CHECKED_AT';
-const LEGACY_JOINED_AT_CUTOFF = new Date(Date.UTC(2025, 4, 16));
+const WEEKLY_DUES_START_DATE = new Date(Date.UTC(2026, 4, 17));
 
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 const OPEN_STATUSES = ['OUTSTANDING', 'PARTIAL', 'UPCOMING'];
@@ -30,6 +30,10 @@ function monthRange(date = new Date()) {
   const from = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
   const to = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 23, 59, 59, 999));
   return { from, to };
+}
+
+function endOfMonth(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 }
 
 function toNumber(value: unknown) {
@@ -66,7 +70,7 @@ export class WeeklyDeductionsService {
     ]);
 
     return {
-      day: day?.value ?? 'MONDAY',
+      day: day?.value ?? 'SUNDAY',
       amount: Number(amount?.value ?? 0),
       enabled: (enabled?.value ?? 'true') === 'true',
       lastRun: lastRun?.value ?? '',
@@ -91,7 +95,7 @@ export class WeeklyDeductionsService {
     if (!member) throw new NotFoundException('Member not found');
 
     const settings = await this.getSettings();
-    await this.ensureCyclesForMember(member, new Date(), settings);
+    await this.ensureCyclesForMember(member, endOfMonth(), settings);
     const { from, to } = monthRange();
     const [cycles, payments] = await Promise.all([
       (this.prisma as any).weeklyDeductionCycle.findMany({
@@ -196,7 +200,7 @@ export class WeeklyDeductionsService {
   }
 
   async getAdminSummary() {
-    await this.ensureCyclesForAll(new Date());
+    await this.ensureCyclesForAll(endOfMonth());
     const [members, cycles, payments] = await Promise.all([
       this.prisma.member.count({ where: { status: 'ACTIVE' } }),
       (this.prisma as any).weeklyDeductionCycle.findMany(),
@@ -223,7 +227,7 @@ export class WeeklyDeductionsService {
   }
 
   async getAdminMembers() {
-    await this.ensureCyclesForAll(new Date());
+    await this.ensureCyclesForAll(endOfMonth());
     const members = await this.prisma.member.findMany({
       where: { status: 'ACTIVE' },
       orderBy: { fullName: 'asc' },
@@ -717,8 +721,7 @@ export class WeeklyDeductionsService {
   }
 
   private cycleStartDate(joinedAt: Date) {
-    const joined = startOfIsoDay(joinedAt);
-    return joined.getTime() > LEGACY_JOINED_AT_CUTOFF.getTime() ? LEGACY_JOINED_AT_CUTOFF : joined;
+    return startOfIsoDay(WEEKLY_DUES_START_DATE);
   }
 
   private firstDueOnOrAfter(startDate: Date, day: string) {
@@ -778,7 +781,7 @@ export class WeeklyDeductionsService {
   private async ensureDefaults() {
     await Promise.all(
       [
-        [DEDUCTION_DAY_KEY, 'MONDAY'],
+        [DEDUCTION_DAY_KEY, 'SUNDAY'],
         [DEDUCTION_AMOUNT_KEY, '250'],
         [LAST_RUN_KEY, ''],
         [DAILY_LAST_RUN_KEY, ''],

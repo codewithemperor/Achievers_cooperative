@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarDays, WalletCards } from "lucide-react";
+import { ArrowLeft, CalendarDays } from "lucide-react";
 import api from "@/lib/member-api";
 import { apiCallWithAlert } from "@/lib/alert";
 import { formatMoney } from "@/lib/member-format";
@@ -66,6 +66,18 @@ function formatDate(value?: string | null) {
   });
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "--";
+  return new Date(value).toLocaleString("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function statusClass(status: string) {
   if (["PAID", "PREPAID", "APPROVED"].includes(status)) {
     return "bg-primary-50 text-primary-700 dark:bg-primary-500/15 dark:text-primary-300";
@@ -76,12 +88,45 @@ function statusClass(status: string) {
   return "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300";
 }
 
+function label(value: string) {
+  return value.replaceAll("_", " ").toLowerCase();
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-background-200 py-3 last:border-b-0 dark:border-background-200">
+      <span className="text-sm text-text-400">{label}</span>
+      <span className="max-w-[60%] text-right text-sm font-semibold text-text-900 dark:text-text-50">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function currentMonthBounds() {
+  const now = new Date();
+  return {
+    from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
+    to: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime(),
+    today: new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(),
+  };
+}
+
 export default function WeeklyDeductionsPage() {
   const router = useRouter();
   const weekly = useMemberData<WeeklyPayload>("/weekly-deductions/me", emptyWeekly);
   const [isPayOpen, setIsPayOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const monthBounds = currentMonthBounds();
+  const visibleCycles = weekly.data.cycles
+    .filter((cycle) => {
+      const dueTime = new Date(cycle.dueDate).getTime();
+      const isCurrentMonth = dueTime >= monthBounds.from && dueTime <= monthBounds.to;
+      const isOutstanding = cycle.outstandingAmount > 0 && dueTime <= monthBounds.today;
+      return isCurrentMonth || isOutstanding;
+    })
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
   async function submitPayment() {
     const value = Number(amount);
@@ -132,24 +177,29 @@ export default function WeeklyDeductionsPage() {
         gradient="from-[#0f4f46] via-[#0d3d37] to-[#082622]"
       />
 
-      <div className="grid grid-cols-2 gap-3">
-        {[
-          ["Expected", weekly.data.expectedAmount],
-          ["Total paid", weekly.data.totalPaid],
-          ["Prepaid", weekly.data.prepaidAmount],
-          ["Next due", weekly.data.nextDueAt ? formatDate(weekly.data.nextDueAt) : "--"],
-        ].map(([label, value]) => (
-          <div
-            className="rounded-2xl border border-background-200 bg-white p-4 dark:border-white/10 dark:bg-background-100"
-            key={label}
-          >
-            <p className="text-xs font-medium text-text-400">{label}</p>
-            <p className="mt-2 text-lg font-semibold text-text-900 dark:text-text-50">
-              {typeof value === "number" ? formatMoney(value) : value}
+      <section className="rounded-3xl border border-background-200 bg-white p-5 dark:border-background-200 dark:bg-background-100">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-400">
+              Weekly summary
             </p>
+            <h2 className="mt-1 font-display text-lg font-semibold text-text-900 dark:text-text-50">
+              Association dues
+            </h2>
           </div>
-        ))}
-      </div>
+          <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">
+            {formatMoney(weekly.data.weeklyAmount)} weekly
+          </span>
+        </div>
+        <div className="mt-3">
+          <DetailRow label="Expected" value={formatMoney(weekly.data.expectedAmount)} />
+          <DetailRow label="Total paid" value={formatMoney(weekly.data.totalPaid)} />
+          <DetailRow label="Outstanding" value={formatMoney(weekly.data.outstandingAmount)} />
+          <DetailRow label="Prepaid" value={formatMoney(weekly.data.prepaidAmount)} />
+          <DetailRow label="Paid this month" value={formatMoney(weekly.data.paidThisMonth)} />
+          <DetailRow label="Next due" value={weekly.data.nextDueAt ? formatDate(weekly.data.nextDueAt) : "--"} />
+        </div>
+      </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -158,30 +208,40 @@ export default function WeeklyDeductionsPage() {
           </h2>
           <span className="text-xs text-text-400">Oldest first</span>
         </div>
-        {weekly.data.cycles.length ? (
-          weekly.data.cycles
-            .slice()
-            .reverse()
-            .map((cycle) => (
-              <div
-                className="rounded-2xl border border-background-200 bg-white p-4 dark:border-white/10 dark:bg-background-100"
-                key={cycle.id}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-text-900 dark:text-text-50">
-                      {formatDate(cycle.dueDate)}
-                    </p>
-                    <p className="mt-1 text-xs text-text-400">
-                      Paid {formatMoney(cycle.amountPaid)} of {formatMoney(cycle.amount)}
-                    </p>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusClass(cycle.status)}`}>
-                    {cycle.status.replaceAll("_", " ").toLowerCase()}
+        {visibleCycles.length ? (
+          <div className="max-w-full overflow-x-auto">
+            <div className="max-h-[360px] min-w-[680px] overflow-y-auto rounded-2xl border border-background-200 dark:border-background-200">
+              <div className="grid grid-cols-[64px_1.2fr_1fr_1fr_1fr_1fr] bg-background-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-400 dark:bg-background-50">
+                <span>S/N</span>
+                <span>Due date</span>
+                <span>Expected</span>
+                <span>Paid</span>
+                <span>Outstanding</span>
+                <span>Status</span>
+              </div>
+              {visibleCycles.map((cycle, index) => (
+                <div
+                  className="grid grid-cols-[64px_1.2fr_1fr_1fr_1fr_1fr] items-center border-t border-background-200 px-4 py-3 text-sm dark:border-background-200"
+                  key={cycle.id}
+                >
+                  <span className="text-text-400">{index + 1}</span>
+                  <span className="font-medium text-text-900 dark:text-text-50">
+                    {formatDate(cycle.dueDate)}
+                  </span>
+                  <span className="text-text-600 dark:text-text-300">{formatMoney(cycle.amount)}</span>
+                  <span className="text-text-600 dark:text-text-300">{formatMoney(cycle.amountPaid)}</span>
+                  <span className="font-semibold text-text-900 dark:text-text-50">
+                    {formatMoney(cycle.outstandingAmount)}
+                  </span>
+                  <span>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${statusClass(cycle.status)}`}>
+                      {label(cycle.status)}
+                    </span>
                   </span>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
+          </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-background-300 p-8 text-center text-sm text-text-400 dark:border-white/10">
             Weekly deduction cycles will appear here.
@@ -194,27 +254,35 @@ export default function WeeklyDeductionsPage() {
           Payment history
         </h2>
         {weekly.data.payments.length ? (
-          weekly.data.payments.map((payment) => (
-            <div
-              className="flex items-center justify-between gap-3 rounded-2xl border border-background-200 bg-white p-4 dark:border-white/10 dark:bg-background-100"
-              key={payment.id}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">
-                  <WalletCards className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-text-900 dark:text-text-50">
-                    {payment.mode.toLowerCase()} payment
-                  </p>
-                  <p className="text-xs text-text-400">{formatDate(payment.paidAt)}</p>
-                </div>
+          <div className="max-w-full overflow-x-auto">
+            <div className="max-h-[340px] min-w-[640px] overflow-y-auto rounded-2xl border border-background-200 dark:border-background-200">
+              <div className="grid grid-cols-[64px_1.2fr_1fr_1fr_1.2fr] bg-background-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-400 dark:bg-background-50">
+                <span>S/N</span>
+                <span>Date</span>
+                <span>Mode</span>
+                <span>Amount</span>
+                <span>Reference</span>
               </div>
-              <p className="font-semibold text-text-900 dark:text-text-50">
-                {formatMoney(payment.amount)}
-              </p>
+              {weekly.data.payments.map((payment, index) => (
+                <div
+                  className="grid grid-cols-[64px_1.2fr_1fr_1fr_1.2fr] items-center border-t border-background-200 px-4 py-3 text-sm dark:border-background-200"
+                  key={payment.id}
+                >
+                  <span className="text-text-400">{index + 1}</span>
+                  <span className="text-text-600 dark:text-text-300">{formatDateTime(payment.paidAt)}</span>
+                  <span className="font-medium capitalize text-text-900 dark:text-text-50">
+                    {payment.mode.toLowerCase()}
+                  </span>
+                  <span className="font-semibold text-text-900 dark:text-text-50">
+                    {formatMoney(payment.amount)}
+                  </span>
+                  <span className="truncate text-text-500 dark:text-text-300">
+                    {payment.transaction?.reference || payment.transaction?.description || "--"}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))
+          </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-background-300 p-8 text-center text-sm text-text-400 dark:border-white/10">
             No weekly deduction payment yet.

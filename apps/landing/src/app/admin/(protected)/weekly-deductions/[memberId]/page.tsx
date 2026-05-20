@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, CalendarDays, CreditCard, WalletCards } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { AdminTabs } from "@/components/ui/admin-tabs";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { DashboardMetricCard } from "@/components/admin/dashboard-card";
 import { useApi } from "@/hooks/useApi";
 
 interface WeeklyCycle {
@@ -96,6 +95,26 @@ function statusVariant(status: string) {
   return "neutral";
 }
 
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-border-subtle py-3 last:border-b-0">
+      <span className="text-sm text-text-muted">{label}</span>
+      <span className="max-w-[60%] text-right text-sm font-semibold text-text-strong">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function currentMonthBounds() {
+  const now = new Date();
+  return {
+    from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
+    to: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime(),
+    today: new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(),
+  };
+}
+
 export default function AdminWeeklyDeductionMemberPage() {
   const params = useParams<{ memberId: string }>();
   const [tab, setTab] = useState<"cycles" | "payments">("cycles");
@@ -103,10 +122,17 @@ export default function AdminWeeklyDeductionMemberPage() {
     `/weekly-deductions/admin/members/${params.memberId}`,
     { label: "weekly deduction member detail" },
   );
-  const cycles = useMemo(
-    () => (detail.data?.cycles ?? []).slice().reverse(),
-    [detail.data?.cycles],
-  );
+  const cycles = useMemo(() => {
+    const bounds = currentMonthBounds();
+    return (detail.data?.cycles ?? [])
+      .filter((cycle) => {
+        const dueTime = new Date(cycle.dueDate).getTime();
+        const isCurrentMonth = dueTime >= bounds.from && dueTime <= bounds.to;
+        const isOutstanding = cycle.outstandingAmount > 0 && dueTime <= bounds.today;
+        return isCurrentMonth || isOutstanding;
+      })
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  }, [detail.data?.cycles]);
   const payments = detail.data?.payments ?? [];
   const member = detail.data?.member;
 
@@ -130,40 +156,30 @@ export default function AdminWeeklyDeductionMemberPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <DashboardMetricCard
-          title="Outstanding"
-          value={currency.format(detail.data?.outstandingAmount ?? 0)}
-          description={`Next due date is ${formatDate(detail.data?.nextDueAt)}.`}
-          href={`/admin/weekly-deductions/${params.memberId}`}
-          icon={<WalletCards className="h-5 w-5" />}
-          tone="red"
-        />
-        <DashboardMetricCard
-          title="Total Paid"
-          value={currency.format(detail.data?.totalPaid ?? 0)}
-          description={`${detail.data?.paidCycleCount ?? 0} cycle(s) fully paid.`}
-          href={`/admin/weekly-deductions/${params.memberId}`}
-          icon={<CreditCard className="h-5 w-5" />}
-          tone="green"
-        />
-        <DashboardMetricCard
-          title="Prepaid"
-          value={currency.format(detail.data?.prepaidAmount ?? 0)}
-          description="Future weekly cycles already covered by upfront payments."
-          href={`/admin/weekly-deductions/${params.memberId}`}
-          icon={<CalendarDays className="h-5 w-5" />}
-          tone="blue"
-        />
-        <DashboardMetricCard
-          title="Wallet Balance"
-          value={currency.format(member?.walletBalance ?? 0)}
-          description={`Weekly amount is ${currency.format(detail.data?.weeklyAmount ?? 0)}.`}
-          href={`/admin/members/${member?.id ?? params.memberId}`}
-          icon={<WalletCards className="h-5 w-5" />}
-          tone="neutral"
-        />
-      </div>
+      <section className="rounded-3xl border border-border-subtle bg-surface-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
+              Member due summary
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-text-strong">
+              Weekly association deduction
+            </h2>
+          </div>
+          <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">
+            {currency.format(detail.data?.weeklyAmount ?? 0)} weekly
+          </span>
+        </div>
+        <div className="mt-3">
+          <DetailRow label="Expected" value={currency.format(detail.data?.expectedAmount ?? 0)} />
+          <DetailRow label="Total paid" value={currency.format(detail.data?.totalPaid ?? 0)} />
+          <DetailRow label="Outstanding" value={currency.format(detail.data?.outstandingAmount ?? 0)} />
+          <DetailRow label="Prepaid" value={currency.format(detail.data?.prepaidAmount ?? 0)} />
+          <DetailRow label="Paid this month" value={currency.format(detail.data?.paidThisMonth ?? 0)} />
+          <DetailRow label="Wallet balance" value={currency.format(member?.walletBalance ?? 0)} />
+          <DetailRow label="Next due" value={formatDate(detail.data?.nextDueAt)} />
+        </div>
+      </section>
 
       <AdminTabs
         items={[

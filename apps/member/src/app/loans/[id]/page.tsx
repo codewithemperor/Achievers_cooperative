@@ -403,7 +403,7 @@ export default function LoanDetailPage() {
                 Installment Schedule
               </h2>
               <div className="mt-4 max-w-full overflow-x-auto">
-                <div className="min-w-[560px] overflow-hidden rounded-2xl border border-background-200 dark:border-background-200">
+                <div className="max-h-[420px] min-w-[560px] overflow-y-auto rounded-2xl border border-background-200 dark:border-background-200">
                   <div className="grid grid-cols-[64px_1fr_1fr_1fr_1fr] bg-background-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-400 dark:bg-background-50">
                     <span>S/N</span>
                     <span>Installment</span>
