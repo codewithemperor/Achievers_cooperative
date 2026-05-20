@@ -107,14 +107,25 @@ function currentMonthBounds() {
   const now = new Date();
   return {
     from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
-    to: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime(),
+    to: new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    ).getTime(),
     today: new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(),
   };
 }
 
 export default function WeeklyDeductionsPage() {
   const router = useRouter();
-  const weekly = useMemberData<WeeklyPayload>("/weekly-deductions/me", emptyWeekly);
+  const weekly = useMemberData<WeeklyPayload>(
+    "/weekly-deductions/me",
+    emptyWeekly,
+  );
   const [isPayOpen, setIsPayOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -122,11 +133,15 @@ export default function WeeklyDeductionsPage() {
   const visibleCycles = weekly.data.cycles
     .filter((cycle) => {
       const dueTime = new Date(cycle.dueDate).getTime();
-      const isCurrentMonth = dueTime >= monthBounds.from && dueTime <= monthBounds.to;
-      const isOutstanding = cycle.outstandingAmount > 0 && dueTime <= monthBounds.today;
+      const isCurrentMonth =
+        dueTime >= monthBounds.from && dueTime <= monthBounds.to;
+      const isOutstanding =
+        cycle.outstandingAmount > 0 && dueTime <= monthBounds.today;
       return isCurrentMonth || isOutstanding;
     })
-    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    .sort(
+      (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+    );
 
   async function submitPayment() {
     const value = Number(amount);
@@ -139,7 +154,8 @@ export default function WeeklyDeductionsPage() {
         loadingText: "Processing weekly deduction payment...",
         apiCall: () => api.post("/weekly-deductions/me/pay", { amount: value }),
         successTitle: "Payment Successful",
-        successText: "Your weekly association deduction payment has been recorded.",
+        successText:
+          "Your weekly association deduction payment has been recorded.",
       });
 
       if (result) {
@@ -154,23 +170,18 @@ export default function WeeklyDeductionsPage() {
 
   return (
     <PullToRefresh className="space-y-5" onRefresh={weekly.refetch}>
-      <button
-        className="inline-flex items-center gap-2 rounded-full border border-background-200 bg-white px-3 py-2 text-xs font-semibold text-text-700 dark:border-white/10 dark:bg-background-100 dark:text-text-100"
-        onClick={() => goBackOrDashboard(router)}
-        type="button"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back
-      </button>
-
       <SummaryCard
         eyebrow="Association"
-        title="Weekly dues"
+        title="Outstanding Weekly dues"
         value={formatMoney(weekly.data.outstandingAmount)}
         caption={`Weekly amount is ${formatMoney(weekly.data.weeklyAmount)}. You have prepaid ${formatMoney(weekly.data.prepaidAmount)} and paid ${formatMoney(weekly.data.paidThisMonth)} this month.`}
         ctaLabel="Pay weekly dues"
         onCtaClick={() => {
-          setAmount(String(weekly.data.outstandingAmount || weekly.data.weeklyAmount || ""));
+          setAmount(
+            String(
+              weekly.data.outstandingAmount || weekly.data.weeklyAmount || "",
+            ),
+          );
           setIsPayOpen(true);
         }}
         icon={<CalendarDays className="h-5 w-5" />}
@@ -192,12 +203,32 @@ export default function WeeklyDeductionsPage() {
           </span>
         </div>
         <div className="mt-3">
-          <DetailRow label="Expected" value={formatMoney(weekly.data.expectedAmount)} />
-          <DetailRow label="Total paid" value={formatMoney(weekly.data.totalPaid)} />
-          <DetailRow label="Outstanding" value={formatMoney(weekly.data.outstandingAmount)} />
-          <DetailRow label="Prepaid" value={formatMoney(weekly.data.prepaidAmount)} />
-          <DetailRow label="Paid this month" value={formatMoney(weekly.data.paidThisMonth)} />
-          <DetailRow label="Next due" value={weekly.data.nextDueAt ? formatDate(weekly.data.nextDueAt) : "--"} />
+          <DetailRow
+            label="Expected"
+            value={formatMoney(weekly.data.expectedAmount)}
+          />
+          <DetailRow
+            label="Total paid"
+            value={formatMoney(weekly.data.totalPaid)}
+          />
+          <DetailRow
+            label="Outstanding"
+            value={formatMoney(weekly.data.outstandingAmount)}
+          />
+          <DetailRow
+            label="Prepaid"
+            value={formatMoney(weekly.data.prepaidAmount)}
+          />
+          <DetailRow
+            label="Paid this month"
+            value={formatMoney(weekly.data.paidThisMonth)}
+          />
+          <DetailRow
+            label="Next due"
+            value={
+              weekly.data.nextDueAt ? formatDate(weekly.data.nextDueAt) : "--"
+            }
+          />
         </div>
       </section>
 
@@ -228,13 +259,19 @@ export default function WeeklyDeductionsPage() {
                   <span className="font-medium text-text-900 dark:text-text-50">
                     {formatDate(cycle.dueDate)}
                   </span>
-                  <span className="text-text-600 dark:text-text-300">{formatMoney(cycle.amount)}</span>
-                  <span className="text-text-600 dark:text-text-300">{formatMoney(cycle.amountPaid)}</span>
+                  <span className="text-text-600 dark:text-text-300">
+                    {formatMoney(cycle.amount)}
+                  </span>
+                  <span className="text-text-600 dark:text-text-300">
+                    {formatMoney(cycle.amountPaid)}
+                  </span>
                   <span className="font-semibold text-text-900 dark:text-text-50">
                     {formatMoney(cycle.outstandingAmount)}
                   </span>
                   <span>
-                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${statusClass(cycle.status)}`}>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${statusClass(cycle.status)}`}
+                    >
                       {label(cycle.status)}
                     </span>
                   </span>
@@ -269,7 +306,9 @@ export default function WeeklyDeductionsPage() {
                   key={payment.id}
                 >
                   <span className="text-text-400">{index + 1}</span>
-                  <span className="text-text-600 dark:text-text-300">{formatDateTime(payment.paidAt)}</span>
+                  <span className="text-text-600 dark:text-text-300">
+                    {formatDateTime(payment.paidAt)}
+                  </span>
                   <span className="font-medium capitalize text-text-900 dark:text-text-50">
                     {payment.mode.toLowerCase()}
                   </span>
@@ -277,7 +316,9 @@ export default function WeeklyDeductionsPage() {
                     {formatMoney(payment.amount)}
                   </span>
                   <span className="truncate text-text-500 dark:text-text-300">
-                    {payment.transaction?.reference || payment.transaction?.description || "--"}
+                    {payment.transaction?.reference ||
+                      payment.transaction?.description ||
+                      "--"}
                   </span>
                 </div>
               ))}

@@ -76,6 +76,8 @@ interface BankAccount {
 }
 
 const ACTIVE_STATUSES = ["APPROVED", "DISBURSED", "IN_PROGRESS", "OVERDUE"];
+const loanActiveGradient = "from-[#7a0d16] via-[#5d0910] to-[#340407]";
+const loanIdleGradient = "from-[#064b5f] via-[#09384b] to-[#0b2435]";
 
 const loanSchema = z.object({
   amount: z.coerce.number().positive("Enter a valid loan amount"),
@@ -298,8 +300,8 @@ export default function LoansPage() {
         icon={<HandCoins className="h-5 w-5" />}
         gradient={
           hasActiveLoan
-            ? "from-[#7a0d16] via-[#5d0910] to-[#340407]"
-            : "from-[#5b0b12] via-[#43080d] to-[#260406]"
+            ? loanActiveGradient
+            : loanIdleGradient
         }
       />
 

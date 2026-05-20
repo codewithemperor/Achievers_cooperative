@@ -113,16 +113,16 @@ const fallbackData: DashboardPayload = {
     transactionCount: 0,
     pendingPaymentsTotal: 0,
     pendingPaymentsCount: 0,
-        activeLoan: null,
-        activePackage: null,
-        weeklyDeduction: {
-          weeklyAmount: 0,
-          outstandingAmount: 0,
-          prepaidAmount: 0,
-          totalPaid: 0,
-          paidThisMonth: 0,
-          nextDueAt: null,
-        },
+    activeLoan: null,
+    activePackage: null,
+    weeklyDeduction: {
+      weeklyAmount: 0,
+      outstandingAmount: 0,
+      prepaidAmount: 0,
+      totalPaid: 0,
+      paidThisMonth: 0,
+      nextDueAt: null,
+    },
   },
   recentTransactions: [],
   cooperativeAccounts: [],
@@ -152,6 +152,9 @@ const quickActions = [
   { label: "Alerts", href: "/notifications", icon: BellRing },
 ];
 
+const loanActiveGradient = "from-[#7a0d16] via-[#5d0910] to-[#340407]";
+const loanIdleGradient = "from-[#064b5f] via-[#09384b] to-[#0b2435]";
+
 const cardMeta = [
   {
     title: "Wallet balance",
@@ -175,6 +178,26 @@ const cardMeta = [
     gradient: "from-[#2a0a0a] via-[#200808] to-[#160505]",
   },
   {
+    title: "Loan balance",
+    valueKey: "loans" as const,
+    eyebrow: "Repayment",
+    caption: "Stay ahead of due dates and repayment milestones.",
+    href: "/loans",
+    ctaLabel: "Manage loan",
+    icon: <Landmark className="h-5 w-5" />,
+    gradient: loanIdleGradient,
+  },
+  {
+    title: "Outstanding Weekly dues",
+    valueKey: "weekly" as const,
+    eyebrow: "Association",
+    caption: "Track your weekly cooperative contribution and prepayments.",
+    href: "/weekly-deductions",
+    ctaLabel: "Pay dues",
+    icon: <CalendarDays className="h-5 w-5" />,
+    gradient: "from-[#0f4f46] via-[#0d3d37] to-[#082622]",
+  },
+  {
     title: "Investments",
     valueKey: "investments" as const,
     eyebrow: "Opportunity",
@@ -196,34 +219,11 @@ const cardMeta = [
     icon: <BriefcaseBusiness className="h-5 w-5" />,
     gradient: "from-[#7c3a00] via-[#5e2b00] to-[#341700]",
   },
-  {
-    title: "Loan balance",
-    valueKey: "loans" as const,
-    eyebrow: "Repayment",
-    caption: "Stay ahead of due dates and repayment milestones.",
-    href: "/loans",
-    ctaLabel: "Manage loan",
-    icon: <Landmark className="h-5 w-5" />,
-    gradient: "from-[#5b0b12] via-[#43080d] to-[#260406]",
-  },
-  {
-    title: "Weekly dues",
-    valueKey: "weekly" as const,
-    eyebrow: "Association",
-    caption: "Track your weekly cooperative contribution and prepayments.",
-    href: "/weekly-deductions",
-    ctaLabel: "Pay dues",
-    icon: <CalendarDays className="h-5 w-5" />,
-    gradient: "from-[#0f4f46] via-[#0d3d37] to-[#082622]",
-  },
 ];
 
 export default function DashboardPage() {
   const { data, loading, refreshing, hasCachedData, refetch } =
-    useMemberData<DashboardPayload>(
-    "/members/me/dashboard",
-    fallbackData,
-    );
+    useMemberData<DashboardPayload>("/members/me/dashboard", fallbackData);
   const profile = useProfileData(fallbackProfile);
   const member = profile.data.member;
   const displayName = member?.fullName || data.profile.fullName || "Member";
@@ -262,7 +262,9 @@ export default function DashboardPage() {
           <div className="flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/90 px-3 py-2 text-xs font-semibold text-text-700 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-background-900/90 dark:text-text-100">
             <Spinner size="sm" />
             <span>
-              {hasCachedData ? "Refreshing dashboard..." : "Loading dashboard..."}
+              {hasCachedData
+                ? "Refreshing dashboard..."
+                : "Loading dashboard..."}
             </span>
           </div>
         </div>
@@ -337,7 +339,7 @@ export default function DashboardPage() {
             {cardMeta.map((card, index) => {
               const gradient =
                 card.valueKey === "loans" && data.summary.activeLoan
-                  ? "from-[#7a0d16] via-[#5d0910] to-[#340407]"
+                  ? loanActiveGradient
                   : card.gradient;
 
               return (
@@ -364,7 +366,7 @@ export default function DashboardPage() {
                             : `You have ${formatMoney(data.summary.pendingLoansTotal ?? 0)} in loan requests waiting for approval.`
                           : card.valueKey === "weekly"
                             ? `Weekly due is ${formatMoney(data.summary.weeklyDeduction?.weeklyAmount ?? 0)}. You have prepaid ${formatMoney(data.summary.weeklyDeduction?.prepaidAmount ?? 0)} and paid ${formatMoney(data.summary.weeklyDeduction?.paidThisMonth ?? 0)} this month.`
-                          : card.caption
+                            : card.caption
                     }
                     href={card.href}
                     ctaLabel={card.ctaLabel}
