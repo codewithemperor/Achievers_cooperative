@@ -113,7 +113,7 @@ export default function LoansPage() {
       guarantorTwoId: "",
       amount: undefined,
       tenorMonths: undefined,
-      tenorUnit: "MONTHS",
+      tenorUnit: "WEEKS",
       purpose: "",
       bankAccountId: "",
     },
@@ -208,7 +208,7 @@ export default function LoansPage() {
                     guarantorTwoId: "",
                     amount: undefined,
                     tenorMonths: undefined,
-                    tenorUnit: "MONTHS",
+                    tenorUnit: "WEEKS",
                     purpose: "",
                     bankAccountId: "",
                   });
@@ -307,8 +307,8 @@ export default function LoansPage() {
                     label="Repayment Frequency"
                     name="tenorUnit"
                     options={[
-                      { id: "MONTHS", label: "Monthly repayment" },
                       { id: "WEEKS", label: "Weekly repayment" },
+                      { id: "MONTHS", label: "Monthly repayment" },
                     ]}
                   />
                   <SelectInput

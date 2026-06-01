@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { Autocomplete, ListBox } from "@heroui/react";
 import {
   CreditCard,
   Landmark,
@@ -18,7 +20,9 @@ import { DashboardMetricCard } from "@/components/admin/dashboard-card";
 import { useApi } from "@/hooks/useApi";
 import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { AdminModal } from "@/components/ui/admin-modal";
-import api from "@/lib/api";
+import { ActionMenu } from "@/components/ui/action-menu";
+import { SelectInput, TextInput } from "@/components/ui/form-input";
+import api, { uploadAdminImage } from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 interface MemberDetail {
@@ -96,6 +100,31 @@ interface MemberDetail {
   }>;
 }
 
+interface MemberSearchResponse {
+  items: Array<{
+    id: string;
+    fullName: string;
+    membershipNumber: string;
+    email: string;
+    phoneNumber: string;
+  }>;
+}
+
+interface MemberFormValues {
+  email: string;
+  fullName: string;
+  phoneNumber: string;
+  homeAddress: string;
+  stateOfOrigin: string;
+  dateOfBirth: string;
+  occupation: string;
+  maritalStatus: string;
+  identificationNumber: string;
+  identificationPicture: string;
+  identificationType: string;
+  referrerId: string;
+}
+
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
@@ -103,6 +132,32 @@ const currency = new Intl.NumberFormat("en-NG", {
 });
 
 const statusOptions = ["ACTIVE", "INACTIVE", "SUSPENDED", "WITHDRAWN"];
+const maritalStatusOptions = [
+  { id: "SINGLE", label: "Single" },
+  { id: "MARRIED", label: "Married" },
+  { id: "DIVORCED", label: "Divorced" },
+  { id: "WIDOWED", label: "Widowed" },
+];
+const identificationTypeOptions = [
+  { id: "VOTERS_CARD", label: "Voter's Card" },
+  { id: "NIN", label: "NIN" },
+  { id: "NATIONAL_PASSPORT", label: "National Passport" },
+];
+
+const memberFormDefaults: MemberFormValues = {
+  email: "",
+  fullName: "",
+  phoneNumber: "",
+  homeAddress: "",
+  stateOfOrigin: "",
+  dateOfBirth: "",
+  occupation: "",
+  maritalStatus: "SINGLE",
+  identificationNumber: "",
+  identificationPicture: "",
+  identificationType: "NIN",
+  referrerId: "",
+};
 
 function formatShortDate(value?: string | null) {
   if (!value) return "No date recorded";
@@ -111,6 +166,28 @@ function formatShortDate(value?: string | null) {
     month: "short",
     day: "numeric",
   });
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) return "";
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function memberToFormValues(member: MemberDetail): MemberFormValues {
+  return {
+    email: member.user.email,
+    fullName: member.fullName,
+    phoneNumber: member.phoneNumber,
+    homeAddress: member.homeAddress ?? member.address ?? "",
+    stateOfOrigin: member.stateOfOrigin ?? "",
+    dateOfBirth: toDateInputValue(member.dateOfBirth),
+    occupation: member.occupation ?? "",
+    maritalStatus: member.maritalStatus ?? "SINGLE",
+    identificationNumber: member.identificationNumber ?? "",
+    identificationPicture: member.identificationPicture ?? "",
+    identificationType: member.identificationType ?? "NIN",
+    referrerId: member.referrer?.id ?? "",
+  };
 }
 
 function DetailCard({
@@ -203,13 +280,49 @@ function statusVariant(status?: string) {
 export default function MemberDetailPage() {
   const params = useParams<{ id: string }>();
   const member = useApi<MemberDetail>(`/members/${params.id}`);
+  const memberSearch = useApi<MemberSearchResponse>("/members/search");
   const [resetting, setResetting] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [updatingMember, setUpdatingMember] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("ACTIVE");
+  const { control, handleSubmit, reset, setValue, watch } =
+    useForm<MemberFormValues>({
+      defaultValues: memberFormDefaults,
+    });
   const savingsTotal = (member.data?.savingsAccounts ?? []).reduce(
     (sum, account) => sum + Number(account.balance ?? 0),
     0,
   );
+  const selectedReferrerId = watch("referrerId");
+  const identificationPicture = watch("identificationPicture");
+  const referrerOptions = (memberSearch.data?.items ?? []).filter(
+    (item) => item.id !== member.data?.id,
+  );
+
+  function openEditMember() {
+    if (!member.data) return;
+    reset(memberToFormValues(member.data));
+    setEditModalOpen(true);
+  }
+
+  function openStatusModal() {
+    setSelectedStatus(member.data?.status || "ACTIVE");
+    setStatusModalOpen(true);
+  }
+
+  async function onUploadIdPicture(file?: File | null) {
+    if (!file) return;
+
+    try {
+      const response = await uploadAdminImage(file, "member-id");
+      setValue("identificationPicture", response.url);
+      showSuccessToast("Image compressed and uploaded successfully.");
+    } catch (error: any) {
+      showErrorToast(error?.message || "Unable to upload identification image.");
+    }
+  }
 
   async function resetPassword() {
     try {
@@ -243,6 +356,46 @@ export default function MemberDetailPage() {
     }
   }
 
+  const updateMember = (close?: () => void) =>
+    handleSubmit(async (values) => {
+      const { identificationNumber: _identificationNumber, ...payload } = values;
+
+      try {
+        setUpdatingMember(true);
+        await api.patch(`/members/${params.id}`, {
+          ...payload,
+          referrerId: payload.referrerId || "",
+        });
+        showSuccessToast("Member details updated successfully.");
+        await member.refetch();
+        close?.();
+      } catch (error: any) {
+        showErrorToast(
+          error?.response?.data?.message || "Unable to update member.",
+        );
+      } finally {
+        setUpdatingMember(false);
+      }
+    });
+
+  const detailActions = [
+    {
+      label: "Reset password",
+      tone: "success" as const,
+      confirmTitle: "Reset this member's password?",
+      confirmMessage: `This will reset the password to ${member.data?.phoneNumber ?? "the member phone number"}.`,
+      onSelect: resetPassword,
+    },
+    {
+      label: "Edit status",
+      onSelect: openStatusModal,
+    },
+    {
+      label: "Edit member",
+      onSelect: openEditMember,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -259,57 +412,22 @@ export default function MemberDetailPage() {
               pendingLabel="Resetting..."
               tone="success"
             />
-            <AdminModal
-              description="Select the new membership status for this member."
-              title="Update Member Status"
-              trigger={
-                <button
-                  className="inline-flex items-center gap-2 rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
-                  onClick={() =>
-                    setSelectedStatus(member.data?.status || "ACTIVE")
-                  }
-                  type="button"
-                >
-                  <Pencil className="h-4 w-4" />
-                  Edit status
-                </button>
-              }
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
+              onClick={openStatusModal}
+              type="button"
             >
-              {({ close }) => (
-                <div className="space-y-4">
-                  <div className="rounded-[1.25rem] bg-[var(--background-50)/72] p-4 text-sm text-text-900">
-                    Current status:{" "}
-                    <span className="font-semibold">
-                      {(member.data?.status || "UNKNOWN").replaceAll("_", " ")}
-                    </span>
-                  </div>
-                  <select
-                    className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm text-text-900 outline-none"
-                    onChange={(event) => setSelectedStatus(event.target.value)}
-                    value={selectedStatus}
-                  >
-                    {statusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {status.replaceAll("_", " ")}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex justify-end">
-                    <button
-                      className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
-                      disabled={updatingStatus}
-                      onClick={async () => {
-                        await updateStatus(selectedStatus);
-                        close();
-                      }}
-                      type="button"
-                    >
-                      {updatingStatus ? "Saving..." : "Save status"}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </AdminModal>
+              <Pencil className="h-4 w-4" />
+              Edit status
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--primary-900)/12] bg-white px-4 py-2 text-sm font-semibold text-text-900"
+              onClick={openEditMember}
+              type="button"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit member
+            </button>
           </div>
         }
       />
@@ -395,6 +513,13 @@ export default function MemberDetailPage() {
                 <p className="mt-1 text-sm text-text-400">
                   {member.data?.membershipNumber || "-"}
                 </p>
+              </div>
+              <div className="ml-auto md:hidden">
+                <ActionMenu
+                  ariaLabel="Edit member actions"
+                  icon={<Pencil className="h-4 w-4" />}
+                  items={detailActions}
+                />
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -651,6 +776,227 @@ export default function MemberDetailPage() {
           </DetailCard>
         </div>
       </div>
+
+      <AdminModal
+        description="Update this member's account and profile details."
+        isOpen={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        title={`Edit ${member.data?.fullName ?? "Member"}`}
+      >
+        {({ close }) => (
+          <>
+            <div className="grid gap-4 md:grid-cols-2">
+              <TextInput
+                className="rounded-2xl"
+                control={control}
+                label="Full name"
+                name="fullName"
+                placeholder="Member full name"
+              />
+              <TextInput
+                className="rounded-2xl"
+                control={control}
+                description="Must be exactly 11 digits and start with 0."
+                label="Phone number"
+                name="phoneNumber"
+                placeholder="08012345678"
+                type="tel"
+              />
+              <TextInput
+                className="rounded-2xl md:col-span-2"
+                control={control}
+                label="Email"
+                name="email"
+                placeholder="Email address"
+                type="email"
+              />
+              <TextInput
+                className="rounded-2xl md:col-span-2"
+                control={control}
+                label="Home address"
+                name="homeAddress"
+                placeholder="Full residential address"
+              />
+              <TextInput
+                className="rounded-2xl"
+                control={control}
+                label="State of origin"
+                name="stateOfOrigin"
+                placeholder="e.g. Oyo"
+              />
+              <TextInput
+                className="rounded-2xl"
+                control={control}
+                label="Occupation"
+                name="occupation"
+                placeholder="Occupation"
+              />
+              <div className="space-y-2">
+                <label
+                  className="text-sm font-medium text-text-900"
+                  htmlFor="detail-member-dob"
+                >
+                  Date of birth
+                </label>
+                <input
+                  id="detail-member-dob"
+                  className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm outline-none"
+                  onChange={(event) =>
+                    setValue("dateOfBirth", event.target.value)
+                  }
+                  type="date"
+                  value={watch("dateOfBirth")}
+                />
+              </div>
+              <SelectInput
+                className="rounded-2xl"
+                control={control}
+                label="Marital status"
+                name="maritalStatus"
+                options={maritalStatusOptions}
+              />
+              <SelectInput
+                className="rounded-2xl"
+                control={control}
+                label="Identification type"
+                name="identificationType"
+                options={identificationTypeOptions}
+              />
+              <TextInput
+                className="rounded-2xl"
+                control={control}
+                label="Identification number"
+                name="identificationNumber"
+                placeholder="NIN, passport, or voter card number"
+                isDisabled
+                description="Identification number cannot be changed from this form."
+              />
+
+              <div className="space-y-2 md:col-span-2">
+                <label
+                  className="text-sm font-medium text-text-900"
+                  htmlFor="detail-member-id-picture"
+                >
+                  Identification picture
+                </label>
+                <input
+                  id="detail-member-id-picture"
+                  accept="image/*"
+                  className="block w-full rounded-2xl border border-[var(--primary-900)/12] px-4 py-3 text-sm"
+                  onChange={(event) =>
+                    void onUploadIdPicture(event.target.files?.[0])
+                  }
+                  type="file"
+                />
+                {identificationPicture ? (
+                  <img
+                    alt="Identification preview"
+                    className="h-28 rounded-2xl border border-[var(--primary-900)/8] object-cover"
+                    src={identificationPicture}
+                  />
+                ) : (
+                  <p className="text-xs text-text-400">
+                    Upload a clear image of the identification document.
+                  </p>
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <p className="mb-2 text-sm font-medium text-text-900">
+                  Referrer
+                </p>
+                <Autocomplete
+                  onSelectionChange={(key) =>
+                    setValue("referrerId", key ? String(key) : "")
+                  }
+                  selectedKey={selectedReferrerId || null}
+                >
+                  <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
+                    <Autocomplete.Value />
+                    <Autocomplete.ClearButton className="text-sm text-text-400" />
+                    <Autocomplete.Indicator />
+                  </Autocomplete.Trigger>
+                  <Autocomplete.Popover>
+                    <ListBox className="max-h-64 overflow-auto p-2">
+                      {referrerOptions.map((referrer) => (
+                        <ListBox.Item
+                          id={referrer.id}
+                          key={referrer.id}
+                          textValue={referrer.fullName}
+                        >
+                          <div className="py-1">
+                            <p className="font-medium text-text-900">
+                              {referrer.fullName}
+                            </p>
+                            <p className="text-xs text-text-400">
+                              {referrer.membershipNumber} Â·{" "}
+                              {referrer.phoneNumber}
+                            </p>
+                          </div>
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Autocomplete.Popover>
+                </Autocomplete>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                disabled={updatingMember}
+                onClick={() => void updateMember(close)()}
+                type="button"
+              >
+                {updatingMember ? "Saving..." : "Save member"}
+              </button>
+            </div>
+          </>
+        )}
+      </AdminModal>
+
+      <AdminModal
+        description="Select the new membership status for this member."
+        isOpen={statusModalOpen}
+        onOpenChange={setStatusModalOpen}
+        title="Update Member Status"
+      >
+        {({ close }) => (
+          <div className="space-y-4">
+            <div className="rounded-[1.25rem] bg-[var(--background-50)/72] p-4 text-sm text-text-900">
+              Current status:{" "}
+              <span className="font-semibold">
+                {(member.data?.status || "UNKNOWN").replaceAll("_", " ")}
+              </span>
+            </div>
+            <select
+              className="min-h-12 w-full rounded-2xl border border-[var(--primary-900)/12] px-4 text-sm text-text-900 outline-none"
+              onChange={(event) => setSelectedStatus(event.target.value)}
+              value={selectedStatus}
+            >
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status.replaceAll("_", " ")}
+                </option>
+              ))}
+            </select>
+            <div className="flex justify-end">
+              <button
+                className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white"
+                disabled={updatingStatus}
+                onClick={async () => {
+                  await updateStatus(selectedStatus);
+                  close();
+                }}
+                type="button"
+              >
+                {updatingStatus ? "Saving..." : "Save status"}
+              </button>
+            </div>
+          </div>
+        )}
+      </AdminModal>
     </div>
   );
 }

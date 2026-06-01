@@ -92,7 +92,7 @@ export class LoansService {
 
     const repaymentSchedule = this.resolveRepaymentSchedule(
       dto.tenorMonths,
-      (dto.tenorUnit ?? 'MONTHS') as LoanTenorUnit,
+      (dto.tenorUnit ?? 'WEEKS') as LoanTenorUnit,
       new Date(),
     );
 
@@ -114,7 +114,7 @@ export class LoansService {
     await this.audit.log(userId, 'APPLY_LOAN', 'LoanApplication', loan.id, {
       amount: dto.amount,
       tenorMonths: dto.tenorMonths,
-      tenorUnit: dto.tenorUnit ?? 'MONTHS',
+      tenorUnit: dto.tenorUnit ?? 'WEEKS',
       repaymentInstallments: repaymentSchedule.installments,
     });
 

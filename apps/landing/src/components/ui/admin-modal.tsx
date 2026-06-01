@@ -10,11 +10,13 @@ import {
 } from "react";
 
 interface AdminModalProps {
-  trigger: ReactNode;
+  trigger?: ReactNode;
   title: string;
   description?: string;
   children: ReactNode | ((controls: { close: () => void }) => ReactNode);
   footer?: ReactNode;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function AdminModal({
@@ -23,13 +25,22 @@ export function AdminModal({
   description,
   children,
   footer,
+  isOpen,
+  onOpenChange,
 }: AdminModalProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isOpen ?? internalOpen;
+  const setOpen = (value: boolean) => {
+    if (isOpen === undefined) {
+      setInternalOpen(value);
+    }
+    onOpenChange?.(value);
+  };
   const close = () => setOpen(false);
   const triggerElement = isValidElement(trigger)
     ? (trigger as ReactElement<any>)
     : null;
-  const triggerNode = isValidElement(trigger) ? (
+  const triggerNode = !trigger ? null : isValidElement(trigger) ? (
     cloneElement(triggerElement!, {
       onClick: (event: any) => {
         triggerElement?.props?.onClick?.(event);

@@ -1,0 +1,23 @@
+
+> landing@0.1.0 dev
+> next dev --port 3000
+
+▲ Next.js 16.2.3 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.167:3000
+- Environments: .env
+✓ Ready in 2.7s
+
+○ Compiling / ...
+ GET / 200 in 7.3s (next.js: 5.0s, application-code: 2.4s)
+ GET /admin/auth/login 200 in 1798ms (next.js: 217ms, proxy.ts: 29ms, application-code: 1552ms)
+ GET /admin 200 in 212ms (next.js: 105ms, proxy.ts: 22ms, application-code: 85ms)
+ GET /admin 200 in 131ms (next.js: 29ms, proxy.ts: 27ms, application-code: 75ms)
+○ Compiling /admin/members ...
+ GET /admin/members 200 in 4.5s (next.js: 4.1s, proxy.ts: 12ms, application-code: 301ms)
+✓ Compiled in 1444ms
+ GET /admin/members 200 in 737ms (next.js: 269ms, proxy.ts: 169ms, application-code: 299ms)
+ GET /admin/members 200 in 119ms (next.js: 10ms, proxy.ts: 14ms, application-code: 95ms)
+ GET /admin/members 200 in 112ms (next.js: 16ms, proxy.ts: 15ms, application-code: 81ms)
+○ Compiling /admin/members/[id] ...
+ GET /admin/members/cmp61m6vb002wuglgxx3cjsvz 200 in 10.0s (next.js: 8.5s, proxy.ts: 18ms, application-code: 1519ms)

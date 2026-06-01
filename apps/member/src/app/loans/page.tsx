@@ -154,7 +154,7 @@ export default function LoansPage() {
     defaultValues: {
       amount: undefined as unknown as number,
       tenorMonths: undefined as unknown as number,
-      tenorUnit: "MONTHS",
+      tenorUnit: "WEEKS",
       purpose: "",
       guarantorOneId: "",
       guarantorTwoId: "",
@@ -231,7 +231,7 @@ export default function LoansPage() {
     reset({
       amount: undefined as unknown as number,
       tenorMonths: undefined as unknown as number,
-      tenorUnit: "MONTHS",
+      tenorUnit: "WEEKS",
       purpose: "",
       guarantorOneId: "",
       guarantorTwoId: "",
@@ -245,7 +245,7 @@ export default function LoansPage() {
     reset({
       amount: loan.amount,
       tenorMonths: loan.tenorMonths,
-      tenorUnit: loan.tenorUnit ?? "MONTHS",
+      tenorUnit: loan.tenorUnit ?? "WEEKS",
       purpose: loan.purpose,
       guarantorOneId: loan.guarantorOne?.id ?? "",
       guarantorTwoId: loan.guarantorTwo?.id ?? "",
@@ -467,8 +467,8 @@ export default function LoansPage() {
             placeholder="Select repayment frequency"
             isRequired
             options={[
-              { id: "MONTHS", label: "Monthly repayment" },
               { id: "WEEKS", label: "Weekly repayment" },
+              { id: "MONTHS", label: "Monthly repayment" },
             ]}
           />
           <TextareaInput

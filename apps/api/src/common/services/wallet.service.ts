@@ -21,12 +21,23 @@ type SettlementRecord = {
   targetId: string;
 };
 
+const WEEKLY_DEDUCTION_AMOUNT_KEY = 'COOPERATIVE_DEDUCTION_AMOUNT';
+const WEEKLY_DEDUCTION_DAY_KEY = 'COOPERATIVE_DEDUCTION_DAY';
+const WEEKLY_OPEN_STATUSES = ['OUTSTANDING', 'PARTIAL', 'UPCOMING'];
+const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+
 function isUniqueConstraintError(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002';
 }
 
 function startOfIsoDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
 }
 
 function weeklyCycleStatus(dueDate: Date, amount: number, amountPaid: number, asOf = new Date()) {
@@ -297,7 +308,7 @@ export class WalletService {
         return updatedTransaction;
       });
 
-      settledTransactions.push(updated);
+      settledTransactions.push({ ...updated, settledAmount: newlyCovered });
     }
 
     const syncedWallet = await this.prisma.wallet.update({
@@ -366,10 +377,27 @@ export class WalletService {
     const settlements: SettlementRecord[] = [];
     const wallet = await this.getMemberWallet(memberId);
 
-    await this.settlePendingWeeklyDeductions(wallet.id);
+    const pendingWeekly = await this.settlePendingWeeklyDeductions(wallet.id);
+    settlements.push(
+      ...pendingWeekly.transactions.map((transaction: any) => ({
+        type: 'WEEKLY_COOPERATIVE',
+        amount: Number(transaction.settledAmount ?? transaction.amount),
+        targetId: transaction.id,
+      })),
+    );
 
     let refreshedWallet = await this.getMemberWallet(memberId);
     let availableBalance = Number(refreshedWallet.availableBalance);
+
+    if (availableBalance <= 0) {
+      return settlements;
+    }
+
+    const weeklySettlements = await this.settleDueWeeklyDeductions(memberId, availableBalance);
+    settlements.push(...weeklySettlements);
+
+    refreshedWallet = await this.getMemberWallet(memberId);
+    availableBalance = Number(refreshedWallet.availableBalance);
 
     if (availableBalance <= 0) {
       return settlements;
@@ -443,6 +471,141 @@ export class WalletService {
     }
 
     return settlements;
+  }
+
+  private async settleDueWeeklyDeductions(memberId: string, availableBalance: number): Promise<SettlementRecord[]> {
+    if (availableBalance <= 0) {
+      return [];
+    }
+
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: {
+        id: true,
+        fullName: true,
+        membershipNumber: true,
+        status: true,
+        joinedAt: true,
+        weeklyDeductionStartsAt: true,
+      },
+    });
+
+    if (!member || member.status !== 'ACTIVE') {
+      return [];
+    }
+
+    const settings = await this.getWeeklyDeductionSettings();
+    if (settings.amount <= 0) {
+      return [];
+    }
+
+    const today = startOfIsoDay(new Date());
+    await this.ensureWeeklyCyclesForMember(member, today, settings);
+
+    const dueCycles = await (this.prisma as any).weeklyDeductionCycle.findMany({
+      where: {
+        memberId,
+        dueDate: { lte: today },
+        status: { in: WEEKLY_OPEN_STATUSES },
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+    const outstanding = dueCycles.reduce(
+      (sum: number, cycle: any) => sum + Math.max(Number(cycle.amount) - Number(cycle.amountPaid), 0),
+      0,
+    );
+    const amountToDebit = Math.min(availableBalance, outstanding);
+
+    if (amountToDebit <= 0) {
+      return [];
+    }
+
+    const runStamp = today.toISOString();
+    const reference = `AUTO-WEEKLY-FUNDING-${memberId}-${runStamp.slice(0, 10)}-${Date.now()}`;
+    const result = await this.debitWallet(memberId, amountToDebit, 'WEEKLY_COOPERATIVE', reference, {
+      category: 'automatic weekly cooperative',
+      description: `Automatic weekly cooperative settlement for ${runStamp.slice(0, 10)}`,
+      editable: false,
+      lockReason: 'Weekly cooperative deductions are settled automatically from wallet funding.',
+      metadata: {
+        deductionDate: runStamp,
+        memberName: member.fullName,
+        membershipNumber: member.membershipNumber,
+        autoSettled: true,
+        settlementPriority: 'WEEKLY',
+      },
+    });
+
+    await this.allocateWeeklySettlement(this.prisma, memberId, result.transaction.id, amountToDebit);
+
+    return [
+      {
+        type: 'WEEKLY_COOPERATIVE',
+        amount: amountToDebit,
+        targetId: result.transaction.id,
+      },
+    ];
+  }
+
+  private async getWeeklyDeductionSettings() {
+    const [amountConfig, dayConfig] = await Promise.all([
+      this.prisma.systemConfig.findUnique({ where: { key: WEEKLY_DEDUCTION_AMOUNT_KEY } }),
+      this.prisma.systemConfig.findUnique({ where: { key: WEEKLY_DEDUCTION_DAY_KEY } }),
+    ]);
+
+    return {
+      amount: Number(amountConfig?.value ?? 0),
+      day: dayConfig?.value ?? 'SUNDAY',
+    };
+  }
+
+  private async ensureWeeklyCyclesForMember(
+    member: { id: string; joinedAt: Date; weeklyDeductionStartsAt?: Date | null },
+    throughDate: Date,
+    settings: { amount: number; day: string },
+  ) {
+    if (settings.amount <= 0) {
+      return;
+    }
+
+    const lastCycle = await (this.prisma as any).weeklyDeductionCycle.findFirst({
+      where: { memberId: member.id },
+      orderBy: { dueDate: 'desc' },
+    });
+    const startDate = this.firstWeeklyDueOnOrAfter(
+      lastCycle ? addDays(lastCycle.dueDate, 1) : startOfIsoDay(member.weeklyDeductionStartsAt ?? member.joinedAt),
+      settings.day,
+    );
+    const endDate = startOfIsoDay(throughDate);
+
+    if (startDate.getTime() > endDate.getTime()) {
+      return;
+    }
+
+    const data = [];
+    for (let dueDate = startDate; dueDate.getTime() <= endDate.getTime(); dueDate = addDays(dueDate, 7)) {
+      data.push({
+        memberId: member.id,
+        dueDate,
+        amount: settings.amount,
+        amountPaid: 0,
+        status: weeklyCycleStatus(dueDate, settings.amount, 0),
+      });
+    }
+
+    if (data.length) {
+      await (this.prisma as any).weeklyDeductionCycle.createMany({
+        data,
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  private firstWeeklyDueOnOrAfter(startDate: Date, day: string) {
+    const targetDay = Math.max(DAYS.indexOf(day.toUpperCase()), 0);
+    const first = startOfIsoDay(startDate);
+    const offset = (targetDay - first.getUTCDay() + 7) % 7;
+    return addDays(first, offset);
   }
 
   async applyLoanRepayment(

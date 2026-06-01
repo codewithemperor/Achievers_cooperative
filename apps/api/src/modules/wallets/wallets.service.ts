@@ -122,7 +122,7 @@ export class WalletsService {
       result = {
         settlements: pending.transactions.map((item) => ({
           type: item.type,
-          amount: Number(item.amount),
+          amount: Number((item as any).settledAmount ?? item.amount),
           targetId: item.id,
         })),
       };

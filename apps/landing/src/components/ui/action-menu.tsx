@@ -1,7 +1,7 @@
 "use client";
 
 import { MoreHorizontal } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   DropdownItem,
   DropdownMenu,
@@ -20,7 +20,15 @@ export interface ActionMenuItem {
   isDisabled?: boolean;
 }
 
-export function ActionMenu({ items }: { items: ActionMenuItem[] }) {
+export function ActionMenu({
+  ariaLabel = "Open actions",
+  icon,
+  items,
+}: {
+  ariaLabel?: string;
+  icon?: ReactNode;
+  items: ActionMenuItem[];
+}) {
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState<ActionMenuItem | null>(null);
   const availableItems = items.filter((item) => !item.isDisabled);
@@ -47,11 +55,11 @@ export function ActionMenu({ items }: { items: ActionMenuItem[] }) {
       >
         <DropdownRoot>
           <DropdownTrigger
-            aria-label="Open actions"
+            aria-label={ariaLabel}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-primary-900/12 bg-white text-text-700 transition hover:bg-background-100"
             type="button"
           >
-            <MoreHorizontal className="h-4 w-4" />
+            {icon ?? <MoreHorizontal className="h-4 w-4" />}
           </DropdownTrigger>
           <DropdownPopover className="z-[9998] min-w-52" placement="bottom end">
             <DropdownMenu aria-label="Record actions">

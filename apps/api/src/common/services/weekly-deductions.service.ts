@@ -436,15 +436,13 @@ export class WeeklyDeductionsService {
       select: { id: true, fullName: true, membershipNumber: true },
     });
 
-    let processedCount = 0;
-    let totalSettled = 0;
-    for (const member of activeMembers) {
+    const weeklyResults = await this.mapInBatches(activeMembers, 5, async (member) => {
       const outstanding = await this.getDueOutstandingForMember(member.id, today);
-      if (outstanding <= 0) continue;
+      if (outstanding <= 0) return { processedCount: 0, totalSettled: 0 };
 
       const reference = `WEEKLY-${runStamp}-${member.id}`;
       const existing = await this.prisma.transaction.findUnique({ where: { reference } });
-      if (existing) continue;
+      if (existing) return { processedCount: 0, totalSettled: 0 };
 
       const amountToDebit = Math.min(settings.amount, outstanding);
       const result = await this.walletService.debitWallet(member.id, amountToDebit, 'WEEKLY_COOPERATIVE', reference, {
@@ -469,9 +467,11 @@ export class WeeklyDeductionsService {
           metadata: { reference, runStamp },
         });
       }
-      processedCount += 1;
-      totalSettled += settledAmount;
-    }
+      return { processedCount: 1, totalSettled: settledAmount };
+    });
+
+    const processedCount = weeklyResults.reduce((sum, item) => sum + item.processedCount, 0);
+    const totalSettled = weeklyResults.reduce((sum, item) => sum + item.totalSettled, 0);
 
     await this.prisma.systemConfig.upsert({
       where: { key: LAST_RUN_KEY },
@@ -590,7 +590,19 @@ export class WeeklyDeductionsService {
 
   private async runDueObligations() {
     const now = new Date();
-    const [duePackages, dueLoans] = await Promise.all([
+    const settings = await this.getSettings();
+    await this.ensureCyclesForAll(now, settings);
+    const today = startOfIsoDay(now);
+    const [dueWeekly, duePackages, dueLoans] = await Promise.all([
+      (this.prisma as any).weeklyDeductionCycle.findMany({
+        where: {
+          member: { status: 'ACTIVE' },
+          dueDate: { lte: today },
+          status: { in: OPEN_STATUSES },
+        },
+        select: { memberId: true },
+        distinct: ['memberId'],
+      }),
       this.prisma.packageSubscription.findMany({
         where: {
           member: { status: 'ACTIVE' },
@@ -613,32 +625,43 @@ export class WeeklyDeductionsService {
       } as any),
     ]);
     const dueMemberIds = Array.from(
-      new Set([...duePackages, ...dueLoans].map((item) => item.memberId)),
+      new Set([...dueWeekly, ...duePackages, ...dueLoans].map((item) => item.memberId)),
     );
 
-    let processedMembers = 0;
-    let settlementCount = 0;
-    let totalSettled = 0;
-
-    for (const memberId of dueMemberIds) {
+    const results = await this.mapInBatches(dueMemberIds, 5, async (memberId) => {
       const settlements = await this.walletService.settleOutstandingObligations(memberId);
       if (!settlements.length) {
-        continue;
+        return { processedMembers: 0, settlementCount: 0, totalSettled: 0 };
       }
 
-      processedMembers += 1;
-      settlementCount += settlements.length;
-      totalSettled += settlements.reduce((sum, item) => sum + item.amount, 0);
-    }
+      return {
+        processedMembers: 1,
+        settlementCount: settlements.length,
+        totalSettled: settlements.reduce((sum, item) => sum + item.amount, 0),
+      };
+    });
 
     return {
       checkedMembers: dueMemberIds.length,
+      dueWeeklyMembers: dueWeekly.length,
       duePackageMembers: duePackages.length,
       dueLoanMembers: dueLoans.length,
-      processedMembers,
-      settlementCount,
-      totalSettled,
+      processedMembers: results.reduce((sum, item) => sum + item.processedMembers, 0),
+      settlementCount: results.reduce((sum, item) => sum + item.settlementCount, 0),
+      totalSettled: results.reduce((sum, item) => sum + item.totalSettled, 0),
     };
+  }
+
+  private async mapInBatches<T, R>(
+    items: T[],
+    batchSize: number,
+    handler: (item: T) => Promise<R>,
+  ): Promise<R[]> {
+    const results: R[] = [];
+    for (let index = 0; index < items.length; index += batchSize) {
+      results.push(...(await Promise.all(items.slice(index, index + batchSize).map(handler))));
+    }
+    return results;
   }
 
   private async allocatePayment(

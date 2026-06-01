@@ -527,10 +527,29 @@ export class MembersService {
       throw new NotFoundException('Member not found');
     }
 
+    await this.validateMemberProfileUpdate(member.id, member.userId, dto);
     const data = this.buildMemberUpdateData(dto);
-    const updated = await this.prisma.member.update({
-      where: { id: member.id },
-      data,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const userData: { email?: string; passwordHash?: string } = {};
+      if (dto.email) {
+        userData.email = dto.email;
+      }
+      if (dto.phoneNumber && dto.phoneNumber !== member.phoneNumber) {
+        userData.passwordHash = await bcrypt.hash(dto.phoneNumber, 12);
+      }
+      if (Object.keys(userData).length) {
+        await tx.user.update({
+          where: { id: member.userId },
+          data: userData,
+        });
+      }
+
+      return Object.keys(data).length
+        ? tx.member.update({
+            where: { id: member.id },
+            data,
+          })
+        : tx.member.findUniqueOrThrow({ where: { id: member.id } });
     });
 
     await this.audit.log(userId, 'UPDATE_PROFILE', 'Member', member.id, { dto });
@@ -544,10 +563,29 @@ export class MembersService {
       throw new NotFoundException('Member not found');
     }
 
+    await this.validateMemberProfileUpdate(member.id, member.userId, dto);
     const data = this.buildMemberUpdateData(dto);
-    const updated = await this.prisma.member.update({
-      where: { id },
-      data,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const userData: { email?: string; passwordHash?: string } = {};
+      if (dto.email) {
+        userData.email = dto.email;
+      }
+      if (dto.phoneNumber && dto.phoneNumber !== member.phoneNumber) {
+        userData.passwordHash = await bcrypt.hash(dto.phoneNumber, 12);
+      }
+      if (Object.keys(userData).length) {
+        await tx.user.update({
+          where: { id: member.userId },
+          data: userData,
+        });
+      }
+
+      return Object.keys(data).length
+        ? tx.member.update({
+            where: { id },
+            data,
+          })
+        : tx.member.findUniqueOrThrow({ where: { id } });
     });
 
     await this.audit.log(actorId, 'UPDATE_MEMBER', 'Member', id, dto as Record<string, unknown>);
@@ -636,13 +674,31 @@ export class MembersService {
       ...(dto.dateOfBirth && { dateOfBirth: new Date(dto.dateOfBirth) }),
       ...(dto.occupation && { occupation: dto.occupation }),
       ...(dto.maritalStatus && { maritalStatus: dto.maritalStatus }),
-      ...(dto.identificationNumber && { identificationNumber: dto.identificationNumber }),
       ...(dto.identificationPicture && { identificationPicture: dto.identificationPicture }),
       ...(dto.identificationType && { identificationType: dto.identificationType }),
       ...(dto.referrerId !== undefined && { referrerId: dto.referrerId || null }),
       ...(dto.status && { status: dto.status }),
       ...(dto.avatarUrl && { avatarUrl: dto.avatarUrl }),
     };
+  }
+
+  private async validateMemberProfileUpdate(memberId: string, userId: string, dto: UpdateMemberDto) {
+    if (dto.email) {
+      const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      if (existing && existing.id !== userId) {
+        throw new ConflictException('Email already exists');
+      }
+    }
+
+    if (dto.referrerId) {
+      if (dto.referrerId === memberId) {
+        throw new BadRequestException('A member cannot refer themselves');
+      }
+      const referrer = await this.prisma.member.findUnique({ where: { id: dto.referrerId } });
+      if (!referrer) {
+        throw new NotFoundException('Selected referrer does not exist');
+      }
+    }
   }
 
   private async applyMembershipFee(memberId: string, actorId: string, fullName: string) {

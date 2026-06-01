@@ -63,6 +63,10 @@ export class CreateMemberDto {
 
 export class UpdateMemberDto {
   @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
   @IsString()
   fullName?: string;
 

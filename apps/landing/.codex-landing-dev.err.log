@@ -1,0 +1,32 @@
+[browser] Image with src "/logo.jpeg" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] Image with src "/cert.jpeg" has "fill" but is missing "sizes" prop. Please add it to improve page performance. Read more: https://nextjs.org/docs/api-reference/next/image#sizes (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] Image with src "/images/hero-2.jpeg" has "fill" but is missing "sizes" prop. Please add it to improve page performance. Read more: https://nextjs.org/docs/api-reference/next/image#sizes (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] Image with src "/images/hero-3.jpeg" has "fill" but is missing "sizes" prop. Please add it to improve page performance. Read more: https://nextjs.org/docs/api-reference/next/image#sizes (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] If you do not provide a visible label, you must specify an aria-label or aria-labelledby attribute for accessibility (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] If you do not provide a visible label, you must specify an aria-label or aria-labelledby attribute for accessibility (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] If you do not provide a visible label, you must specify an aria-label or aria-labelledby attribute for accessibility (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] If you do not provide a visible label, you must specify an aria-label or aria-labelledby attribute for accessibility (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: AbortError: Transition was skipped
+
+[browser] If you do not provide a visible label, you must specify an aria-label or aria-labelledby attribute for accessibility (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] If you do not provide a visible label, you must specify an aria-label or aria-labelledby attribute for accessibility (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] If you do not provide a visible label, you must specify an aria-label or aria-labelledby attribute for accessibility (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)
+[browser] If you do not provide a visible label, you must specify an aria-label or aria-labelledby attribute for accessibility (file://C:/Users/APPLE LAPTOP/Desktop/Achievers_cooperative/apps/landing/.next/dev/static/chunks/node_modules_next_dist_115brz8._.js:2431:13)

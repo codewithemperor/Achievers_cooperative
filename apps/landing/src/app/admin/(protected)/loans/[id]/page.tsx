@@ -149,7 +149,7 @@ export default function LoanDetailPage() {
     tenorUnit: "MONTHS" | "WEEKS";
     disburseAmount: number | undefined;
   }>({
-    defaultValues: { reason: "", amount: undefined, newAmount: undefined, tenorMonths: undefined, tenorUnit: "MONTHS", disburseAmount: undefined },
+    defaultValues: { reason: "", amount: undefined, newAmount: undefined, tenorMonths: undefined, tenorUnit: "WEEKS", disburseAmount: undefined },
   });
 
   const status = loan.data?.status;
@@ -242,7 +242,7 @@ export default function LoanDetailPage() {
           reason: values.reason || undefined,
         });
         showSuccessToast("Loan approved amount increased successfully.");
-        reset({ reason: "", amount: undefined, newAmount: undefined, tenorMonths: undefined, tenorUnit: "MONTHS", disburseAmount: undefined });
+        reset({ reason: "", amount: undefined, newAmount: undefined, tenorMonths: undefined, tenorUnit: "WEEKS", disburseAmount: undefined });
         await loan.refetch();
         close?.();
       } catch (error: any) {
@@ -260,7 +260,7 @@ export default function LoanDetailPage() {
         setDisbursing(true);
         await api.patch(`/loans/${params.id}/disburse`, { amount });
         showSuccessToast("Loan disbursement recorded successfully.");
-        reset({ reason: "", amount: undefined, newAmount: undefined, tenorMonths: undefined, tenorUnit: "MONTHS", disburseAmount: undefined });
+        reset({ reason: "", amount: undefined, newAmount: undefined, tenorMonths: undefined, tenorUnit: "WEEKS", disburseAmount: undefined });
         await loan.refetch();
         close?.();
       } catch (error: any) {
@@ -290,7 +290,7 @@ export default function LoanDetailPage() {
                         amount: undefined,
                         newAmount: approvedAmount,
                         tenorMonths: loan.data?.tenorMonths,
-                        tenorUnit: loan.data?.tenorUnit ?? "MONTHS",
+                        tenorUnit: loan.data?.tenorUnit ?? "WEEKS",
                         disburseAmount: undefined,
                       })
                     }
