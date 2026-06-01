@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Autocomplete, ListBox } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminModal } from "@/components/ui/admin-modal";
 import {
+  AutocompleteInput,
   NumberInput,
   SelectInput,
   TextareaInput,
@@ -65,6 +65,17 @@ interface MemberSearchResponse {
   }>;
 }
 
+interface LoanFormValues {
+  memberId: string;
+  guarantorOneId: string;
+  guarantorTwoId: string;
+  amount: number | undefined;
+  tenorMonths: number | undefined;
+  tenorUnit: "MONTHS" | "WEEKS";
+  purpose: string;
+  bankAccountId: string;
+}
+
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
@@ -97,16 +108,8 @@ export default function LoansPage() {
   const members = useApi<MemberSearchResponse>("/members/search");
   const [submitting, setSubmitting] = useState(false);
   const [memberBankAccounts, setMemberBankAccounts] = useState<BankAccountInfo[]>([]);
-  const { control, handleSubmit, reset, setValue, watch } = useForm<{
-    memberId: string;
-    guarantorOneId: string;
-    guarantorTwoId: string;
-    amount: number | undefined;
-    tenorMonths: number | undefined;
-    tenorUnit: "MONTHS" | "WEEKS";
-    purpose: string;
-    bankAccountId: string;
-  }>({
+  const { control, handleSubmit, reset, setValue, watch } =
+    useForm<LoanFormValues>({
     defaultValues: {
       memberId: "",
       guarantorOneId: "",
@@ -120,9 +123,13 @@ export default function LoansPage() {
   });
 
   const selectedMemberId = watch("memberId");
-  const selectedGuarantorOneId = watch("guarantorOneId");
-  const selectedGuarantorTwoId = watch("guarantorTwoId");
   const loanRows = loans.data?.items ?? [];
+  const memberOptions = (members.data?.items ?? []).map((member) => ({
+    id: member.id,
+    label: member.fullName,
+    description: `${member.membershipNumber} - ${member.phoneNumber}`,
+    searchText: `${member.fullName} ${member.membershipNumber} ${member.phoneNumber} ${member.email}`,
+  }));
   const allLoanRows = loanRows;
   const pendingLoans = allLoanRows.filter((item) => item.status === "PENDING");
   const activeLoans = allLoanRows.filter((item) =>
@@ -228,62 +235,30 @@ export default function LoansPage() {
                   {[
                     {
                       label: "Member",
-                      field: "memberId",
-                      selectedKey: selectedMemberId,
+                      field: "memberId" as const,
+                      placeholder: "Search member...",
                     },
                     {
                       label: "Guarantor 1",
-                      field: "guarantorOneId",
-                      selectedKey: selectedGuarantorOneId,
+                      field: "guarantorOneId" as const,
+                      placeholder: "Search guarantor...",
                     },
                     {
                       label: "Guarantor 2",
-                      field: "guarantorTwoId",
-                      selectedKey: selectedGuarantorTwoId,
+                      field: "guarantorTwoId" as const,
+                      placeholder: "Search guarantor...",
                     },
                   ].map((entry, index) => (
-                    <div
+                    <AutocompleteInput
                       className={index === 0 ? "md:col-span-2" : ""}
+                      control={control}
+                      emptyLabel="No members found"
                       key={entry.field}
-                    >
-                      <p className="mb-2 text-sm font-medium text-text-900">
-                        {entry.label}
-                      </p>
-                      <Autocomplete
-                        onSelectionChange={(key) =>
-                          setValue(entry.field as any, key ? String(key) : "")
-                        }
-                        selectedKey={entry.selectedKey || null}
-                      >
-                        <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
-                          <Autocomplete.Value />
-                          <Autocomplete.ClearButton className="text-sm text-text-400" />
-                          <Autocomplete.Indicator />
-                        </Autocomplete.Trigger>
-                        <Autocomplete.Popover>
-                          <ListBox className="max-h-64 overflow-auto p-2">
-                            {(members.data?.items ?? []).map((member) => (
-                              <ListBox.Item
-                                id={member.id}
-                                key={member.id}
-                                textValue={member.fullName}
-                              >
-                                <div className="py-1">
-                                  <p className="font-medium text-text-900">
-                                    {member.fullName}
-                                  </p>
-                                  <p className="text-xs text-text-400">
-                                    {member.membershipNumber} ·{" "}
-                                    {member.phoneNumber}
-                                  </p>
-                                </div>
-                                <ListBox.ItemIndicator />
-                              </ListBox.Item>
-                            ))}
-                          </ListBox>
-                        </Autocomplete.Popover>
-                      </Autocomplete>
-                    </div>
+                      label={entry.label}
+                      name={entry.field}
+                      options={memberOptions}
+                      placeholder={entry.placeholder}
+                    />
                   ))}
                   <NumberInput
                     className="rounded-2xl"

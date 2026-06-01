@@ -54,6 +54,7 @@ export class PaymentsService {
   }
 
   async create(userId: string, body: { amount: number; receiptUrl?: string; memberId?: string }) {
+    this.assertValidAmount(body.amount);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     let memberId = body.memberId;
 
@@ -81,6 +82,36 @@ export class PaymentsService {
       ...created,
       amount: Number(created.amount),
     };
+  }
+
+  async createApprovedByAdmin(actorId: string, body: { amount: number; receiptUrl?: string; memberId?: string }) {
+    this.assertValidAmount(body.amount);
+
+    if (!body.memberId) {
+      throw new BadRequestException('Member is required');
+    }
+
+    const member = await this.prisma.member.findUnique({
+      where: { id: body.memberId },
+      select: { id: true },
+    });
+
+    if (!member) {
+      throw new NotFoundException('Member not found');
+    }
+
+    const created = await this.prisma.payment.create({
+      data: {
+        memberId: body.memberId,
+        amount: body.amount,
+        receiptUrl: body.receiptUrl,
+        status: 'PENDING',
+      },
+    });
+
+    await this.audit.log(actorId, 'CREATE_ADMIN_PAYMENT', 'Payment', created.id, body);
+
+    return this.approve(created.id, actorId);
   }
 
   async approve(id: string, actorId: string) {
@@ -216,5 +247,11 @@ export class PaymentsService {
       amount: Number(updated.amount),
       netCreditAmount: updated.netCreditAmount ? Number(updated.netCreditAmount) : null,
     };
+  }
+
+  private assertValidAmount(amount: number) {
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+      throw new BadRequestException('Enter a valid payment amount.');
+    }
   }
 }

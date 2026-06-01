@@ -36,6 +36,16 @@ export class PaymentsController {
     return this.paymentsService.create(req.user.id, body);
   }
 
+  @Post('admin-fund')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Create and approve an admin wallet funding payment' })
+  createAdminFunding(
+    @Request() req: any,
+    @Body() body: { amount: number; receiptUrl?: string; memberId?: string },
+  ) {
+    return this.paymentsService.createApprovedByAdmin(req.user.id, body);
+  }
+
   @Patch(':id/approve')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Approve payment and credit wallet' })

@@ -6,18 +6,23 @@ import { parseDate } from "@internationalized/date";
 import { useForm, useWatch } from "react-hook-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
-import { DateRangePicker } from "@/components/ui/form-input";
+import {
+  AutocompleteInput,
+  DateRangePicker,
+  NumberInput,
+} from "@/components/ui/form-input";
 import type { DateRange } from "@/components/ui/form-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminTabs } from "@/components/ui/admin-tabs";
+import { AdminModal } from "@/components/ui/admin-modal";
 import { DashboardMetricCard } from "@/components/admin/dashboard-card";
 import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
 import { useApi } from "@/hooks/useApi";
-import api from "@/lib/api";
+import api, { uploadAdminImage } from "@/lib/api";
 import { getCurrentMonthRange, isWithinDateRange } from "@/lib/date-range";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
-import { CheckCircle2, Clock3, Receipt, XCircle } from "lucide-react";
+import { CheckCircle2, Clock3, Plus, Receipt, XCircle } from "lucide-react";
 
 interface PaymentsResponse {
   items: Array<{
@@ -55,6 +60,21 @@ interface TransactionFiltersForm {
   transactionDateRange: DateRange;
 }
 
+interface MemberSearchResponse {
+  items: Array<{
+    id: string;
+    fullName: string;
+    membershipNumber: string;
+    email: string;
+    phoneNumber: string;
+  }>;
+}
+
+interface AdminPaymentFormValues {
+  memberId: string;
+  amount: number | undefined;
+}
+
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
@@ -64,6 +84,7 @@ const currency = new Intl.NumberFormat("en-NG", {
 export default function PaymentsPage() {
   const payments = useApi<PaymentsResponse>("/payments");
   const transactions = useApi<MemberTransactionsResponse>("/transactions");
+  const members = useApi<MemberSearchResponse>("/members/search");
   const currentMonthRange = useMemo(() => getCurrentMonthRange(), []);
   const { control: filtersControl } = useForm<TransactionFiltersForm>({
     defaultValues: {
@@ -73,6 +94,13 @@ export default function PaymentsPage() {
       },
     },
   });
+  const {
+    control: adminPaymentControl,
+    handleSubmit: handleAdminPaymentSubmit,
+    reset: resetAdminPayment,
+  } = useForm<AdminPaymentFormValues>({
+    defaultValues: { memberId: "", amount: undefined },
+  });
   const selectedDateRange = useWatch({
     control: filtersControl,
     name: "transactionDateRange",
@@ -81,6 +109,9 @@ export default function PaymentsPage() {
     selectedDateRange?.start?.toString() ?? currentMonthRange.from;
   const endDate = selectedDateRange?.end?.toString() ?? currentMonthRange.to;
   const [tab, setTab] = useState<"requests" | "transactions">("requests");
+  const [adminReceiptUrl, setAdminReceiptUrl] = useState("");
+  const [uploadingAdminReceipt, setUploadingAdminReceipt] = useState(false);
+  const [submittingAdminPayment, setSubmittingAdminPayment] = useState(false);
   const [selectedProof, setSelectedProof] =
     useState<PaymentsResponse["items"][number] | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<{
@@ -105,6 +136,7 @@ export default function PaymentsPage() {
     (sum, item) => sum + Number(item.amount ?? 0),
     0,
   );
+  const memberRows = members.data?.items ?? [];
   const dateRangeToolbar = (
     <DateRangePicker
       className="w-full"
@@ -142,11 +174,160 @@ export default function PaymentsPage() {
     }
   }
 
+  async function uploadAdminReceipt(file: File | null) {
+    if (!file) return;
+
+    try {
+      setUploadingAdminReceipt(true);
+      const upload = await uploadAdminImage(file, "payment-receipt");
+      setAdminReceiptUrl(upload.url);
+      showSuccessToast("Receipt uploaded successfully.");
+    } catch (error: any) {
+      showErrorToast(error?.message || "Unable to upload receipt.");
+      throw error;
+    } finally {
+      setUploadingAdminReceipt(false);
+    }
+  }
+
+  const addAdminPayment = handleAdminPaymentSubmit(async (values) => {
+    try {
+      if (!values.memberId) {
+        throw new Error("Choose a member before adding payment.");
+      }
+      if (!values.amount || Number(values.amount) <= 0) {
+        throw new Error("Enter a valid payment amount.");
+      }
+      if (!adminReceiptUrl) {
+        throw new Error("Upload a receipt before adding payment.");
+      }
+
+      setSubmittingAdminPayment(true);
+      await api.post("/payments/admin-fund", {
+        memberId: values.memberId,
+        amount: Number(values.amount),
+        receiptUrl: adminReceiptUrl,
+      });
+      showSuccessToast("Payment added and approved successfully.");
+      resetAdminPayment({ memberId: "", amount: undefined });
+      setAdminReceiptUrl("");
+      await Promise.all([payments.refetch(), transactions.refetch()]);
+    } catch (error: any) {
+      showErrorToast(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to add payment.",
+      );
+      throw error;
+    } finally {
+      setSubmittingAdminPayment(false);
+    }
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Payments"
         subtitle="Review uploaded transfer receipts and verification status before wallet credit is applied."
+        actions={
+          <AdminModal
+            description="Choose a member, upload the transfer receipt, and credit the wallet immediately."
+            title="Add Payment"
+            trigger={
+              <button
+                className="inline-flex items-center gap-2 rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+                onClick={() => {
+                  resetAdminPayment({ memberId: "", amount: undefined });
+                  setAdminReceiptUrl("");
+                }}
+                type="button"
+              >
+                <Plus className="h-4 w-4" />
+                Add payment
+              </button>
+            }
+          >
+            {({ close }) => (
+              <>
+                <div className="grid gap-4">
+                  <AutocompleteInput
+                    control={adminPaymentControl}
+                    emptyLabel="No members found"
+                    label="Member"
+                    name="memberId"
+                    options={memberRows.map((member) => ({
+                      id: member.id,
+                      label: member.fullName,
+                      description: `${member.membershipNumber} - ${member.phoneNumber}`,
+                      searchText: `${member.fullName} ${member.membershipNumber} ${member.phoneNumber} ${member.email}`,
+                    }))}
+                    placeholder="Search member..."
+                  />
+
+                  <NumberInput
+                    control={adminPaymentControl}
+                    formatOptions={{
+                      style: "currency",
+                      currency: "NGN",
+                      maximumFractionDigits: 0,
+                    }}
+                    isRequired
+                    label="Amount"
+                    min={1}
+                    name="amount"
+                    placeholder="Enter amount"
+                  />
+
+                  <div className="grid gap-2">
+                    <label
+                      className="text-sm font-medium text-text-900"
+                      htmlFor="admin-payment-receipt"
+                    >
+                      Payment receipt
+                    </label>
+                    <input
+                      accept="image/*"
+                      className="block w-full rounded-2xl border border-[var(--primary-900)/12] px-4 py-3 text-sm"
+                      id="admin-payment-receipt"
+                      onChange={(event) =>
+                        void uploadAdminReceipt(event.target.files?.[0] ?? null)
+                      }
+                      type="file"
+                    />
+                    {adminReceiptUrl ? (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                        Receipt uploaded successfully.
+                      </div>
+                    ) : (
+                      <p className="text-xs text-text-400">
+                        Upload the receipt image attached to this payment.
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end">
+                  <button
+                    className="rounded-full bg-[var(--primary-700)] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                    disabled={uploadingAdminReceipt || submittingAdminPayment}
+                    onClick={async () => {
+                      try {
+                        await addAdminPayment();
+                        close();
+                      } catch {}
+                    }}
+                    type="button"
+                  >
+                    {uploadingAdminReceipt
+                      ? "Uploading..."
+                      : submittingAdminPayment
+                        ? "Adding..."
+                        : "Add payment"}
+                  </button>
+                </div>
+              </>
+            )}
+          </AdminModal>
+        }
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

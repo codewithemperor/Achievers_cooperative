@@ -3,7 +3,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Autocomplete, ListBox } from "@heroui/react";
 import {
   CreditCard,
   Landmark,
@@ -21,7 +20,11 @@ import { useApi } from "@/hooks/useApi";
 import { ConfirmActionButton } from "@/components/ui/confirm-action-button";
 import { AdminModal } from "@/components/ui/admin-modal";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { SelectInput, TextInput } from "@/components/ui/form-input";
+import {
+  AutocompleteInput,
+  SelectInput,
+  TextInput,
+} from "@/components/ui/form-input";
 import api, { uploadAdminImage } from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
@@ -295,11 +298,15 @@ export default function MemberDetailPage() {
     (sum, account) => sum + Number(account.balance ?? 0),
     0,
   );
-  const selectedReferrerId = watch("referrerId");
   const identificationPicture = watch("identificationPicture");
   const referrerOptions = (memberSearch.data?.items ?? []).filter(
     (item) => item.id !== member.data?.id,
-  );
+  ).map((item) => ({
+    id: item.id,
+    label: item.fullName,
+    description: `${item.membershipNumber} - ${item.phoneNumber}`,
+    searchText: `${item.fullName} ${item.membershipNumber} ${item.phoneNumber} ${item.email}`,
+  }));
 
   function openEditMember() {
     if (!member.data) return;
@@ -901,45 +908,15 @@ export default function MemberDetailPage() {
                 )}
               </div>
 
-              <div className="md:col-span-2">
-                <p className="mb-2 text-sm font-medium text-text-900">
-                  Referrer
-                </p>
-                <Autocomplete
-                  onSelectionChange={(key) =>
-                    setValue("referrerId", key ? String(key) : "")
-                  }
-                  selectedKey={selectedReferrerId || null}
-                >
-                  <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
-                    <Autocomplete.Value />
-                    <Autocomplete.ClearButton className="text-sm text-text-400" />
-                    <Autocomplete.Indicator />
-                  </Autocomplete.Trigger>
-                  <Autocomplete.Popover>
-                    <ListBox className="max-h-64 overflow-auto p-2">
-                      {referrerOptions.map((referrer) => (
-                        <ListBox.Item
-                          id={referrer.id}
-                          key={referrer.id}
-                          textValue={referrer.fullName}
-                        >
-                          <div className="py-1">
-                            <p className="font-medium text-text-900">
-                              {referrer.fullName}
-                            </p>
-                            <p className="text-xs text-text-400">
-                              {referrer.membershipNumber} Â·{" "}
-                              {referrer.phoneNumber}
-                            </p>
-                          </div>
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      ))}
-                    </ListBox>
-                  </Autocomplete.Popover>
-                </Autocomplete>
-              </div>
+              <AutocompleteInput
+                className="md:col-span-2"
+                control={control}
+                emptyLabel="No referrers found"
+                label="Referrer"
+                name="referrerId"
+                options={referrerOptions}
+                placeholder="Search referrer..."
+              />
             </div>
 
             <div className="mt-6 flex justify-end">

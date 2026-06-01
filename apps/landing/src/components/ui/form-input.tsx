@@ -18,6 +18,10 @@ import {
   TimeField,
   Select,
   ListBox,
+  Autocomplete,
+  EmptyState,
+  SearchField,
+  useFilter,
 } from "@heroui/react";
 import type { Key } from "@heroui/react";
 import {
@@ -702,6 +706,117 @@ export function SelectInput<T extends FieldValues>({
   );
 }
 
+// ==================== AUTOCOMPLETE INPUT ====================
+interface AutocompleteOption {
+  id: Key;
+  label: string;
+  description?: string;
+  searchText?: string;
+  isDisabled?: boolean;
+}
+
+interface AutocompleteInputProps<T extends FieldValues>
+  extends BaseInputProps<T> {
+  options: AutocompleteOption[];
+  emptyLabel?: string;
+}
+
+export type { AutocompleteOption, AutocompleteInputProps };
+
+export function AutocompleteInput<T extends FieldValues>({
+  name,
+  control,
+  label,
+  placeholder = "Search...",
+  options,
+  emptyLabel = "No results found",
+  isRequired = false,
+  isDisabled = false,
+  className,
+  description,
+}: AutocompleteInputProps<T>) {
+  const { contains } = useFilter({ sensitivity: "base" });
+
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState: { error } }) => {
+        const value: Key | null =
+          field.value === undefined || field.value === null || field.value === ""
+            ? null
+            : field.value;
+
+        return (
+          <Autocomplete
+            className={className}
+            isDisabled={isDisabled}
+            isInvalid={!!error}
+            isRequired={isRequired}
+            onChange={(nextValue: Key | Key[] | null) => {
+              const selected = Array.isArray(nextValue)
+                ? nextValue[0]
+                : nextValue;
+              field.onChange(selected ? String(selected) : "");
+            }}
+            placeholder={placeholder}
+            value={value}
+          >
+            <Label>{label}</Label>
+            <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
+              <Autocomplete.Value />
+              <Autocomplete.ClearButton className="text-sm text-text-400" />
+              <Autocomplete.Indicator />
+            </Autocomplete.Trigger>
+            <Autocomplete.Popover>
+              <Autocomplete.Filter filter={contains}>
+                <SearchField
+                  autoFocus
+                  name={`${String(name)}-search`}
+                  variant="secondary"
+                >
+                  <SearchField.Group>
+                    <SearchField.SearchIcon />
+                    <SearchField.Input placeholder={placeholder} />
+                    <SearchField.ClearButton />
+                  </SearchField.Group>
+                </SearchField>
+                <ListBox
+                  className="max-h-64 overflow-auto p-2"
+                  renderEmptyState={() => <EmptyState>{emptyLabel}</EmptyState>}
+                >
+                  {options.map((option) => (
+                    <ListBox.Item
+                      id={option.id}
+                      isDisabled={option.isDisabled}
+                      key={option.id}
+                      textValue={option.searchText ?? option.label}
+                    >
+                      <div className="py-1">
+                        <p className="font-medium text-text-900">
+                          {option.label}
+                        </p>
+                        {option.description ? (
+                          <p className="text-xs text-text-400">
+                            {option.description}
+                          </p>
+                        ) : null}
+                      </div>
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Autocomplete.Filter>
+            </Autocomplete.Popover>
+            {description && !error && <Description>{description}</Description>}
+            <FieldError>{error?.message}</FieldError>
+          </Autocomplete>
+        );
+      }}
+    />
+  );
+}
+
 // ==================== EXPORTS ====================
 
 export { TextInput as Text };
@@ -712,3 +827,4 @@ export { DatePickerInput as DatePicker };
 export { DateRangePickerInput as DateRangePicker };
 export { TimeFieldInput as Time };
 export { SelectInput as Select };
+export { AutocompleteInput as AutocompleteSelect };

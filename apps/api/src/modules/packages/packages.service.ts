@@ -110,14 +110,16 @@ export class PackagesService {
     penaltyType: string;
     penaltyValue: number;
     penaltyFrequency: string;
+    addAllMembers?: boolean;
   }) {
-    this.validatePackagePayload(body);
-    const schedule = this.resolvePackageSchedule(body.startDate, body.endDate, body.durationMonths);
+    const { addAllMembers, ...packageBody } = body;
+    this.validatePackagePayload(packageBody);
+    const schedule = this.resolvePackageSchedule(packageBody.startDate, packageBody.endDate, packageBody.durationMonths);
     const created = await this.prisma.package.create({
       data: {
-        ...body,
-        totalAmount: body.totalAmount,
-        penaltyValue: body.penaltyValue,
+        ...packageBody,
+        totalAmount: packageBody.totalAmount,
+        penaltyValue: packageBody.penaltyValue,
         durationMonths: schedule.durationMonths,
         startDate: schedule.startDate,
         endDate: schedule.endDate,
@@ -125,12 +127,19 @@ export class PackagesService {
       } as any,
     });
 
-    await this.audit.log(actorId, 'CREATE_PACKAGE', 'Package', created.id, body);
+    const autoSubscriberCount = addAllMembers ? await this.addAllActiveMembersToPackage(created) : 0;
+
+    await this.audit.log(actorId, 'CREATE_PACKAGE', 'Package', created.id, {
+      ...packageBody,
+      addAllMembers: Boolean(addAllMembers),
+      autoSubscriberCount,
+    });
 
     return {
       ...created,
       totalAmount: Number(created.totalAmount),
       penaltyValue: Number(created.penaltyValue),
+      autoSubscriberCount,
     };
   }
 
@@ -144,32 +153,34 @@ export class PackagesService {
     penaltyValue: number;
     penaltyFrequency: string;
     isActive: boolean;
+    addAllMembers?: boolean;
   }>) {
+    const { addAllMembers, ...packageBody } = body;
     const existing = await this.prisma.package.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Package not found');
     }
 
     this.validatePackagePayload({
-      totalAmount: body.totalAmount ?? Number(existing.totalAmount),
-      penaltyValue: body.penaltyValue ?? Number(existing.penaltyValue),
-      startDate: body.startDate ?? ((existing as any).startDate ? new Date((existing as any).startDate).toISOString() : undefined),
-      endDate: body.endDate ?? ((existing as any).endDate ? new Date((existing as any).endDate).toISOString() : undefined),
+      totalAmount: packageBody.totalAmount ?? Number(existing.totalAmount),
+      penaltyValue: packageBody.penaltyValue ?? Number(existing.penaltyValue),
+      startDate: packageBody.startDate ?? ((existing as any).startDate ? new Date((existing as any).startDate).toISOString() : undefined),
+      endDate: packageBody.endDate ?? ((existing as any).endDate ? new Date((existing as any).endDate).toISOString() : undefined),
     });
 
     const schedule =
-      body.startDate || body.endDate || body.durationMonths
+      packageBody.startDate || packageBody.endDate || packageBody.durationMonths
         ? this.resolvePackageSchedule(
-            body.startDate ?? ((existing as any).startDate ? new Date((existing as any).startDate).toISOString() : undefined),
-            body.endDate ?? ((existing as any).endDate ? new Date((existing as any).endDate).toISOString() : undefined),
-            body.durationMonths ?? (existing as any).durationMonths,
+            packageBody.startDate ?? ((existing as any).startDate ? new Date((existing as any).startDate).toISOString() : undefined),
+            packageBody.endDate ?? ((existing as any).endDate ? new Date((existing as any).endDate).toISOString() : undefined),
+            packageBody.durationMonths ?? (existing as any).durationMonths,
           )
         : null;
 
     const updated = await this.prisma.package.update({
       where: { id },
       data: {
-        ...body,
+        ...packageBody,
         ...(schedule
           ? {
               durationMonths: schedule.durationMonths,
@@ -181,12 +192,19 @@ export class PackagesService {
       } as any,
     });
 
-    await this.audit.log(actorId, 'UPDATE_PACKAGE', 'Package', id, body as Record<string, unknown>);
+    const autoSubscriberCount = addAllMembers ? await this.addAllActiveMembersToPackage(updated) : 0;
+
+    await this.audit.log(actorId, 'UPDATE_PACKAGE', 'Package', id, {
+      ...packageBody,
+      addAllMembers: Boolean(addAllMembers),
+      autoSubscriberCount,
+    });
 
     return {
       ...updated,
       totalAmount: Number(updated.totalAmount),
       penaltyValue: Number(updated.penaltyValue),
+      autoSubscriberCount,
     };
   }
 
@@ -332,14 +350,15 @@ export class PackagesService {
     if (!selectedPackage.isActive) {
       throw new BadRequestException('This package is currently inactive');
     }
+    this.assertPackageCanAcceptSubscriptions(selectedPackage);
 
-    if (!body.disbursementBankAccountId) {
-      throw new BadRequestException('A disbursement bank account is required.');
-    }
-
-    const bankAccount = await this.prisma.bankAccount.findUnique({ where: { id: body.disbursementBankAccountId } });
-    if (!bankAccount || bankAccount.memberId !== memberId) {
-      throw new BadRequestException('Invalid bank account selected.');
+    let disbursementBankAccountId: string | null = null;
+    if (body.disbursementBankAccountId) {
+      const bankAccount = await this.prisma.bankAccount.findUnique({ where: { id: body.disbursementBankAccountId } });
+      if (!bankAccount || bankAccount.memberId !== memberId) {
+        throw new BadRequestException('Invalid bank account selected.');
+      }
+      disbursementBankAccountId = body.disbursementBankAccountId;
     }
 
     const duplicate = await this.prisma.packageSubscription.findFirst({
@@ -362,7 +381,7 @@ export class PackagesService {
         amountRemaining: selectedPackage.totalAmount,
         status: 'PENDING',
         nextDueAt: null,
-        disbursementBankAccountId: body.disbursementBankAccountId,
+        disbursementBankAccountId,
       },
       include: {
         member: { select: { fullName: true, membershipNumber: true } },
@@ -374,7 +393,7 @@ export class PackagesService {
     await this.audit.log(userId, 'SUBSCRIBE_PACKAGE', 'PackageSubscription', created.id, {
       packageId: body.packageId,
       memberId,
-      disbursementBankAccountId: body.disbursementBankAccountId,
+      disbursementBankAccountId,
     });
 
     const wallet = await this.walletService.getMemberWallet(memberId);
@@ -551,6 +570,95 @@ export class PackagesService {
     };
   }
 
+  private async addAllActiveMembersToPackage(selectedPackage: {
+    id: string;
+    name: string;
+    totalAmount: any;
+    durationMonths: number;
+    startDate?: Date | null;
+    endDate?: Date | null;
+    repaymentFrequency?: string | null;
+    createdAt: Date;
+  }) {
+    this.assertPackageCanAcceptSubscriptions(selectedPackage);
+
+    const approvalTimestamp = new Date();
+    const nextDueAt = this.getInitialPackageDueDate({
+      ...selectedPackage,
+      approvedAt: approvalTimestamp,
+    });
+
+    return this.prisma.$transaction(async (tx) => {
+      const members = await tx.member.findMany({
+        where: { status: 'ACTIVE' },
+        select: {
+          id: true,
+          fullName: true,
+          membershipNumber: true,
+          wallet: { select: { id: true } },
+        },
+      });
+
+      if (!members.length) {
+        return 0;
+      }
+
+      const existingSubscriptions = await (tx as any).packageSubscription.findMany({
+        where: {
+          packageId: selectedPackage.id,
+          memberId: { in: members.map((member) => member.id) },
+        },
+        select: { memberId: true },
+      });
+      const existingMemberIds = new Set(existingSubscriptions.map((subscription: any) => subscription.memberId));
+      const eligibleMembers = members.filter((member) => !existingMemberIds.has(member.id));
+      const createdSubscriptions = [];
+
+      for (const member of eligibleMembers) {
+        const subscription = await (tx as any).packageSubscription.create({
+          data: {
+            packageId: selectedPackage.id,
+            memberId: member.id,
+            amountRemaining: selectedPackage.totalAmount,
+            status: 'APPROVED',
+            approvedAt: approvalTimestamp,
+            nextDueAt,
+            disbursementBankAccountId: null,
+          },
+        });
+        createdSubscriptions.push({ ...subscription, member });
+      }
+
+      const activityTransactions = createdSubscriptions
+        .filter((subscription: any) => subscription.member.wallet?.id)
+        .map((subscription: any) => ({
+          walletId: subscription.member.wallet.id,
+          type: 'PACKAGE_SUBSCRIPTION',
+          amount: 0,
+          status: 'APPROVED',
+          reference: `PACKAGE-AUTO-SUB-${subscription.id}`,
+          category: 'package subscription',
+          description: `Package subscription created for ${selectedPackage.name}`,
+          editable: false,
+          lockReason: 'Package subscription activity is generated automatically by the system.',
+          metadata: {
+            subscriptionId: subscription.id,
+            packageId: selectedPackage.id,
+            subscribedAmount: Number(selectedPackage.totalAmount),
+            event: 'AUTO_SUBSCRIBED_BY_ADMIN',
+            memberName: subscription.member.fullName,
+            membershipNumber: subscription.member.membershipNumber,
+          },
+        }));
+
+      if (activityTransactions.length) {
+        await (tx as any).transaction.createMany({ data: activityTransactions });
+      }
+
+      return createdSubscriptions.length;
+    });
+  }
+
   private serializeSubscription(item: any) {
     const packageData = item.package
       ? {
@@ -610,6 +718,28 @@ export class PackagesService {
     if (body.endDate && Number.isNaN(new Date(body.endDate).getTime())) {
       throw new BadRequestException('End date is invalid.');
     }
+  }
+
+  private assertPackageCanAcceptSubscriptions(pkg: { endDate?: Date | string | null }) {
+    if (!this.isPackageExpired(pkg)) {
+      return;
+    }
+
+    throw new BadRequestException('This package has expired and can no longer accept subscriptions.');
+  }
+
+  private isPackageExpired(pkg: { endDate?: Date | string | null }) {
+    if (!pkg.endDate) {
+      return false;
+    }
+
+    const endDate = new Date(pkg.endDate);
+    if (Number.isNaN(endDate.getTime())) {
+      return false;
+    }
+
+    endDate.setHours(23, 59, 59, 999);
+    return endDate.getTime() < Date.now();
   }
 
   private resolvePackageSchedule(startDate?: string, endDate?: string, fallbackDurationMonths?: number) {
@@ -731,10 +861,6 @@ export class PackagesService {
   }) {
     const packageStartDate = subscriptionOrPackage.package?.startDate ?? subscriptionOrPackage.startDate ?? null;
     const approvalAnchor = subscriptionOrPackage.disbursedAt ?? subscriptionOrPackage.approvedAt ?? subscriptionOrPackage.createdAt ?? null;
-
-    if (packageStartDate && approvalAnchor) {
-      return new Date(Math.max(packageStartDate.getTime(), approvalAnchor.getTime()));
-    }
 
     return packageStartDate ?? approvalAnchor ?? null;
   }

@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Autocomplete, ListBox } from "@heroui/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminModal } from "@/components/ui/admin-modal";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { SelectInput, TextInput } from "@/components/ui/form-input";
+import {
+  AutocompleteInput,
+  SelectInput,
+  TextInput,
+} from "@/components/ui/form-input";
 import { useApi } from "@/hooks/useApi";
 import api, { uploadAdminImage } from "@/lib/api";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
@@ -154,11 +157,15 @@ export default function MembersPage() {
       defaultValues: memberFormDefaults,
     });
 
-  const selectedReferrerId = watch("referrerId");
   const identificationPicture = watch("identificationPicture");
   const referrerOptions = (memberSearch.data?.items ?? []).filter(
     (member) => member.id !== editingMember?.id,
-  );
+  ).map((member) => ({
+    id: member.id,
+    label: member.fullName,
+    description: `${member.membershipNumber} - ${member.phoneNumber}`,
+    searchText: `${member.fullName} ${member.membershipNumber} ${member.phoneNumber} ${member.email}`,
+  }));
 
   async function onUploadIdPicture(file?: File | null) {
     if (!file) return;
@@ -426,45 +433,15 @@ export default function MembersPage() {
                     )}
                   </div>
 
-                  <div className="md:col-span-2">
-                    <p className="mb-2 text-sm font-medium text-text-900">
-                      Referrer
-                    </p>
-                    <Autocomplete
-                      onSelectionChange={(key) =>
-                        setValue("referrerId", key ? String(key) : "")
-                      }
-                      selectedKey={selectedReferrerId || null}
-                    >
-                      <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
-                        <Autocomplete.Value />
-                        <Autocomplete.ClearButton className="text-sm text-text-400" />
-                        <Autocomplete.Indicator />
-                      </Autocomplete.Trigger>
-                      <Autocomplete.Popover>
-                        <ListBox className="max-h-64 overflow-auto p-2">
-                          {referrerOptions.map((member) => (
-                            <ListBox.Item
-                              id={member.id}
-                              key={member.id}
-                              textValue={member.fullName}
-                            >
-                              <div className="py-1">
-                                <p className="font-medium text-text-900">
-                                  {member.fullName}
-                                </p>
-                                <p className="text-xs text-text-400">
-                                  {member.membershipNumber} ·{" "}
-                                  {member.phoneNumber}
-                                </p>
-                              </div>
-                              <ListBox.ItemIndicator />
-                            </ListBox.Item>
-                          ))}
-                        </ListBox>
-                      </Autocomplete.Popover>
-                    </Autocomplete>
-                  </div>
+                  <AutocompleteInput
+                    className="md:col-span-2"
+                    control={control}
+                    emptyLabel="No referrers found"
+                    label="Referrer"
+                    name="referrerId"
+                    options={referrerOptions}
+                    placeholder="Search referrer..."
+                  />
                 </div>
 
                 <div className="mt-6 flex justify-end">
@@ -725,44 +702,15 @@ export default function MembersPage() {
                 )}
               </div>
 
-              <div className="md:col-span-2">
-                <p className="mb-2 text-sm font-medium text-text-900">
-                  Referrer
-                </p>
-                <Autocomplete
-                  onSelectionChange={(key) =>
-                    setValue("referrerId", key ? String(key) : "")
-                  }
-                  selectedKey={selectedReferrerId || null}
-                >
-                  <Autocomplete.Trigger className="flex min-h-12 items-center gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-3">
-                    <Autocomplete.Value />
-                    <Autocomplete.ClearButton className="text-sm text-text-400" />
-                    <Autocomplete.Indicator />
-                  </Autocomplete.Trigger>
-                  <Autocomplete.Popover>
-                    <ListBox className="max-h-64 overflow-auto p-2">
-                      {referrerOptions.map((member) => (
-                        <ListBox.Item
-                          id={member.id}
-                          key={member.id}
-                          textValue={member.fullName}
-                        >
-                          <div className="py-1">
-                            <p className="font-medium text-text-900">
-                              {member.fullName}
-                            </p>
-                            <p className="text-xs text-text-400">
-                              {member.membershipNumber} Â· {member.phoneNumber}
-                            </p>
-                          </div>
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      ))}
-                    </ListBox>
-                  </Autocomplete.Popover>
-                </Autocomplete>
-              </div>
+              <AutocompleteInput
+                className="md:col-span-2"
+                control={control}
+                emptyLabel="No referrers found"
+                label="Referrer"
+                name="referrerId"
+                options={referrerOptions}
+                placeholder="Search referrer..."
+              />
             </div>
 
             <div className="mt-6 flex justify-end">

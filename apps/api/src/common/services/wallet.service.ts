@@ -1079,11 +1079,7 @@ export class WalletService {
     const packageStartDate = subscription.package.startDate ?? null;
     const approvalAnchor = subscription.disbursedAt ?? subscription.approvedAt ?? subscription.createdAt;
 
-    if (packageStartDate) {
-      return new Date(Math.max(packageStartDate.getTime(), approvalAnchor.getTime()));
-    }
-
-    return approvalAnchor;
+    return packageStartDate ?? approvalAnchor;
   }
 
   private fullMonthsBetween(start: Date, end: Date) {

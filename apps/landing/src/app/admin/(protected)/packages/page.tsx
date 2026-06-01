@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { parseDate } from "@internationalized/date";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -42,6 +42,7 @@ interface PackageFormValues {
   penaltyType: string;
   penaltyValue: number | undefined;
   penaltyFrequency: string;
+  addAllMembers: boolean;
 }
 
 const penaltyOptions: Array<{ id: string; label: string }> = [
@@ -80,11 +81,12 @@ export default function PackagesPage() {
       penaltyType: "FIXED",
       penaltyValue: undefined,
       penaltyFrequency: "WEEKLY",
+      addAllMembers: false,
     },
   });
 
   function buildPackagePayload(values: PackageFormValues) {
-    return {
+    const payload: Record<string, unknown> = {
       name: values.name.trim(),
       totalAmount: Number(values.totalAmount),
       startDate: values.schedule?.start?.toString?.() || undefined,
@@ -93,6 +95,10 @@ export default function PackagesPage() {
       penaltyValue: Number(values.penaltyValue ?? 0),
       penaltyFrequency: "WEEKLY",
     };
+
+    payload.addAllMembers = Boolean(values.addAllMembers);
+
+    return payload;
   }
 
   function toScheduleRange(item: PackagesResponse["items"][number]) {
@@ -113,11 +119,16 @@ export default function PackagesPage() {
         ? `/packages/${editingPackage.id}`
         : "/packages";
       const method = editingPackage ? api.patch : api.post;
-      await method(endpoint, buildPackagePayload(values));
+      const { data } = await method(endpoint, buildPackagePayload(values));
+      const autoSubscriberCount = Number(data?.autoSubscriberCount ?? 0);
       showSuccessToast(
         editingPackage
-          ? "Package updated successfully."
-          : "Package created successfully.",
+          ? values.addAllMembers
+            ? `Package updated and ${autoSubscriberCount} member(s) were added.`
+            : "Package updated successfully."
+          : values.addAllMembers
+            ? `Package created and ${autoSubscriberCount} member(s) were added.`
+            : "Package created successfully.",
       );
       reset();
       setEditingPackage(null);
@@ -131,6 +142,31 @@ export default function PackagesPage() {
       setSubmitting(false);
     }
   });
+
+  const renderAddAllMembersCheckbox = (description: string) => (
+    <Controller
+      control={control}
+      name="addAllMembers"
+      render={({ field }) => (
+        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[var(--primary-900)/12] bg-white px-4 py-3 text-sm text-text-700 md:col-span-2">
+          <input
+            checked={Boolean(field.value)}
+            className="mt-1 h-4 w-4 accent-[var(--primary-700)]"
+            onChange={(event) => field.onChange(event.target.checked)}
+            type="checkbox"
+          />
+          <span>
+            <span className="block font-semibold text-text-900">
+              Add all members to this package
+            </span>
+            <span className="mt-1 block text-xs text-text-400">
+              {description}
+            </span>
+          </span>
+        </label>
+      )}
+    />
+  );
 
   return (
     <div className="space-y-6">
@@ -152,6 +188,7 @@ export default function PackagesPage() {
                     penaltyType: "FIXED",
                     penaltyValue: 0,
                     penaltyFrequency: "WEEKLY",
+                    addAllMembers: false,
                   });
                 }}
                 type="button"
@@ -200,6 +237,9 @@ export default function PackagesPage() {
                     placeholder="Penalty value"
                     min={0}
                   />
+                  {renderAddAllMembersCheckbox(
+                    "Active members will be subscribed automatically when the package is created.",
+                  )}
                 </div>
                 <div className="mt-6 flex justify-end">
                   <button
@@ -327,6 +367,7 @@ export default function PackagesPage() {
                           penaltyType: item.penaltyType,
                           penaltyValue: 0,
                           penaltyFrequency: "WEEKLY",
+                          addAllMembers: false,
                         });
                     },
                   },
@@ -426,6 +467,9 @@ export default function PackagesPage() {
                   placeholder="Penalty value"
                   min={0}
                 />
+                {renderAddAllMembersCheckbox(
+                  "Only active members who are not already subscribed to this package will be added.",
+                )}
               </div>
               <div className="mt-6 flex justify-end">
                 <button

@@ -1,13 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
 import { Tabs } from "@heroui/react";
 import { BriefcaseBusiness } from "lucide-react";
-import { MemberModal } from "@/components/member-modal";
 import { PullToRefresh } from "@/components/pull-to-refresh";
-import { SelectInput } from "@/components/form-input";
-import { apiCallWithAlert } from "@/lib/alert";
+import { MySwal, apiCallWithAlert } from "@/lib/alert";
 import api from "@/lib/member-api";
 import { useMemberData } from "@/hooks/use-member-data";
 import { SummaryCard } from "@/components/summary-card";
@@ -23,6 +20,8 @@ interface PackageItem {
   penaltyValue: number;
   penaltyFrequency: string;
   isActive: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 interface PackageSubscription {
@@ -51,52 +50,76 @@ interface PackageSubscriptionsResponse {
   items: PackageSubscription[];
 }
 
-interface BankAccount {
-  id: string;
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-  isDefault: boolean;
-}
-
-interface SubscriptionFormValues {
-  disbursementBankAccountId: string;
-}
-
 export default function PackagesPage() {
   const [activeTab, setActiveTab] = useState("packages");
-  const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(
-    null,
-  );
   const packages = useMemberData<PackagesResponse>("/packages", { items: [] });
   const subscriptions = useMemberData<PackageSubscriptionsResponse>(
     "/packages/my-subscriptions",
     { items: [] },
   );
-  const bankAccounts = useMemberData<BankAccount[]>("/bank-accounts", []);
-  const { control, handleSubmit, reset } = useForm<SubscriptionFormValues>({
-    defaultValues: { disbursementBankAccountId: "" },
-  });
 
-  async function handleSubscribe(values: SubscriptionFormValues) {
-    if (!selectedPackage) return;
+  function isExpiredPackage(pkg: PackageItem) {
+    if (!pkg.endDate) return false;
+    const endDate = new Date(pkg.endDate);
+    if (Number.isNaN(endDate.getTime())) return false;
+    endDate.setHours(23, 59, 59, 999);
+    return endDate.getTime() < Date.now();
+  }
+
+  function packageStatus(pkg: PackageItem) {
+    if (isExpiredPackage(pkg)) return "EXPIRED";
+    return pkg.isActive ? "ACTIVE" : "INACTIVE";
+  }
+
+  function packageCtaLabel(pkg: PackageItem) {
+    return isExpiredPackage(pkg) ? "Expired" : "Subscribe";
+  }
+
+  function packageTimestamp(pkg: PackageItem) {
+    return pkg.endDate || new Date().toISOString();
+  }
+
+  async function showExpiredPackageAlert(pkg: PackageItem) {
+    await MySwal.fire({
+      icon: "warning",
+      title: "Package expired",
+      text: `${pkg.name} has reached its end date and can no longer accept subscriptions.`,
+      confirmButtonColor: "#2d5a27",
+    });
+  }
+
+  async function handleSubscribe(pkg: PackageItem) {
+    if (isExpiredPackage(pkg)) {
+      await showExpiredPackageAlert(pkg);
+      return;
+    }
+
+    const confirmation = await MySwal.fire({
+      icon: "question",
+      title: "Subscribe to package?",
+      text: `Do you want to subscribe to ${pkg.name}?`,
+      showCancelButton: true,
+      confirmButtonText: "Yes, subscribe",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#2d5a27",
+    });
+
+    if (!confirmation.isConfirmed) {
+      return;
+    }
 
     const result = await apiCallWithAlert({
       title: "Package Subscription",
       loadingText: "Processing subscription...",
       apiCall: () =>
         api.post("/packages/subscriptions", {
-          packageId: selectedPackage.id,
-          disbursementBankAccountId:
-            values.disbursementBankAccountId || undefined,
+          packageId: pkg.id,
         }),
       successTitle: "Subscribed",
-      successText: `You have been subscribed to ${selectedPackage.name}.`,
+      successText: `You have been subscribed to ${pkg.name}.`,
     });
 
     if (result) {
-      setSelectedPackage(null);
-      reset({ disbursementBankAccountId: "" });
       await subscriptions.refetch();
     }
   }
@@ -128,7 +151,6 @@ export default function PackagesPage() {
         await Promise.all([
           packages.refetch(),
           subscriptions.refetch(),
-          bankAccounts.refetch(),
         ]);
       }}
     >
@@ -140,18 +162,6 @@ export default function PackagesPage() {
         icon={<BriefcaseBusiness className="h-5 w-5" />}
         gradient="from-[#7c3a00] via-[#5e2b00] to-[#341700]"
       />
-
-      {bankAccounts.data.length === 0 ? (
-        <section className="rounded-[20px] border border-background-200 dark:border-white/8 bg-background-50 dark:bg-background-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-text-900 dark:text-text-50">
-            Bank account required
-          </h2>
-          <p className="mt-0.5 text-xs text-text-400">
-            Add a bank account before creating a package subscription so your
-            disbursement account can be linked correctly.
-          </p>
-        </section>
-      ) : null}
 
       <Tabs
         className="w-full"
@@ -182,19 +192,10 @@ export default function PackagesPage() {
                   title={pkg.name}
                   subtitle={`${pkg.durationMonths} months${pkg.penaltyValue > 0 ? ` · ${pkg.penaltyType} penalty` : ""}`}
                   amount={pkg.totalAmount}
-                  status={pkg.isActive ? "ACTIVE" : "INACTIVE"}
-                  timestamp={new Date().toISOString()}
-                  onClick={() => {
-                    if (!bankAccounts.data.length) return;
-                    const defaultBank =
-                      bankAccounts.data.find((account) => account.isDefault)
-                        ?.id ??
-                      bankAccounts.data[0]?.id ??
-                      "";
-                    reset({ disbursementBankAccountId: defaultBank });
-                    setSelectedPackage(pkg);
-                  }}
-                  ctaLabel="Subscribe"
+                  status={packageStatus(pkg)}
+                  timestamp={packageTimestamp(pkg)}
+                  onClick={() => void handleSubscribe(pkg)}
+                  ctaLabel={packageCtaLabel(pkg)}
                 />
               ))
             ) : (
@@ -232,33 +233,6 @@ export default function PackagesPage() {
           </div>
         </Tabs.Panel>
       </Tabs>
-
-      <MemberModal
-        isOpen={Boolean(selectedPackage)}
-        onClose={() => setSelectedPackage(null)}
-        title="Package subscription"
-        description="Choose the bank account linked to this package subscription before you continue."
-      >
-        <form className="grid gap-4" onSubmit={handleSubmit(handleSubscribe)}>
-          <SelectInput
-            control={control}
-            name="disbursementBankAccountId"
-            label="Disbursement bank account"
-            placeholder="Select a bank account"
-            options={bankAccounts.data.map((account) => ({
-              id: account.id,
-              label: `${account.bankName} - ${account.accountNumber.slice(-4)}`,
-            }))}
-            isRequired
-          />
-          <button
-            className="min-h-11 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
-            type="submit"
-          >
-            Confirm subscription
-          </button>
-        </form>
-      </MemberModal>
     </PullToRefresh>
   );
 }
