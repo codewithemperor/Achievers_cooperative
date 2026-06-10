@@ -24,7 +24,10 @@
     "db:repair:legacy-loans": "tsx prisma/repair-legacy-loan-schedules.ts",
     "db:repair:weekly-cycles": "tsx prisma/repair-weekly-due-cycles.ts",
     "db:reconcile:financials": "tsx prisma/reconcile-financials.ts",
-    "db:patch:weekly-members": "tsx prisma/patch-weekly-member-repair.ts"
+    "db:patch:weekly-members": "tsx prisma/patch-weekly-member-repair.ts",
+    "db:patch:repayment-attempts": "tsx prisma/patch-repayment-attempts.ts",
+    "db:patch:payment-recovery": "tsx prisma/patch-payment-debt-recovery.ts",
+    "db:patch:repayment-schedules": "tsx prisma/patch-repayment-schedule-items.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.18",

@@ -237,6 +237,15 @@ export class LoansService {
         })
       : [];
 
+    const repaymentAttempts = await (this.prisma as any).repaymentAttempt.findMany({
+      where: {
+        targetType: 'LoanApplication',
+        targetId: loan.id,
+      },
+      orderBy: { attemptedAt: 'desc' },
+      include: { transaction: true },
+    });
+
     const amount = Number(loan.amount);
     const disbursedAmount = this.resolveDisbursedAmount(loan);
     const remainingToDisburse = Math.max(amount - disbursedAmount, 0);
@@ -253,7 +262,7 @@ export class LoansService {
       ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit,
     );
     const installmentAmount = installmentCount > 0 ? schedulePrincipal / installmentCount : schedulePrincipal;
-    const paymentSchedule = Array.from({ length: installmentCount }).map((_, index) => {
+    let paymentSchedule = Array.from({ length: installmentCount }).map((_, index) => {
       const dueDate = this.addTenorStep(scheduleAnchorDate, ((loan as any).tenorUnit ?? 'MONTHS') as LoanTenorUnit, index + 1);
       const dueAmount = Math.round(installmentAmount * 100) / 100;
       const cumulativeDue = dueAmount * (index + 1);
@@ -272,12 +281,24 @@ export class LoansService {
         installment: index + 1,
         dueDate,
         amount: dueAmount,
+        expectedAmount: dueAmount,
+        paidAmount: status === 'PAID' ? dueAmount : 0,
+        remainingAmount: status === 'PAID' ? 0 : dueAmount,
         status,
       };
     });
+
+    if (this.shouldExposeRemainingBalance(loan.status)) {
+      const persistedSchedule = await this.walletService.ensureLoanRepaymentSchedule(loan.id);
+      if (persistedSchedule.length) {
+        paymentSchedule = persistedSchedule.map((item: any) => this.walletService.serializeRepaymentScheduleItem(item));
+      }
+    }
     const nextRepaymentAt =
       (loan as any).nextRepaymentAt ??
-      paymentSchedule.find((item) => item.status === 'PENDING' || item.status === 'OVERDUE')?.dueDate ??
+      paymentSchedule.find((item: any) =>
+        ['PENDING', 'PARTIAL', 'OVERDUE', 'UPCOMING'].includes(item.status) && Number(item.remainingAmount ?? item.amount) > 0,
+      )?.dueDate ??
       null;
 
     const timeline = this.buildTimeline(loan, relatedTransactions);
@@ -299,6 +320,7 @@ export class LoansService {
         ...item,
         amount: Number(item.amount),
       })),
+      repaymentAttempts: repaymentAttempts.map((attempt: any) => this.serializeRepaymentAttempt(attempt)),
       activities: (loan as any).activities?.map((activity: any) => ({
         ...activity,
         previousAmount: activity.previousAmount == null ? null : Number(activity.previousAmount),
@@ -321,6 +343,34 @@ export class LoansService {
   }
 
   // ─── Approve loan ──────────────────────────────────────────────────
+  private serializeRepaymentAttempt(attempt: any) {
+    return {
+      id: attempt.id,
+      phase: attempt.phase,
+      targetType: attempt.targetType,
+      targetId: attempt.targetId,
+      expectedAmount: Number(attempt.expectedAmount),
+      paidAmount: Number(attempt.paidAmount),
+      remainingAmount: Number(attempt.remainingAmount),
+      status: attempt.status,
+      mode: attempt.mode,
+      reference: attempt.reference,
+      dueAt: attempt.dueAt,
+      attemptedAt: attempt.attemptedAt,
+      metadata: attempt.metadata ?? {},
+      transaction: attempt.transaction
+        ? {
+            id: attempt.transaction.id,
+            type: attempt.transaction.type,
+            status: attempt.transaction.status,
+            reference: attempt.transaction.reference,
+            description: attempt.transaction.description,
+            amount: Number(attempt.transaction.amount),
+          }
+        : null,
+    };
+  }
+
   async approve(id: string, actorId: string) {
     const loan = await this.prisma.loanApplication.findUnique({
       where: { id },
@@ -454,6 +504,10 @@ export class LoansService {
         } as any,
       });
 
+      if (['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(next.status)) {
+        await this.walletService.rebuildLoanRepaymentSchedule(next.id, tx);
+      }
+
       return next;
     });
 
@@ -576,7 +630,7 @@ export class LoansService {
         } as any,
       });
 
-      return tx.loanApplication.update({
+      const updatedLoan = await tx.loanApplication.update({
         where: { id },
         data: {
           status: loan.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'DISBURSED',
@@ -589,6 +643,9 @@ export class LoansService {
           remainingBalance: { increment: disbursementAmount },
         } as any,
       });
+
+      await this.walletService.rebuildLoanRepaymentSchedule(updatedLoan.id, tx);
+      return updatedLoan;
     });
 
     await this.audit.log(actorId, 'DISBURSE_LOAN', 'LoanApplication', id, {

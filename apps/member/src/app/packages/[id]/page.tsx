@@ -37,6 +37,9 @@ interface PackageDetail {
     installment?: number;
     dueDate: string;
     amount: number;
+    expectedAmount?: number;
+    paidAmount?: number;
+    remainingAmount?: number;
     status: string;
   }>;
   relatedTransactions?: Array<{
@@ -47,6 +50,18 @@ interface PackageDetail {
     createdAt: string;
     reference?: string | null;
     description?: string | null;
+  }>;
+  repaymentAttempts?: Array<{
+    id: string;
+    phase: string;
+    expectedAmount: number;
+    paidAmount: number;
+    remainingAmount: number;
+    status: string;
+    mode: string;
+    dueAt?: string | null;
+    attemptedAt: string;
+    reference?: string | null;
   }>;
   activityLog?: Array<{
     id: string;
@@ -91,13 +106,13 @@ function statusBadge(status: string) {
   if (["APPROVED", "COMPLETED", "SUCCESSFUL", "PAID"].includes(value)) {
     return "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300";
   }
-  if (["REJECTED", "OVERDUE", "CANCELLED"].includes(value)) {
+  if (["REJECTED", "OVERDUE", "CANCELLED", "UNPAID"].includes(value)) {
     return "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300";
   }
   if (["DISBURSED", "IN_PROGRESS"].includes(value)) {
     return "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300";
   }
-  if (["PENDING", "UPCOMING", "CURRENT"].includes(value)) {
+  if (["PENDING", "UPCOMING", "CURRENT", "PARTIAL"].includes(value)) {
     return "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300";
   }
   return "bg-background-100 text-text-600 dark:bg-background-200 dark:text-text-300";
@@ -327,17 +342,19 @@ export default function PackageDetailPage() {
                 Installment Schedule
               </h2>
               <div className="mt-4 max-w-full overflow-x-auto">
-                <div className="max-h-[420px] min-w-[560px] overflow-y-auto rounded-2xl border border-background-200 dark:border-background-200">
-                  <div className="grid grid-cols-[64px_1fr_1fr_1fr_1fr] bg-background-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-400 dark:bg-background-50">
+                <div className="max-h-[420px] min-w-[760px] overflow-y-auto rounded-2xl border border-background-200 dark:border-background-200">
+                  <div className="grid grid-cols-[64px_1.2fr_1fr_1fr_1fr_1fr_1fr] bg-background-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-400 dark:bg-background-50">
                     <span>S/N</span>
                     <span>Installment</span>
                     <span>Due Date</span>
-                    <span>Amount</span>
+                    <span>Expected</span>
+                    <span>Paid</span>
+                    <span>Remaining</span>
                     <span>Status</span>
                   </div>
                   {item.paymentSchedule.map((sched, index) => (
                     <div
-                      className="grid grid-cols-[64px_1fr_1fr_1fr_1fr] items-center border-t border-background-200 px-4 py-3 text-sm dark:border-background-200"
+                      className="grid grid-cols-[64px_1.2fr_1fr_1fr_1fr_1fr_1fr] items-center border-t border-background-200 px-4 py-3 text-sm dark:border-background-200"
                       key={`${sched.dueDate}-${index}`}
                     >
                       <span className="text-text-400">{index + 1}</span>
@@ -346,7 +363,13 @@ export default function PackageDetailPage() {
                       </span>
                       <span className="text-text-600 dark:text-text-300">{formatDate(sched.dueDate)}</span>
                       <span className="font-semibold text-text-900 dark:text-text-50">
-                        {money.format(sched.amount)}
+                        {money.format(sched.expectedAmount ?? sched.amount)}
+                      </span>
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                        {money.format(sched.paidAmount ?? 0)}
+                      </span>
+                      <span className="font-semibold text-red-700 dark:text-red-300">
+                        {money.format(sched.remainingAmount ?? Math.max((sched.expectedAmount ?? sched.amount) - (sched.paidAmount ?? 0), 0))}
                       </span>
                       <span>
                         <span
@@ -358,6 +381,43 @@ export default function PackageDetailPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </section>
+          ) : null}
+
+          {item.repaymentAttempts?.length ? (
+            <section className="rounded-3xl border border-background-200 bg-white p-5 dark:border-background-200 dark:bg-background-100">
+              <h2 className="font-display text-lg font-semibold text-text-900 dark:text-text-50">
+                Repayment attempts
+              </h2>
+              <div className="mt-4 space-y-3">
+                {item.repaymentAttempts.map((attempt) => (
+                  <div
+                    className="rounded-2xl bg-background-50 px-4 py-3 dark:bg-background-50"
+                    key={attempt.id}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-text-900 dark:text-text-50">
+                          {label(attempt.phase)}
+                        </p>
+                        <p className="mt-1 text-xs text-text-400">
+                          {formatDateTime(attempt.attemptedAt)}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${statusBadge(attempt.status)}`}
+                      >
+                        {label(attempt.status)}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-text-500 dark:text-text-300 sm:grid-cols-3">
+                      <span>Expected: {money.format(attempt.expectedAmount)}</span>
+                      <span>Paid: {money.format(attempt.paidAmount)}</span>
+                      <span>Remaining: {money.format(attempt.remainingAmount)}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
           ) : null}

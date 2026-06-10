@@ -192,6 +192,10 @@ export class PackagesService {
       } as any,
     });
 
+    if (packageBody.totalAmount !== undefined || schedule) {
+      await this.rebuildSchedulesForPackage(updated.id);
+    }
+
     const autoSubscriberCount = addAllMembers ? await this.addAllActiveMembersToPackage(updated) : 0;
 
     await this.audit.log(actorId, 'UPDATE_PACKAGE', 'Package', id, {
@@ -290,6 +294,15 @@ export class PackagesService {
         })
       : [];
 
+    const repaymentAttempts = await (this.prisma as any).repaymentAttempt.findMany({
+      where: {
+        targetType: 'PackageSubscription',
+        targetId: subscription.id,
+      },
+      orderBy: { attemptedAt: 'desc' },
+      include: { transaction: true },
+    });
+
     const activityLog = await this.prisma.auditEvent.findMany({
       where: {
         entityType: 'PackageSubscription',
@@ -305,7 +318,13 @@ export class PackagesService {
     const amountPaid = Number(subscription.amountPaid);
     const progress = totalAmount > 0 ? Math.min((amountPaid / totalAmount) * 100, 100) : 0;
     const timeline = this.buildTimeline(subscription, relatedTransactions);
-    const paymentSchedule = this.buildPaymentSchedule(subscription, totalAmount, amountPaid);
+    let paymentSchedule = this.buildPaymentSchedule(subscription, totalAmount, amountPaid);
+    if (['APPROVED', 'DISBURSED', 'IN_PROGRESS', 'COMPLETED'].includes(subscription.status)) {
+      const persistedSchedule = await this.walletService.ensurePackageRepaymentSchedule(subscription.id);
+      if (persistedSchedule.length) {
+        paymentSchedule = persistedSchedule.map((item: any) => this.walletService.serializeRepaymentScheduleItem(item));
+      }
+    }
 
     return {
       ...this.serializeSubscription(subscription),
@@ -326,6 +345,7 @@ export class PackagesService {
         ...item,
         amount: Number(item.amount),
       })),
+      repaymentAttempts: repaymentAttempts.map((attempt: any) => this.serializeRepaymentAttempt(attempt)),
       activityLog,
     };
   }
@@ -495,6 +515,14 @@ export class PackagesService {
       } as any,
     } as any);
 
+    if (['approve', 'complete'].includes(action)) {
+      await this.walletService.rebuildPackageRepaymentSchedule(updated.id);
+    } else if (action === 'reject') {
+      await (this.prisma as any).repaymentScheduleItem.deleteMany({
+        where: { targetType: 'PackageSubscription', targetId: updated.id },
+      });
+    }
+
     await this.audit.log(actorId, `PACKAGE_SUBSCRIPTION_${action.toUpperCase().replace('-', '_')}`, 'PackageSubscription', id, {
       ...(reason ? { reason } : {}),
     });
@@ -626,6 +654,7 @@ export class PackagesService {
             disbursementBankAccountId: null,
           },
         });
+        await this.walletService.rebuildPackageRepaymentSchedule(subscription.id, tx);
         createdSubscriptions.push({ ...subscription, member });
       }
 
@@ -659,6 +688,20 @@ export class PackagesService {
     });
   }
 
+  private async rebuildSchedulesForPackage(packageId: string) {
+    const subscriptions = await this.prisma.packageSubscription.findMany({
+      where: {
+        packageId,
+        status: { in: ['APPROVED', 'DISBURSED', 'IN_PROGRESS', 'COMPLETED'] },
+      } as any,
+      select: { id: true },
+    });
+
+    for (const subscription of subscriptions) {
+      await this.walletService.rebuildPackageRepaymentSchedule(subscription.id);
+    }
+  }
+
   private serializeSubscription(item: any) {
     const packageData = item.package
       ? {
@@ -677,6 +720,34 @@ export class PackagesService {
       status: item.status === 'ACTIVE' ? 'IN_PROGRESS' : item.status,
       package: packageData,
       totalAmount: packageData ? Number(packageData.totalAmount) : undefined,
+    };
+  }
+
+  private serializeRepaymentAttempt(attempt: any) {
+    return {
+      id: attempt.id,
+      phase: attempt.phase,
+      targetType: attempt.targetType,
+      targetId: attempt.targetId,
+      expectedAmount: Number(attempt.expectedAmount),
+      paidAmount: Number(attempt.paidAmount),
+      remainingAmount: Number(attempt.remainingAmount),
+      status: attempt.status,
+      mode: attempt.mode,
+      reference: attempt.reference,
+      dueAt: attempt.dueAt,
+      attemptedAt: attempt.attemptedAt,
+      metadata: attempt.metadata ?? {},
+      transaction: attempt.transaction
+        ? {
+            id: attempt.transaction.id,
+            type: attempt.transaction.type,
+            status: attempt.transaction.status,
+            reference: attempt.transaction.reference,
+            description: attempt.transaction.description,
+            amount: Number(attempt.transaction.amount),
+          }
+        : null,
     };
   }
 
@@ -839,15 +910,21 @@ export class PackagesService {
       }
 
       const paidForInstallment = remainingPaid >= installmentAmount;
+      const paidAmount = Math.min(Math.max(remainingPaid, 0), installmentAmount);
       if (paidForInstallment) {
         remainingPaid -= installmentAmount;
+      } else {
+        remainingPaid = 0;
       }
 
       return {
         installment: index + 1,
         dueDate,
         amount: installmentAmount,
-        status: paidForInstallment ? 'SUCCESSFUL' : 'PENDING',
+        expectedAmount: installmentAmount,
+        paidAmount,
+        remainingAmount: Math.max(installmentAmount - paidAmount, 0),
+        status: paidForInstallment ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'PENDING',
       };
     });
   }

@@ -33,6 +33,19 @@ interface WeeklyPayment {
   } | null;
 }
 
+interface RepaymentAttempt {
+  id: string;
+  phase: string;
+  expectedAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  status: string;
+  mode: string;
+  dueAt?: string | null;
+  attemptedAt: string;
+  reference?: string | null;
+}
+
 interface WeeklyPayload {
   weeklyAmount: number;
   outstandingAmount: number;
@@ -43,6 +56,7 @@ interface WeeklyPayload {
   nextDueAt?: string | null;
   cycles: WeeklyCycle[];
   payments: WeeklyPayment[];
+  repaymentAttempts: RepaymentAttempt[];
 }
 
 const emptyWeekly: WeeklyPayload = {
@@ -55,6 +69,7 @@ const emptyWeekly: WeeklyPayload = {
   nextDueAt: null,
   cycles: [],
   payments: [],
+  repaymentAttempts: [],
 };
 
 function formatDate(value?: string | null) {
@@ -282,6 +297,61 @@ export default function WeeklyDeductionsPage() {
         ) : (
           <div className="rounded-2xl border border-dashed border-background-300 p-8 text-center text-sm text-text-400 dark:border-white/10">
             Weekly deduction cycles will appear here.
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-text-900 dark:text-text-50">
+          Deduction attempts
+        </h2>
+        {weekly.data.repaymentAttempts.length ? (
+          <div className="max-w-full overflow-x-auto">
+            <div className="max-h-[340px] min-w-[760px] overflow-y-auto rounded-2xl border border-background-200 dark:border-background-200">
+              <div className="grid grid-cols-[64px_1.2fr_1fr_1fr_1fr_1fr_1.1fr] bg-background-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-text-400 dark:bg-background-50">
+                <span>S/N</span>
+                <span>Attempted</span>
+                <span>Expected</span>
+                <span>Paid</span>
+                <span>Remaining</span>
+                <span>Status</span>
+                <span>Reference</span>
+              </div>
+              {weekly.data.repaymentAttempts.map((attempt, index) => (
+                <div
+                  className="grid grid-cols-[64px_1.2fr_1fr_1fr_1fr_1fr_1.1fr] items-center border-t border-background-200 px-4 py-3 text-sm dark:border-background-200"
+                  key={attempt.id}
+                >
+                  <span className="text-text-400">{index + 1}</span>
+                  <span className="text-text-600 dark:text-text-300">
+                    {formatDateTime(attempt.attemptedAt)}
+                  </span>
+                  <span className="text-text-600 dark:text-text-300">
+                    {formatMoney(attempt.expectedAmount)}
+                  </span>
+                  <span className="font-semibold text-text-900 dark:text-text-50">
+                    {formatMoney(attempt.paidAmount)}
+                  </span>
+                  <span className="font-semibold text-text-900 dark:text-text-50">
+                    {formatMoney(attempt.remainingAmount)}
+                  </span>
+                  <span>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${statusClass(attempt.status)}`}
+                    >
+                      {label(attempt.status)}
+                    </span>
+                  </span>
+                  <span className="truncate text-text-500 dark:text-text-300">
+                    {attempt.reference || "--"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-background-300 p-8 text-center text-sm text-text-400 dark:border-white/10">
+            Deduction attempts will appear here after the cron checks your dues.
           </div>
         )}
       </section>

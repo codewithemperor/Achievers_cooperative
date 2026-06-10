@@ -67,6 +67,9 @@ interface LoanDetail {
     installment: number;
     dueDate: string;
     amount: number;
+    expectedAmount?: number;
+    paidAmount?: number;
+    remainingAmount?: number;
     status: string;
   }>;
   timeline: Array<{
@@ -120,6 +123,10 @@ function variantForStatus(status: string) {
       return "danger";
     case "PAID":
       return "success";
+    case "PARTIAL":
+      return "warning";
+    case "UPCOMING":
+      return "neutral";
     default:
       return "neutral";
   }
@@ -851,9 +858,23 @@ export default function LoanDetailPage() {
                   },
                   {
                     key: "amount",
-                    header: "Amount",
-                    render: (item) => currency.format(item.amount),
-                    sortValue: (item) => item.amount,
+                    header: "Expected",
+                    render: (item) => currency.format(item.expectedAmount ?? item.amount),
+                    sortValue: (item) => item.expectedAmount ?? item.amount,
+                  },
+                  {
+                    key: "paidAmount",
+                    header: "Paid",
+                    render: (item) => currency.format(item.paidAmount ?? 0),
+                    sortValue: (item) => item.paidAmount ?? 0,
+                  },
+                  {
+                    key: "remainingAmount",
+                    header: "Remaining",
+                    render: (item) =>
+                      currency.format(item.remainingAmount ?? Math.max((item.expectedAmount ?? item.amount) - (item.paidAmount ?? 0), 0)),
+                    sortValue: (item) =>
+                      item.remainingAmount ?? Math.max((item.expectedAmount ?? item.amount) - (item.paidAmount ?? 0), 0),
                   },
                   {
                     key: "status",

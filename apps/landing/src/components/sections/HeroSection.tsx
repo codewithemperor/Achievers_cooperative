@@ -73,7 +73,7 @@ export default function HeroSection() {
               </button>
               <div className="relative overflow-hidden rounded-3xl bg-background-100 dark:bg-background-800">
                 <Image
-                  src="/images/hero-2.jpeg"
+                  src="/images/hero-2.jpg"
                   alt="Cooperative gathering"
                   fill
                   className="object-cover"
@@ -81,7 +81,7 @@ export default function HeroSection() {
               </div>
               <div className="relative overflow-hidden rounded-3xl bg-primary-700/30 dark:bg-primary-500/20">
                 <Image
-                  src="/images/hero-3.jpeg"
+                  src="/images/hero-3.jpg"
                   alt="Members working together"
                   fill
                   className="object-cover"

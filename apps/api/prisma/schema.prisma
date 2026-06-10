@@ -156,6 +156,8 @@ model Member {
   investmentCancellationRequests InvestmentCancellationRequest[]
   payments              Payment[]
   packageSubscriptions  PackageSubscription[]
+  repaymentAttempts     RepaymentAttempt[]
+  repaymentScheduleItems RepaymentScheduleItem[]
   guaranteedLoansOne    LoanApplication[]      @relation("LoanGuarantorOne")
   guaranteedLoansTwo    LoanApplication[]      @relation("LoanGuarantorTwo")
   bankAccounts          BankAccount[]
@@ -191,6 +193,57 @@ model Transaction {
   updatedAt   DateTime        @updatedAt
   wallet      Wallet          @relation(fields: [walletId], references: [id])
   weeklyDeductionPayments WeeklyDeductionPayment[]
+  repaymentAttempt RepaymentAttempt?
+}
+
+model RepaymentAttempt {
+  id              String      @id @default(cuid())
+  memberId        String
+  transactionId   String?     @unique
+  phase           String
+  targetType      String
+  targetId        String?
+  expectedAmount  Decimal
+  paidAmount      Decimal     @default(0)
+  remainingAmount Decimal     @default(0)
+  status          String
+  mode            String      @default("AUTO")
+  reference       String?     @unique
+  dueAt           DateTime?
+  attemptedAt     DateTime    @default(now())
+  metadata        Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  member          Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  transaction     Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([memberId, phase, attemptedAt])
+  @@index([targetType, targetId])
+  @@index([status])
+  @@index([dueAt])
+}
+
+model RepaymentScheduleItem {
+  id              String   @id @default(cuid())
+  memberId        String
+  targetType      String
+  targetId        String
+  sequence        Int
+  dueDate         DateTime
+  expectedAmount  Decimal
+  paidAmount      Decimal  @default(0)
+  remainingAmount Decimal
+  status          String   @default("UPCOMING")
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  member          Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([targetType, targetId, sequence])
+  @@index([memberId, dueDate])
+  @@index([memberId, status, dueDate])
+  @@index([targetType, targetId, dueDate])
+  @@index([targetType, targetId, status])
 }
 
 model WeeklyDeductionCycle {
@@ -358,6 +411,9 @@ model Payment {
   rejectionReason String?
   verifiedAt      DateTime?
   netCreditAmount Decimal?
+  debtSettlementAmount Decimal?
+  walletCreditAmount Decimal?
+  approvalReference String?       @unique
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   verifiedById    String?

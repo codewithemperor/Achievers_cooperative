@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { testimonialsSection, testimonials } from "@/data/content";
 import { AnimatedSection } from "@/components/ui/AnimatedSection";
@@ -18,6 +17,11 @@ export default function TestimonialsSection() {
     testimonials[activeIndex],
     testimonials[(activeIndex + 1) % testimonials.length],
     testimonials[(activeIndex + 2) % testimonials.length],
+  ];
+  const avatarStyles = [
+    "bg-emerald-100 text-emerald-800",
+    "bg-amber-100 text-amber-800",
+    "bg-sky-100 text-sky-800",
   ];
 
   return (
@@ -64,19 +68,11 @@ export default function TestimonialsSection() {
                 &ldquo;{t.quote}&rdquo;
               </p>
               <div className="flex items-center gap-3">
-                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-primary-700/20">
-                  <Image
-                    src={
-                      i === 0
-                        ? "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=100&q=80"
-                        : i === 1
-                          ? "https://images.unsplash.com/photo-1618641986557-1ecd230959aa?w=100&q=80"
-                          : "https://images.unsplash.com/photo-1506277886164-e25aa3f4ef7f?w=100&q=80"
-                    }
-                    alt={t.name}
-                    fill
-                    className="object-cover"
-                  />
+                <div
+                  aria-hidden="true"
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${avatarStyles[i % avatarStyles.length]}`}
+                >
+                  {t.avatar}
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-text-900">

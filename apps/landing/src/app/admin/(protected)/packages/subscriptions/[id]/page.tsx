@@ -69,6 +69,9 @@ interface PackageSubscriptionDetail {
     installment: number;
     dueDate: string;
     amount: number;
+    expectedAmount?: number;
+    paidAmount?: number;
+    remainingAmount?: number;
     status: string;
   }>;
 }
@@ -90,10 +93,10 @@ function formatDateTime(value?: string | null) {
 
 function getStatusVariant(status: string) {
   const value = status.toUpperCase();
-  if (["APPROVED", "COMPLETED", "ACTIVE", "SUCCESSFUL"].includes(value)) return "success";
-  if (["REJECTED", "OVERDUE", "DEFAULTING"].includes(value)) return "danger";
+  if (["APPROVED", "COMPLETED", "ACTIVE", "SUCCESSFUL", "PAID"].includes(value)) return "success";
+  if (["REJECTED", "OVERDUE", "DEFAULTING", "UNPAID"].includes(value)) return "danger";
   if (["DISBURSED", "IN_PROGRESS"].includes(value)) return "info";
-  if (value === "PENDING") return "warning";
+  if (["PENDING", "PARTIAL"].includes(value)) return "warning";
   return "neutral";
 }
 
@@ -447,9 +450,23 @@ export default function AdminPackageSubscriptionDetailPage() {
                   },
                   {
                     key: "amount",
-                    header: "Amount",
-                    render: (item) => currency.format(item.amount),
-                    sortValue: (item) => item.amount,
+                    header: "Expected",
+                    render: (item) => currency.format(item.expectedAmount ?? item.amount),
+                    sortValue: (item) => item.expectedAmount ?? item.amount,
+                  },
+                  {
+                    key: "paidAmount",
+                    header: "Paid",
+                    render: (item) => currency.format(item.paidAmount ?? 0),
+                    sortValue: (item) => item.paidAmount ?? 0,
+                  },
+                  {
+                    key: "remainingAmount",
+                    header: "Remaining",
+                    render: (item) =>
+                      currency.format(item.remainingAmount ?? Math.max((item.expectedAmount ?? item.amount) - (item.paidAmount ?? 0), 0)),
+                    sortValue: (item) =>
+                      item.remainingAmount ?? Math.max((item.expectedAmount ?? item.amount) - (item.paidAmount ?? 0), 0),
                   },
                   {
                     key: "status",

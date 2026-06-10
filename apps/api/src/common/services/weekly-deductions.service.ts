@@ -95,7 +95,7 @@ export class WeeklyDeductionsService {
     const settings = await this.getSettings();
     await this.ensureCyclesForMember(member, endOfMonth(), settings);
     const { from, to } = monthRange();
-    const [cycles, payments] = await Promise.all([
+    const [cycles, payments, repaymentAttempts] = await Promise.all([
       (this.prisma as any).weeklyDeductionCycle.findMany({
         where: { memberId },
         orderBy: { dueDate: 'asc' },
@@ -109,6 +109,12 @@ export class WeeklyDeductionsService {
           transaction: true,
           allocations: { include: { cycle: true } },
         },
+      }),
+      (this.prisma as any).repaymentAttempt.findMany({
+        where: { memberId, phase: 'WEEKLY_DEDUCTION' },
+        orderBy: { attemptedAt: 'desc' },
+        take: 50,
+        include: { transaction: true },
       }),
     ]);
 
@@ -147,6 +153,7 @@ export class WeeklyDeductionsService {
       latestPaymentAt: latestPayment?.paidAt ?? null,
       cycles: options.includeCycles === false ? cycles.slice(-12).map((cycle: any) => this.serializeCycle(cycle)) : cycles.map((cycle: any) => this.serializeCycle(cycle)),
       payments: payments.map((payment: any) => this.serializePayment(payment)),
+      repaymentAttempts: repaymentAttempts.map((attempt: any) => this.serializeRepaymentAttempt(attempt)),
     };
   }
 
@@ -430,48 +437,14 @@ export class WeeklyDeductionsService {
       return { alreadyProcessed: true, processedCount: 0, amount: settings.amount };
     }
 
-    await this.ensureCyclesForAll(today, settings);
-    const activeMembers = await this.prisma.member.findMany({
-      where: { status: 'ACTIVE' },
-      select: { id: true, fullName: true, membershipNumber: true },
+    const weeklySummary = await this.processObligationPhase('weekly', {
+      recordAttempts: true,
+      trigger: options?.trigger ?? 'ADMIN',
     });
-
-    const weeklyResults = await this.mapInBatches(activeMembers, 5, async (member) => {
-      const outstanding = await this.getDueOutstandingForMember(member.id, today);
-      if (outstanding <= 0) return { processedCount: 0, totalSettled: 0 };
-
-      const reference = `WEEKLY-${runStamp}-${member.id}`;
-      const existing = await this.prisma.transaction.findUnique({ where: { reference } });
-      if (existing) return { processedCount: 0, totalSettled: 0 };
-
-      const amountToDebit = Math.min(settings.amount, outstanding);
-      const result = await this.walletService.debitWallet(member.id, amountToDebit, 'WEEKLY_COOPERATIVE', reference, {
-        allowNegative: true,
-        category: 'weekly cooperative',
-        description: `Weekly cooperative deduction for ${runStamp.slice(0, 10)}`,
-        editable: false,
-        lockReason: 'Weekly cooperative deductions are generated automatically by the system.',
-        metadata: {
-          deductionDate: runStamp,
-          memberName: member.fullName,
-          membershipNumber: member.membershipNumber,
-          trigger: options?.trigger ?? 'ADMIN',
-        },
-      });
-      const outstandingAmount = toNumber((result.transaction.metadata as any)?.outstandingAmount);
-      const settledAmount = Math.max(amountToDebit - outstandingAmount, 0);
-      if (settledAmount > 0) {
-        await this.allocatePayment(member.id, settledAmount, {
-          transactionId: result.transaction.id,
-          mode: 'AUTO',
-          metadata: { reference, runStamp },
-        });
-      }
-      return { processedCount: 1, totalSettled: settledAmount };
-    });
-
-    const processedCount = weeklyResults.reduce((sum, item) => sum + item.processedCount, 0);
-    const totalSettled = weeklyResults.reduce((sum, item) => sum + item.totalSettled, 0);
+    const processedCount = weeklySummary.processedMembers;
+    const totalSettled = weeklySummary.totalSettled;
+    const partialCount = weeklySummary.partialCount;
+    const unpaidCount = weeklySummary.unpaidCount;
 
     await this.prisma.systemConfig.upsert({
       where: { key: LAST_RUN_KEY },
@@ -485,6 +458,8 @@ export class WeeklyDeductionsService {
       amount: settings.amount,
       processedCount,
       totalSettled,
+      partialCount,
+      unpaidCount,
       trigger: options?.trigger ?? 'ADMIN',
     });
 
@@ -492,6 +467,8 @@ export class WeeklyDeductionsService {
       alreadyProcessed: false,
       processedCount,
       totalSettled,
+      partialCount,
+      unpaidCount,
       amount: settings.amount,
       day: expectedDay,
       runStamp,
@@ -520,28 +497,32 @@ export class WeeklyDeductionsService {
 
     let weekly:
       | Awaited<ReturnType<WeeklyDeductionsService['run']>>
+      | Awaited<ReturnType<WeeklyDeductionsService['runWeeklyOutstanding']>>
       | { skipped: true; reason: string; day?: string; error?: string };
 
-    if (actualDay === expectedDay) {
-      try {
+    try {
+      if (actualDay === expectedDay) {
         weekly = await this.run(actorId, { force: options?.force, trigger: options?.trigger ?? 'CRON' });
-      } catch (error: any) {
-        weekly = {
-          skipped: true,
-          reason: 'weekly-deduction-failed',
-          day: expectedDay,
-          error: error?.message || 'Unknown weekly deduction error',
-        };
+      } else {
+        weekly = await this.runWeeklyOutstanding(actorId, {
+          recordAttempts: options?.trigger !== 'LAZY',
+          trigger: options?.trigger ?? 'CRON',
+        });
       }
-    } else {
+    } catch (error: any) {
       weekly = {
         skipped: true,
-        reason: 'not-weekly-deduction-day',
+        reason: 'weekly-deduction-failed',
         day: expectedDay,
+        error: error?.message || 'Unknown weekly deduction error',
       };
     }
 
-    const dueObligations = await this.runDueObligations();
+    const dueObligations = await this.runDueObligations({
+      includeWeekly: false,
+      recordAttempts: options?.trigger !== 'LAZY',
+      trigger: options?.trigger ?? 'CRON',
+    });
 
     await this.prisma.systemConfig.upsert({
       where: { key: DAILY_LAST_RUN_KEY },
@@ -570,15 +551,8 @@ export class WeeklyDeductionsService {
   }
 
   async runFromCron(force = false) {
-    const actor = await this.prisma.user.findFirst({
-      where: { role: 'SUPER_ADMIN' },
-      select: { id: true },
-    });
-
-    if (!actor?.id) {
-      await this.recordStatus('FAILED_NO_ADMIN_ACTOR', 'No SUPER_ADMIN user exists for cron audit attribution.');
-      return { skipped: true, reason: 'no-admin-actor' };
-    }
+    const actor = await this.getCronActor();
+    if (!actor) return { skipped: true, reason: 'no-admin-actor' };
 
     try {
       return await this.runDaily(actor.id, { force, trigger: 'CRON' });
@@ -588,13 +562,119 @@ export class WeeklyDeductionsService {
     }
   }
 
-  private async runDueObligations() {
-    const now = new Date();
+  async runWeeklyCron() {
+    const actor = await this.getCronActor();
+    if (!actor) return { skipped: true, reason: 'no-admin-actor' };
+    return this.runWeeklyOutstanding(actor.id, { recordAttempts: true, trigger: 'CRON' });
+  }
+
+  async runPackageRepaymentsCron() {
+    const actor = await this.getCronActor();
+    if (!actor) return { skipped: true, reason: 'no-admin-actor' };
+    return this.runPackageRepayments(actor.id, { recordAttempts: true, trigger: 'CRON' });
+  }
+
+  async runLoanRepaymentsCron() {
+    const actor = await this.getCronActor();
+    if (!actor) return { skipped: true, reason: 'no-admin-actor' };
+    return this.runLoanRepayments(actor.id, { recordAttempts: true, trigger: 'CRON' });
+  }
+
+  async runWeeklyOutstanding(
+    actorId: string,
+    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string } = {},
+  ) {
+    await this.ensureDefaults();
+    await this.touchLastCheckedAt();
     const settings = await this.getSettings();
-    await this.ensureCyclesForAll(now, settings);
+    if (!settings.enabled) {
+      await this.recordStatus('DISABLED');
+      return { skipped: true, reason: 'disabled' };
+    }
+    const summary = await this.processObligationPhase('weekly', options);
+    await this.audit.log(actorId, 'RUN_DAILY_WEEKLY_DEDUCTIONS', 'SystemConfig', DAILY_LAST_RUN_KEY, {
+      trigger: options.trigger ?? 'ADMIN',
+      ...summary,
+    });
+    return summary;
+  }
+
+  async runPackageRepayments(
+    actorId: string,
+    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string } = {},
+  ) {
+    await this.ensureDefaults();
+    await this.touchLastCheckedAt();
+    const summary = await this.processObligationPhase('package', options);
+    await this.audit.log(actorId, 'RUN_DAILY_PACKAGE_REPAYMENTS', 'SystemConfig', DAILY_LAST_RUN_KEY, {
+      trigger: options.trigger ?? 'ADMIN',
+      ...summary,
+    });
+    return summary;
+  }
+
+  async runLoanRepayments(
+    actorId: string,
+    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string } = {},
+  ) {
+    await this.ensureDefaults();
+    await this.touchLastCheckedAt();
+    const summary = await this.processObligationPhase('loan', options);
+    await this.audit.log(actorId, 'RUN_DAILY_LOAN_REPAYMENTS', 'SystemConfig', DAILY_LAST_RUN_KEY, {
+      trigger: options.trigger ?? 'ADMIN',
+      ...summary,
+    });
+    return summary;
+  }
+
+  private async runDueObligations(
+    options: {
+      includeWeekly?: boolean;
+      recordAttempts?: boolean;
+      trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string;
+    } = {},
+  ) {
+    const weekly = options.includeWeekly === false
+      ? { skipped: true, reason: 'handled-separately' }
+      : await this.processObligationPhase('weekly', options);
+    const packages = await this.processObligationPhase('package', options);
+    const loans = await this.processObligationPhase('loan', options);
+    const summaries = [weekly, packages, loans].filter((summary: any) => !summary.skipped) as Array<{
+      checkedMembers: number;
+      processedMembers: number;
+      settlementCount: number;
+      totalSettled: number;
+      completedCount: number;
+      partialCount: number;
+      unpaidCount: number;
+    }>;
+
+    return {
+      weekly,
+      packages,
+      loans,
+      checkedMembers: summaries.reduce((sum, item) => sum + item.checkedMembers, 0),
+      processedMembers: summaries.reduce((sum, item) => sum + item.processedMembers, 0),
+      settlementCount: summaries.reduce((sum, item) => sum + item.settlementCount, 0),
+      totalSettled: summaries.reduce((sum, item) => sum + item.totalSettled, 0),
+      completedCount: summaries.reduce((sum, item) => sum + item.completedCount, 0),
+      partialCount: summaries.reduce((sum, item) => sum + item.partialCount, 0),
+      unpaidCount: summaries.reduce((sum, item) => sum + item.unpaidCount, 0),
+    };
+  }
+
+  private async processObligationPhase(
+    phase: 'weekly' | 'package' | 'loan',
+    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string } = {},
+  ) {
+    const now = new Date();
     const today = startOfIsoDay(now);
-    const [dueWeekly, duePackages, dueLoans] = await Promise.all([
-      (this.prisma as any).weeklyDeductionCycle.findMany({
+    let dueMembers: Array<{ memberId: string }>;
+
+    if (phase === 'weekly') {
+      const settings = await this.getSettings();
+      await this.ensureCyclesForAll(now, settings);
+      dueMembers = await (this.prisma as any).weeklyDeductionCycle.findMany({
         where: {
           member: { status: 'ACTIVE' },
           dueDate: { lte: today },
@@ -602,8 +682,20 @@ export class WeeklyDeductionsService {
         },
         select: { memberId: true },
         distinct: ['memberId'],
-      }),
-      this.prisma.packageSubscription.findMany({
+      });
+    } else if (phase === 'package') {
+      const dueBefore = addDays(today, 1);
+      const scheduleMembers = await (this.prisma as any).repaymentScheduleItem.findMany({
+        where: {
+          targetType: 'PackageSubscription',
+          member: { status: 'ACTIVE' },
+          dueDate: { lt: dueBefore },
+          remainingAmount: { gt: 0 },
+        },
+        select: { memberId: true },
+        distinct: ['memberId'],
+      });
+      const legacyMembers = await this.prisma.packageSubscription.findMany({
         where: {
           member: { status: 'ACTIVE' },
           status: { in: ['APPROVED', 'DISBURSED', 'IN_PROGRESS'] },
@@ -612,8 +704,21 @@ export class WeeklyDeductionsService {
         },
         select: { memberId: true },
         distinct: ['memberId'],
-      }),
-      this.prisma.loanApplication.findMany({
+      });
+      dueMembers = this.uniqueMemberRows([...scheduleMembers, ...legacyMembers]);
+    } else {
+      const dueBefore = addDays(today, 1);
+      const scheduleMembers = await (this.prisma as any).repaymentScheduleItem.findMany({
+        where: {
+          targetType: 'LoanApplication',
+          member: { status: 'ACTIVE' },
+          dueDate: { lt: dueBefore },
+          remainingAmount: { gt: 0 },
+        },
+        select: { memberId: true },
+        distinct: ['memberId'],
+      });
+      const legacyMembers = await this.prisma.loanApplication.findMany({
         where: {
           member: { status: 'ACTIVE' },
           status: { in: ['DISBURSED', 'IN_PROGRESS', 'OVERDUE'] },
@@ -622,34 +727,64 @@ export class WeeklyDeductionsService {
         },
         select: { memberId: true },
         distinct: ['memberId'],
-      } as any),
-    ]);
-    const dueMemberIds = Array.from(
-      new Set([...dueWeekly, ...duePackages, ...dueLoans].map((item) => item.memberId)),
-    );
+      } as any);
+      dueMembers = this.uniqueMemberRows([...scheduleMembers, ...legacyMembers]);
+    }
 
+    const dueMemberIds = dueMembers.map((item) => item.memberId);
     const results = await this.mapInBatches(dueMemberIds, 5, async (memberId) => {
-      const settlements = await this.walletService.settleOutstandingObligations(memberId);
+      const settlements =
+        phase === 'weekly'
+          ? await this.walletService.settleWeeklyObligations(memberId, options)
+          : phase === 'package'
+            ? await this.walletService.settlePackageObligations(memberId, options)
+            : await this.walletService.settleLoanObligations(memberId, options);
+
       if (!settlements.length) {
-        return { processedMembers: 0, settlementCount: 0, totalSettled: 0 };
+        return {
+          processedMembers: 0,
+          settlementCount: 0,
+          totalSettled: 0,
+          completedCount: 0,
+          partialCount: 0,
+          unpaidCount: 0,
+        };
       }
 
       return {
         processedMembers: 1,
         settlementCount: settlements.length,
         totalSettled: settlements.reduce((sum, item) => sum + item.amount, 0),
+        completedCount: settlements.filter((item) => (item.repaymentStatus ?? (item.amount > 0 ? 'COMPLETED' : 'UNPAID')) === 'COMPLETED').length,
+        partialCount: settlements.filter((item) => item.repaymentStatus === 'PARTIAL').length,
+        unpaidCount: settlements.filter((item) => item.repaymentStatus === 'UNPAID').length,
       };
     });
 
     return {
+      phase,
       checkedMembers: dueMemberIds.length,
-      dueWeeklyMembers: dueWeekly.length,
-      duePackageMembers: duePackages.length,
-      dueLoanMembers: dueLoans.length,
       processedMembers: results.reduce((sum, item) => sum + item.processedMembers, 0),
       settlementCount: results.reduce((sum, item) => sum + item.settlementCount, 0),
       totalSettled: results.reduce((sum, item) => sum + item.totalSettled, 0),
+      completedCount: results.reduce((sum, item) => sum + item.completedCount, 0),
+      partialCount: results.reduce((sum, item) => sum + item.partialCount, 0),
+      unpaidCount: results.reduce((sum, item) => sum + item.unpaidCount, 0),
     };
+  }
+
+  private async getCronActor() {
+    const actor = await this.prisma.user.findFirst({
+      where: { role: 'SUPER_ADMIN' },
+      select: { id: true },
+    });
+
+    if (!actor?.id) {
+      await this.recordStatus('FAILED_NO_ADMIN_ACTOR', 'No SUPER_ADMIN user exists for cron audit attribution.');
+      return null;
+    }
+
+    return actor;
   }
 
   private async mapInBatches<T, R>(
@@ -945,6 +1080,43 @@ export class WeeklyDeductionsService {
         cycle: allocation.cycle ? this.serializeCycle(allocation.cycle) : null,
       })),
     };
+  }
+
+  private serializeRepaymentAttempt(attempt: any) {
+    return {
+      id: attempt.id,
+      phase: attempt.phase,
+      targetType: attempt.targetType,
+      targetId: attempt.targetId,
+      expectedAmount: toNumber(attempt.expectedAmount),
+      paidAmount: toNumber(attempt.paidAmount),
+      remainingAmount: toNumber(attempt.remainingAmount),
+      status: attempt.status,
+      mode: attempt.mode,
+      reference: attempt.reference,
+      dueAt: attempt.dueAt,
+      attemptedAt: attempt.attemptedAt,
+      metadata: attempt.metadata ?? {},
+      transaction: attempt.transaction
+        ? {
+            id: attempt.transaction.id,
+            type: attempt.transaction.type,
+            status: attempt.transaction.status,
+            reference: attempt.transaction.reference,
+            description: attempt.transaction.description,
+            amount: toNumber(attempt.transaction.amount),
+          }
+        : null,
+    };
+  }
+
+  private uniqueMemberRows(rows: Array<{ memberId: string }>) {
+    const seen = new Set<string>();
+    return rows.filter((row) => {
+      if (seen.has(row.memberId)) return false;
+      seen.add(row.memberId);
+      return true;
+    });
   }
 
   private async ensureDefaults() {

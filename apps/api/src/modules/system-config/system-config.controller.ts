@@ -35,6 +35,13 @@ export class SystemConfigController {
     return this.systemConfigService.runWeeklyDeductions(req.user.id, body?.force ?? false);
   }
 
+  @Post('actions/daily-deductions/run')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Run daily deduction processors manually' })
+  runDailyDeductions(@Request() req: any, @Body() body?: { force?: boolean }) {
+    return this.systemConfigService.runDailyDeductions(req.user.id, body?.force ?? false);
+  }
+
   @Patch(':key')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Update a system config value' })

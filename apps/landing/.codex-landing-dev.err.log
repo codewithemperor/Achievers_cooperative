@@ -804,3 +804,13 @@ https://react.dev/link/hydration-mismatch
 
 [browser] ⨯ unhandledRejection: AbortError: Transition was skipped
 
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+
+[browser] ⨯ unhandledRejection: InvalidStateError: Transition was aborted because of invalid state
+

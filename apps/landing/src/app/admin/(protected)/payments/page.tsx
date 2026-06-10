@@ -34,6 +34,9 @@ interface PaymentsResponse {
     verifiedAt?: string | null;
     rejectionReason?: string | null;
     netCreditAmount?: number | null;
+    debtSettlementAmount?: number | null;
+    walletCreditAmount?: number | null;
+    approvalReference?: string | null;
     member: { fullName: string; membershipNumber?: string };
   }>;
 }
@@ -555,6 +558,24 @@ export default function PaymentsPage() {
                       typeof item.netCreditAmount === "number"
                         ? currency.format(item.netCreditAmount)
                         : "-",
+                  },
+                  {
+                    label: "Debt recovered",
+                    value:
+                      typeof item.debtSettlementAmount === "number"
+                        ? currency.format(item.debtSettlementAmount)
+                        : "-",
+                  },
+                  {
+                    label: "Wallet credited",
+                    value:
+                      typeof item.walletCreditAmount === "number"
+                        ? currency.format(item.walletCreditAmount)
+                        : "-",
+                  },
+                  {
+                    label: "Approval reference",
+                    value: item.approvalReference || "-",
                   },
                   {
                     label: "Reason",

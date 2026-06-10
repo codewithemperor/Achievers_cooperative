@@ -104,16 +104,16 @@ export default function SettingsPage() {
     }
   }
 
-  async function runWeeklyDeductions(force = false) {
+  async function runDailyDeductions(force = false) {
     try {
       setSaving(true);
-      await api.post("/config/actions/weekly-deductions/run", { force });
-      showSuccessToast("Weekly deduction run completed.");
+      await api.post("/config/actions/daily-deductions/run", { force });
+      showSuccessToast("Daily deduction run completed.");
       await config.refetch();
     } catch (error: any) {
       showErrorToast(
         error?.response?.data?.message ||
-          "Unable to run weekly deductions right now.",
+          "Unable to run daily deductions right now.",
       );
     } finally {
       setSaving(false);
@@ -128,20 +128,20 @@ export default function SettingsPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <ConfirmActionButton
-              confirmMessage="Run weekly deductions only if today matches the configured deduction day."
-              confirmTitle="Run scheduled deduction check?"
+              confirmMessage="Run the daily processors for due weekly deductions, package repayments, and loan repayments. Weekly dues still respect the configured schedule."
+              confirmTitle="Run daily deduction check?"
               isDisabled={saving}
               label="Run if due"
-              onConfirm={() => runWeeklyDeductions(false)}
+              onConfirm={() => runDailyDeductions(false)}
               pendingLabel="Running..."
               tone="neutral"
             />
             <ConfirmActionButton
-              confirmMessage="Force run weekly deductions now, even if today is not the configured deduction day. Duplicate deductions are still blocked by references and last-run checks unless force is explicitly allowed by the backend flow."
+              confirmMessage="Force the master daily deduction flow now. Duplicate same-day attempts are still protected by backend references."
               confirmTitle="Force run deductions?"
               isDisabled={saving}
               label="Force run"
-              onConfirm={() => runWeeklyDeductions(true)}
+              onConfirm={() => runDailyDeductions(true)}
               pendingLabel="Running..."
               tone="success"
             />

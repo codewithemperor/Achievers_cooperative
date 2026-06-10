@@ -14,16 +14,22 @@ import {
   Package,
   PiggyBank,
   Receipt,
+  RefreshCw,
   Search,
   Settings,
   TrendingUp,
   Users,
   X,
 } from "lucide-react";
+import { toast } from "@heroui/react";
 import clsx from "clsx";
 import { clearSession } from "@/lib/session";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useApi } from "@/hooks/useApi";
+import {
+  ADMIN_REFRESH_EVENT,
+  useAdminDataStore,
+} from "@/lib/admin-data-store";
 
 interface DashboardNoticeResponse {
   summary: {
@@ -126,7 +132,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 export function AdminShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
   const notices = useApi<DashboardNoticeResponse>("/reports/dashboard");
+  const clearAdminCache = useAdminDataStore((state) => state.clear);
   const missedRequests =
     (notices.data?.pendingPayments.length ?? 0) +
     (notices.data?.pendingWalletWithdrawals.length ?? 0) +
@@ -138,6 +146,38 @@ export function AdminShell({ children }: PropsWithChildren) {
     pathname === "/admin"
       ? "Dashboard overview"
       : pathname.replace("/admin/", "").replaceAll("/", " / ");
+
+  async function refreshAdminData() {
+    if (isReloading) return;
+    setIsReloading(true);
+    clearAdminCache();
+
+    const refreshTasks: Promise<void>[] = [];
+    window.dispatchEvent(
+      new CustomEvent(ADMIN_REFRESH_EVENT, {
+        detail: {
+          collect: (task: Promise<void>) => refreshTasks.push(task),
+        },
+      }),
+    );
+
+    const refreshTask = (
+      refreshTasks.length
+        ? Promise.all(refreshTasks).then(() => undefined)
+        : notices.refetch({ force: true, reason: "manual", silent: true })
+    );
+
+    try {
+      await toast.promise(refreshTask, {
+        error: (error) =>
+          error?.message || "Unable to refresh admin data. Please try again.",
+        loading: "Refreshing admin data...",
+        success: "Admin data refreshed successfully.",
+      });
+    } finally {
+      setIsReloading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen overflow-x-clip bg-[var(--background-50)] text-text-800 dark:bg-[var(--background-950)] dark:text-[var(--text-200)]">
@@ -180,6 +220,21 @@ export function AdminShell({ children }: PropsWithChildren) {
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  aria-label="Refresh admin data"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-background-50 px-3 text-sm font-semibold text-text-900 transition hover:bg-background-100 disabled:cursor-wait disabled:opacity-70"
+                  disabled={isReloading}
+                  onClick={refreshAdminData}
+                  title="Refresh admin data"
+                  type="button"
+                >
+                  <RefreshCw
+                    className={clsx("h-4 w-4", isReloading && "animate-spin")}
+                  />
+                  <span className="hidden sm:inline">
+                    {isReloading ? "Refreshing" : "Refresh"}
+                  </span>
+                </button>
                 <Link
                   aria-label={`${missedRequests} pending requests`}
                   className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-background-50 text-text-900 transition hover:bg-background-100"

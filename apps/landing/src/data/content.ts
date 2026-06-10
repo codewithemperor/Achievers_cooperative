@@ -118,7 +118,7 @@ export const benefits = [
 
 export const statsNumbers = [
   { value: "40+", label: "Active members" },
-  { value: "₦12m+", label: "Assets under management" },
+  { value: "\u20a617m+", label: "Assets under management" },
   {
     value: String(Math.max(0, currentYear - siteConfig.foundedYear)),
     label: "Years of operation",
@@ -140,37 +140,37 @@ export const testimonials = [
   {
     quote:
       "Achievers Cooperative helped me move from informal borrowing to a stable financing plan for my business.",
-    name: "Amaka O.",
-    company: "Sunrise Textile Co.",
-    avatar: "/images/avatar-1.jpg",
+    name: "Bashirat Makinde",
+    company: "Achievers Cooperative Member",
+    avatar: "BM",
   },
   {
     quote:
       "The savings structure gave my family the discipline we needed to build an emergency fund that actually lasts.",
-    name: "Emeka N.",
-    company: "Lagos Market Traders",
-    avatar: "/images/avatar-2.jpg",
+    name: "Adebayo Olatunji",
+    company: "Achievers Cooperative Member",
+    avatar: "AO",
   },
   {
     quote:
       "I value how transparent the cooperative is. Members understand what is happening and have a say in it.",
-    name: "Fatima B.",
-    company: "Northern Agro Alliance",
-    avatar: "/images/avatar-3.jpg",
+    name: "Fatimah Adeshiyan",
+    company: "Achievers Cooperative Member",
+    avatar: "FA",
   },
   {
     quote:
       "The business support sessions have been as valuable to me as the financial products themselves.",
-    name: "Chidi M.",
-    company: "TechBridge Ventures",
-    avatar: "/images/avatar-4.jpg",
+    name: "Gbadegesin John",
+    company: "Achievers Cooperative Member",
+    avatar: "GJ",
   },
   {
     quote:
       "You can feel the difference when a financial institution is truly built around its members.",
-    name: "Grace A.",
-    company: "Harvest Foods Ltd.",
-    avatar: "/images/avatar-5.jpg",
+    name: "Fakunle Alaba",
+    company: "Achievers Cooperative Member",
+    avatar: "FA",
   },
 ];
 
@@ -190,7 +190,7 @@ export const newsArticles = [
     title: "Achievers Cooperative holds its 2025 Annual General Meeting",
     excerpt:
       "Members reviewed performance, approved key resolutions, and aligned on the next stage of growth for the cooperative.",
-    image: "/images/news-1.jpeg",
+    image: "/images/news-1.jpg",
   },
   {
     slug: "new-loan-product-launch",

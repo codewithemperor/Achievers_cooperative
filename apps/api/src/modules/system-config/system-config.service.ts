@@ -80,6 +80,10 @@ export class SystemConfigService {
   }
 
   async runWeeklyDeductions(actorId: string, force = false) {
+    return this.runDailyDeductions(actorId, force);
+  }
+
+  async runDailyDeductions(actorId: string, force = false) {
     try {
       return await this.weeklyDeductions.runDaily(actorId, { force, trigger: 'ADMIN' });
     } catch (error: any) {

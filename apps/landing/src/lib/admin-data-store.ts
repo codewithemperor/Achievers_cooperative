@@ -20,6 +20,7 @@ interface AdminDataStore {
 }
 
 export const ADMIN_DATA_TTL_MS = 5 * 60 * 1000;
+export const ADMIN_REFRESH_EVENT = "achievers:admin-refresh";
 const ADMIN_DATA_CACHE_VERSION = 2;
 const ADMIN_DATA_STORAGE_KEY = "achievers-admin-data-cache";
 

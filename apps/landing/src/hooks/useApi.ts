@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@heroui/react";
 import api from "@/lib/api";
-import { ADMIN_DATA_TTL_MS, useAdminDataStore } from "@/lib/admin-data-store";
+import {
+  ADMIN_DATA_TTL_MS,
+  ADMIN_REFRESH_EVENT,
+  useAdminDataStore,
+} from "@/lib/admin-data-store";
 
 interface UseApiState<T> {
   data: T | null;
@@ -169,6 +173,28 @@ export function useApi<T>(url: string, options: UseApiOptions = {}): UseApiState
 
   useEffect(() => {
     void refetch({ force: false, reason: "mount" });
+  }, [refetch]);
+
+  useEffect(() => {
+    const handleAdminRefresh = (event: Event) => {
+      const refreshTask = refetch({
+        force: true,
+        reason: "manual",
+        silent: true,
+      });
+      const collect = (
+        event as CustomEvent<{
+          collect?: (task: Promise<void>) => void;
+        }>
+      ).detail?.collect;
+      collect?.(refreshTask);
+      void refreshTask;
+    };
+
+    window.addEventListener(ADMIN_REFRESH_EVENT, handleAdminRefresh);
+    return () => {
+      window.removeEventListener(ADMIN_REFRESH_EVENT, handleAdminRefresh);
+    };
   }, [refetch]);
 
   useEffect(() => {

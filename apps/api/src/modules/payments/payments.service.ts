@@ -4,7 +4,7 @@ import { AuditService } from '../../common/services/audit.service';
 import { MembershipChargeService } from '../../common/services/membership-charge.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { NotificationService } from '../../common/services/notification.service';
-import { CooperativeWalletService } from '../cooperative-wallet/cooperative-wallet.service';
+import { FinancialPostingService } from '../../common/services/financial-posting.service';
 
 @Injectable()
 export class PaymentsService {
@@ -14,7 +14,7 @@ export class PaymentsService {
     private readonly membershipChargeService: MembershipChargeService,
     private readonly walletService: WalletService,
     private readonly notificationService: NotificationService,
-    private readonly cooperativeWalletService: CooperativeWalletService,
+    private readonly financialPosting: FinancialPostingService,
   ) {}
 
   async findAll() {
@@ -26,11 +26,7 @@ export class PaymentsService {
     });
 
     return {
-      items: items.map((payment) => ({
-        ...payment,
-        amount: Number(payment.amount),
-        netCreditAmount: payment.netCreditAmount ? Number(payment.netCreditAmount) : null,
-      })),
+      items: items.map((payment) => this.serializePayment(payment)),
     };
   }
 
@@ -46,11 +42,7 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    return {
-      ...payment,
-      amount: Number(payment.amount),
-      netCreditAmount: payment.netCreditAmount ? Number(payment.netCreditAmount) : null,
-    };
+    return this.serializePayment(payment);
   }
 
   async create(userId: string, body: { amount: number; receiptUrl?: string; memberId?: string }) {
@@ -78,10 +70,7 @@ export class PaymentsService {
 
     await this.audit.log(userId, 'CREATE_PAYMENT', 'Payment', created.id, body);
 
-    return {
-      ...created,
-      amount: Number(created.amount),
-    };
+    return this.serializePayment(created);
   }
 
   async createApprovedByAdmin(actorId: string, body: { amount: number; receiptUrl?: string; memberId?: string }) {
@@ -138,27 +127,41 @@ export class PaymentsService {
     const { charge, netAmount } = await this.membershipChargeService.applyCharge(grossAmount);
     const reference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
-    const fundingResult = await this.walletService.creditWallet(payment.memberId, netAmount, 'WALLET_FUNDING', reference, {
-      category: 'wallet funding',
-      description: `Approved wallet funding for ${payment.member.fullName}`,
-      editable: false,
-      lockReason: 'Wallet funding transactions come from verified payment records and cannot be edited.',
-    });
-    const autoSettlements = fundingResult.settlements;
+    const { updated, fundingResult } = await this.prisma.$transaction(async (tx) => {
+      const fundingResult = await this.walletService.applyWalletFundingWithDebtRecovery(
+        tx,
+        payment.memberId,
+        netAmount,
+        'WALLET_FUNDING',
+        reference,
+        {
+          actorId,
+          paymentId: payment.id,
+          category: 'wallet funding',
+          description: `Approved wallet funding for ${payment.member.fullName}`,
+          editable: false,
+          lockReason: 'Wallet funding transactions come from verified payment records and cannot be edited.',
+          metadata: {
+            paymentId: payment.id,
+            grossAmount,
+            charge,
+            netAmount,
+            trigger: 'PAYMENT_APPROVAL',
+          },
+        },
+      );
 
-    await this.prisma.wallet.update({
-      where: { memberId: payment.memberId },
-      data: {
-        totalCharges: { increment: charge },
-      },
-    });
-
-    if (charge > 0) {
-      const wallet = await this.prisma.wallet.findUnique({ where: { memberId: payment.memberId } });
-      if (wallet) {
-        await this.prisma.transaction.create({
+      if (charge > 0) {
+        await tx.wallet.update({
+          where: { memberId: payment.memberId },
           data: {
-            walletId: wallet.id,
+            totalCharges: { increment: charge },
+          },
+        });
+
+        await tx.transaction.create({
+          data: {
+            walletId: fundingResult.wallet.id,
             type: 'MEMBERSHIP_CHARGE',
             amount: charge,
             status: 'APPROVED',
@@ -167,47 +170,75 @@ export class PaymentsService {
             description: `Funding charge applied to ${payment.member.fullName}`,
             editable: false,
             lockReason: 'System-generated funding charges cannot be edited.',
+            metadata: {
+              paymentId: payment.id,
+              fundingTransactionId: fundingResult.transaction.id,
+              approvalReference: reference,
+            },
           },
         });
+
+        const cooperativeWallet = await this.financialPosting.ensureWallet(tx);
+        const cooperativeEntry = await tx.cooperativeEntry.create({
+          data: {
+            walletId: cooperativeWallet.id,
+            type: 'INCOME',
+            amount: charge,
+            category: 'MEMBERSHIP_CHARGE',
+            description: `Membership charge collected from ${payment.member.fullName}`,
+            reference: `${reference}-CHARGE`,
+            createdById: actorId,
+          },
+        });
+
+        await this.financialPosting.postAssociationInflow(
+          {
+            amount: charge,
+            reference: `${reference}-CHARGE`,
+            sourceType: 'CooperativeEntry',
+            sourceId: cooperativeEntry.id,
+            description: `Membership charge collected from ${payment.member.fullName}`,
+            actorId,
+            category: 'MEMBERSHIP_CHARGE',
+          },
+          tx,
+        );
       }
 
-      await this.cooperativeWalletService.createEntry(actorId, {
-        type: 'INCOME',
-        amount: charge,
-        category: 'MEMBERSHIP_CHARGE',
-        description: `Membership charge collected from ${payment.member.fullName}`,
-        reference: `${reference}-CHARGE`,
+      const updated = await tx.payment.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          verifiedById: actorId,
+          verifiedAt: new Date(),
+          netCreditAmount: netAmount,
+          debtSettlementAmount: fundingResult.debtSettlementAmount,
+          walletCreditAmount: fundingResult.walletCreditAmount,
+          approvalReference: reference,
+        },
       });
-    }
 
-    const updated = await this.prisma.payment.update({
-      where: { id },
-      data: {
-        status: 'APPROVED',
-        verifiedById: actorId,
-        verifiedAt: new Date(),
-        netCreditAmount: netAmount,
-      },
+      return { updated, fundingResult };
     });
+    const autoSettlements = fundingResult.settlements;
 
     await this.audit.log(actorId, 'APPROVE_PAYMENT', 'Payment', id, {
       grossAmount,
       charge,
       netAmount,
+      debtSettlementAmount: fundingResult.debtSettlementAmount,
+      walletCreditAmount: fundingResult.walletCreditAmount,
+      approvalReference: reference,
       autoSettlements,
     });
 
     await this.notificationService.notifyMember(
       payment.member.userId,
       'Wallet funding approved',
-      `Your payment of ${grossAmount.toLocaleString()} has been approved. Net credit: ${netAmount.toLocaleString()}.${autoSettlements.length ? ` Automatic deductions applied: ${autoSettlements.map((item) => `${item.type} ${item.amount.toLocaleString()}`).join(', ')}.` : ''}`,
+      `Your payment of ${grossAmount.toLocaleString()} has been approved. Net deposit: ${netAmount.toLocaleString()}. Wallet credited: ${fundingResult.walletCreditAmount.toLocaleString()}.${fundingResult.debtSettlementAmount > 0 ? ` Debt recovery applied: ${fundingResult.debtSettlementAmount.toLocaleString()}.` : ''}${autoSettlements.length ? ` Automatic deductions applied: ${autoSettlements.map((item) => `${item.type} ${item.amount.toLocaleString()}`).join(', ')}.` : ''}`,
     );
 
-    return {
-      ...updated,
-      amount: Number(updated.amount),
-      netCreditAmount: updated.netCreditAmount ? Number(updated.netCreditAmount) : null,
-    };
+    return this.serializePayment(updated);
   }
 
   async reject(id: string, actorId: string, reason?: string) {
@@ -242,16 +273,22 @@ export class PaymentsService {
       reason || 'Your uploaded receipt could not be verified.',
     );
 
-    return {
-      ...updated,
-      amount: Number(updated.amount),
-      netCreditAmount: updated.netCreditAmount ? Number(updated.netCreditAmount) : null,
-    };
+    return this.serializePayment(updated);
   }
 
   private assertValidAmount(amount: number) {
     if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
       throw new BadRequestException('Enter a valid payment amount.');
     }
+  }
+
+  private serializePayment(payment: any) {
+    return {
+      ...payment,
+      amount: Number(payment.amount),
+      netCreditAmount: payment.netCreditAmount == null ? null : Number(payment.netCreditAmount),
+      debtSettlementAmount: payment.debtSettlementAmount == null ? null : Number(payment.debtSettlementAmount),
+      walletCreditAmount: payment.walletCreditAmount == null ? null : Number(payment.walletCreditAmount),
+    };
   }
 }
