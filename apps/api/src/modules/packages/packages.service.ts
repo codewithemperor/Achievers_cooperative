@@ -616,76 +616,80 @@ export class PackagesService {
       approvedAt: approvalTimestamp,
     });
 
-    return this.prisma.$transaction(async (tx) => {
-      const members = await tx.member.findMany({
-        where: { status: 'ACTIVE' },
-        select: {
-          id: true,
-          fullName: true,
-          membershipNumber: true,
-          wallet: { select: { id: true } },
-        },
-      });
-
-      if (!members.length) {
-        return 0;
-      }
-
-      const existingSubscriptions = await (tx as any).packageSubscription.findMany({
-        where: {
-          packageId: selectedPackage.id,
-          memberId: { in: members.map((member) => member.id) },
-        },
-        select: { memberId: true },
-      });
-      const existingMemberIds = new Set(existingSubscriptions.map((subscription: any) => subscription.memberId));
-      const eligibleMembers = members.filter((member) => !existingMemberIds.has(member.id));
-      const createdSubscriptions = [];
-
-      for (const member of eligibleMembers) {
-        const subscription = await (tx as any).packageSubscription.create({
-          data: {
-            packageId: selectedPackage.id,
-            memberId: member.id,
-            amountRemaining: selectedPackage.totalAmount,
-            status: 'APPROVED',
-            approvedAt: approvalTimestamp,
-            nextDueAt,
-            disbursementBankAccountId: null,
+    return this.prisma.runTransaction(
+      'packages.addAllActiveMembersToPackage',
+      async (tx) => {
+        const members = await tx.member.findMany({
+          where: { status: 'ACTIVE' },
+          select: {
+            id: true,
+            fullName: true,
+            membershipNumber: true,
+            wallet: { select: { id: true } },
           },
         });
-        await this.walletService.rebuildPackageRepaymentSchedule(subscription.id, tx);
-        createdSubscriptions.push({ ...subscription, member });
-      }
 
-      const activityTransactions = createdSubscriptions
-        .filter((subscription: any) => subscription.member.wallet?.id)
-        .map((subscription: any) => ({
-          walletId: subscription.member.wallet.id,
-          type: 'PACKAGE_SUBSCRIPTION',
-          amount: 0,
-          status: 'APPROVED',
-          reference: `PACKAGE-AUTO-SUB-${subscription.id}`,
-          category: 'package subscription',
-          description: `Package subscription created for ${selectedPackage.name}`,
-          editable: false,
-          lockReason: 'Package subscription activity is generated automatically by the system.',
-          metadata: {
-            subscriptionId: subscription.id,
+        if (!members.length) {
+          return 0;
+        }
+
+        const existingSubscriptions = await (tx as any).packageSubscription.findMany({
+          where: {
             packageId: selectedPackage.id,
-            subscribedAmount: Number(selectedPackage.totalAmount),
-            event: 'AUTO_SUBSCRIBED_BY_ADMIN',
-            memberName: subscription.member.fullName,
-            membershipNumber: subscription.member.membershipNumber,
+            memberId: { in: members.map((member) => member.id) },
           },
-        }));
+          select: { memberId: true },
+        });
+        const existingMemberIds = new Set(existingSubscriptions.map((subscription: any) => subscription.memberId));
+        const eligibleMembers = members.filter((member) => !existingMemberIds.has(member.id));
+        const createdSubscriptions = [];
 
-      if (activityTransactions.length) {
-        await (tx as any).transaction.createMany({ data: activityTransactions });
-      }
+        for (const member of eligibleMembers) {
+          const subscription = await (tx as any).packageSubscription.create({
+            data: {
+              packageId: selectedPackage.id,
+              memberId: member.id,
+              amountRemaining: selectedPackage.totalAmount,
+              status: 'APPROVED',
+              approvedAt: approvalTimestamp,
+              nextDueAt,
+              disbursementBankAccountId: null,
+            },
+          });
+          await this.walletService.rebuildPackageRepaymentSchedule(subscription.id, tx);
+          createdSubscriptions.push({ ...subscription, member });
+        }
 
-      return createdSubscriptions.length;
-    });
+        const activityTransactions = createdSubscriptions
+          .filter((subscription: any) => subscription.member.wallet?.id)
+          .map((subscription: any) => ({
+            walletId: subscription.member.wallet.id,
+            type: 'PACKAGE_SUBSCRIPTION',
+            amount: 0,
+            status: 'APPROVED',
+            reference: `PACKAGE-AUTO-SUB-${subscription.id}`,
+            category: 'package subscription',
+            description: `Package subscription created for ${selectedPackage.name}`,
+            editable: false,
+            lockReason: 'Package subscription activity is generated automatically by the system.',
+            metadata: {
+              subscriptionId: subscription.id,
+              packageId: selectedPackage.id,
+              subscribedAmount: Number(selectedPackage.totalAmount),
+              event: 'AUTO_SUBSCRIBED_BY_ADMIN',
+              memberName: subscription.member.fullName,
+              membershipNumber: subscription.member.membershipNumber,
+            },
+          }));
+
+        if (activityTransactions.length) {
+          await (tx as any).transaction.createMany({ data: activityTransactions });
+        }
+
+        return createdSubscriptions.length;
+      },
+      { maxWait: 30000, timeout: 120000 },
+    );
   }
 
   private async rebuildSchedulesForPackage(packageId: string) {

@@ -439,7 +439,7 @@ export class WalletsService {
     }
 
     const reference = `WALLET-WD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.runTransaction('wallets.disburseWithdrawal', async (tx) => {
       await tx.wallet.update({
         where: { id: request.walletId },
         data: { availableBalance: { decrement: request.amount }, totalCharges: { increment: request.amount } },

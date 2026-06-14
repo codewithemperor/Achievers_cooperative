@@ -172,7 +172,7 @@ export class CooperativeWalletService {
     const wallet = await this.ensureWallet();
     const isIncome = input.type === 'INCOME';
 
-    const entry = await this.prisma.$transaction(async (tx) => {
+    const entry = await this.prisma.runTransaction('cooperativeWallet.createEntry', async (tx) => {
       const entry = await tx.cooperativeEntry.create({
         data: {
           walletId: wallet.id,

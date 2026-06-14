@@ -1,0 +1,189 @@
+ACHIEVERS COOPERATIVE CRON GUIDE
+================================
+
+Purpose
+-------
+The cron endpoints run automatic deductions for members who have due or overdue obligations.
+The system checks three phases:
+
+1. Weekly cooperative dues
+2. Package repayments
+3. Loan repayments
+
+The priority is weekly first, then package, then loan.
+
+
+Recommended Cron URLs
+---------------------
+Use these split cron URLs. They are faster than running everything in one request.
+
+Weekly dues:
+https://achievers-cooperative.onrender.com/api/v1/cron/daily-deductions/weekly?secret=YOUR_CRON_SECRET
+
+Package repayments:
+https://achievers-cooperative.onrender.com/api/v1/cron/daily-package-repayments?secret=YOUR_CRON_SECRET
+
+Loan repayments:
+https://achievers-cooperative.onrender.com/api/v1/cron/daily-loan-repayments?secret=YOUR_CRON_SECRET
+
+Keep Render awake:
+https://achievers-cooperative.onrender.com/api/v1/health
+
+Suggested times:
+- Keep awake: every 10 minutes
+- Weekly dues: 5:00 AM
+- Package repayments: 5:02 AM
+- Loan repayments: 5:04 AM
+
+
+Security
+--------
+Each cron URL must include the CRON_SECRET.
+You can pass it in either way:
+
+1. Query string:
+   ?secret=YOUR_CRON_SECRET
+
+2. Header:
+   x-cron-secret: YOUR_CRON_SECRET
+
+If the secret is missing or wrong, the API returns 401 Unauthorized.
+If the route does not exist on the deployed API, it returns 404 Not Found.
+
+
+How Weekly Dues Cron Works
+--------------------------
+1. The system loads weekly deduction settings.
+2. It creates any missing weekly cycles up to today.
+3. It finds active members with weekly cycles due today or earlier.
+4. For each member, it checks wallet balance.
+5. If wallet has enough money:
+   - It deducts the due amount.
+   - It creates a transaction.
+   - It creates a repayment attempt record.
+   - It updates the weekly cycle as PAID or PARTIAL.
+6. If wallet has no money:
+   - It creates an UNPAID repayment attempt if the cron is configured to record attempts.
+   - It does not deduct anything.
+
+
+How Package Cron Works
+----------------------
+1. The system finds active members with due package repayment schedule items.
+2. It also checks older legacy package nextDueAt values as a fallback.
+3. For each due member, it checks wallet balance.
+4. Package deductions pay penalty first, then package principal.
+5. Package principal is allocated FIFO to the oldest due schedule item first.
+6. If only part of the amount is available, the schedule item becomes PARTIAL.
+7. If no money is available, the cron records an UNPAID attempt and deducts nothing.
+
+
+How Loan Cron Works
+-------------------
+1. The system finds active members with due loan repayment schedule items.
+2. It also checks older legacy loan nextRepaymentAt values as a fallback.
+3. For each due member, it checks wallet balance.
+4. Loan repayment is allocated FIFO to the oldest due schedule item first.
+5. If only part of the due amount is available, the schedule item becomes PARTIAL.
+6. If no money is available, the cron records an UNPAID attempt and deducts nothing.
+
+
+Meaning Of Cron Result Fields
+-----------------------------
+Example:
+{"phase":"loan","checkedMembers":9,"processedMembers":8,"settlementCount":8,"totalSettled":0,"completedCount":0,"partialCount":0,"unpaidCount":8}
+
+phase:
+The phase that ran. It can be weekly, package, or loan.
+
+checkedMembers:
+Number of members found with something due or overdue for that phase.
+
+processedMembers:
+Number of members where the cron created at least one settlement or repayment attempt.
+
+settlementCount:
+Number of settlement/attempt records created.
+
+totalSettled:
+Actual amount deducted from wallets.
+If this is 0, no money was deducted.
+
+completedCount:
+Number of due obligations fully paid by the cron run.
+
+partialCount:
+Number of due obligations partially paid by the cron run.
+
+unpaidCount:
+Number of due obligations where the member had no available wallet balance, so the cron recorded an unpaid attempt.
+
+
+What Your Output Means
+----------------------
+Loan result:
+{"phase":"loan","checkedMembers":9,"processedMembers":8,"settlementCount":8,"totalSettled":0,"completedCount":0,"partialCount":0,"unpaidCount":8}
+
+Meaning:
+- 9 members had loan repayment due.
+- 8 members had repayment attempts recorded.
+- 0 naira was deducted.
+- All 8 recorded attempts were unpaid.
+- This usually means those members had no available wallet balance.
+
+Weekly result:
+{"phase":"weekly","checkedMembers":7,"processedMembers":7,"settlementCount":7,"totalSettled":0,"completedCount":0,"partialCount":0,"unpaidCount":7}
+
+Meaning:
+- 7 members had weekly dues due.
+- 7 unpaid attempts were recorded.
+- 0 naira was deducted.
+- This usually means all 7 had no available wallet balance.
+
+Package result:
+{"phase":"package","checkedMembers":20,"processedMembers":20,"settlementCount":20,"totalSettled":0,"completedCount":0,"partialCount":0,"unpaidCount":20}
+
+Meaning:
+- 20 members had package repayment due.
+- 20 unpaid attempts were recorded.
+- 0 naira was deducted.
+- This usually means all 20 had no available wallet balance.
+
+
+Important Notes
+---------------
+1. Cron does not create wallet money.
+   It can only deduct from available wallet balance.
+
+2. If totalSettled is 0 and unpaidCount is greater than 0:
+   The cron found debts, but the members did not have wallet funds available.
+
+3. If a member later funds wallet:
+   Admin payment approval will first recover overdue debt before crediting leftover balance to the wallet.
+
+4. RepaymentAttempt records should not be deleted.
+   They are audit/history showing that the cron tried to collect a due payment.
+
+5. Current debt is tracked by:
+   - WeeklyDeductionCycle for weekly dues
+   - RepaymentScheduleItem for packages and loans
+
+6. Members and admins should use the detail pages to see each frame:
+   - Expected amount
+   - Paid amount
+   - Remaining amount
+   - Status
+
+
+Quick Health Check
+------------------
+If cron-job.org returns 503:
+- Render may be asleep or waking.
+- Keep the /health cron active every 10 minutes.
+
+If cron-job.org returns 401:
+- The URL exists, but the cron secret is missing or wrong.
+
+If cron-job.org returns 404:
+- The deployed API does not have that route yet, or the URL/method is wrong.
+- Deploy the latest API code and use the exact URLs above.

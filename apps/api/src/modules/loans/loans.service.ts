@@ -471,7 +471,7 @@ export class LoansService {
           tenorUnit: nextTenorUnit as LoanTenorUnit,
           maturityDate: loan.dueDate,
         };
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.runTransaction('loans.increaseAmount', async (tx) => {
       const next = await tx.loanApplication.update({
         where: { id },
         data: {
@@ -576,7 +576,7 @@ export class LoansService {
     const reference = `LOAN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const wallet = await this.walletService.getMemberWallet(loan.memberId);
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.runTransaction('loans.disburse', async (tx) => {
       await tx.transaction.create({
         data: {
           walletId: wallet.id,

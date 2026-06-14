@@ -315,7 +315,8 @@ export class WeeklyDeductionsService {
     const nextSettings = { ...settings, day: normalizedDay };
     const today = startOfIsoDay(new Date());
 
-    return this.prisma.$transaction(
+    return this.prisma.runTransaction(
+      'weeklyDeductions.realignFutureCyclesForDayChange',
       async (tx) => {
         const members = await tx.member.findMany({
           where: { status: 'ACTIVE' },
@@ -812,7 +813,7 @@ export class WeeklyDeductionsService {
     const settings = await this.getSettings();
     await this.ensureCyclesForMember(member, new Date(), settings);
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.runTransaction('weeklyDeductions.allocatePayment', async (tx) => {
       const payment = await (tx as any).weeklyDeductionPayment.create({
         data: {
           memberId,

@@ -19,6 +19,7 @@ interface DebitWalletOptions extends TransactionOptions {
 interface FundingDebtRecoveryOptions extends TransactionOptions {
   actorId?: string;
   paymentId?: string;
+  debtRecoveryPlan?: PreparedFundingDebtRecoveryPlan;
 }
 
 type SettlementRecord = {
@@ -54,6 +55,103 @@ type RepaymentAttemptOptions = {
   mode: 'AUTO' | 'ADMIN' | 'MEMBER' | string;
   dueAt?: Date | null;
   metadata?: Record<string, unknown>;
+};
+
+type WeeklyCycleAllocationPlan = {
+  cycleId: string;
+  dueDate: Date;
+  expectedAmount: number;
+  previousPaidAmount: number;
+  paidAmount: number;
+  nextPaidAmount: number;
+  nextStatus: string;
+};
+
+type ScheduleAllocationPlan = {
+  itemId: string;
+  sequence: number;
+  dueDate: Date;
+  expectedAmount: number;
+  previousPaidAmount: number;
+  paidAmount: number;
+  nextPaidAmount: number;
+  nextRemainingAmount: number;
+  nextStatus: string;
+};
+
+type PreparedWeeklyDebtRecovery = {
+  amount: number;
+  outstanding: number;
+  firstDueAt: Date;
+  lastDueAt: Date;
+  repaymentStatus: RepaymentAttemptStatus;
+  dueCycleIds: string[];
+  allocations: WeeklyCycleAllocationPlan[];
+  member: {
+    fullName?: string | null;
+    membershipNumber?: string | null;
+  };
+};
+
+type PreparedPackageDebtEntry = {
+  type: 'PACKAGE_PENALTY' | 'PACKAGE_SUBSCRIPTION';
+  subscriptionId: string;
+  packageName: string;
+  amount: number;
+  expectedAmount: number;
+  remainingAmount: number;
+  dueAt: Date;
+  dueKey: string;
+  repaymentStatus: RepaymentAttemptStatus;
+  scheduleAllocations?: ScheduleAllocationPlan[];
+};
+
+type PreparedPackageTargetUpdate = {
+  subscriptionId: string;
+  previousPenaltyAccrued: number;
+  previousAmountRemaining: number;
+  previousAmountPaid: number;
+  previousStatus: string;
+  penaltyAccrued: number;
+  amountRemaining: number;
+  amountPaid: number;
+  status: string;
+  completedAt: Date | null;
+  nextDueAt: Date | null;
+};
+
+type PreparedLoanDebtEntry = {
+  loanId: string;
+  loanName: string;
+  amount: number;
+  expectedAmount: number;
+  remainingAmount: number;
+  dueAt: Date;
+  dueKey: string;
+  repaymentStatus: RepaymentAttemptStatus;
+  scheduleAllocations: ScheduleAllocationPlan[];
+  member: {
+    fullName?: string | null;
+    membershipNumber?: string | null;
+  };
+  update: {
+    previousRemainingBalance: number;
+    previousStatus: string;
+    remainingBalance: number;
+    status: string;
+    nextRepaymentAt: Date | null;
+  };
+};
+
+type PreparedFundingDebtRecoveryPlan = {
+  weekly?: PreparedWeeklyDebtRecovery | null;
+  packages: {
+    entries: PreparedPackageDebtEntry[];
+    updates: PreparedPackageTargetUpdate[];
+  };
+  loans: PreparedLoanDebtEntry[];
+  debtSettlementAmount: number;
+  walletCreditAmount: number;
 };
 
 const WEEKLY_DEDUCTION_AMOUNT_KEY = 'COOPERATIVE_DEDUCTION_AMOUNT';
@@ -140,7 +238,7 @@ export class WalletService {
   ) {
     const wallet = await this.getMemberWallet(memberId);
 
-    const transaction = await this.prisma.$transaction(async (tx) => {
+    const transaction = await this.prisma.runTransaction('wallet.creditWallet', async (tx) => {
       await tx.wallet.update({
         where: { id: wallet.id },
         data: {
@@ -212,8 +310,16 @@ export class WalletService {
     reference?: string,
     options?: FundingDebtRecoveryOptions,
   ) {
-    return this.prisma.$transaction((tx) =>
-      this.applyWalletFundingWithDebtRecovery(tx, memberId, amount, type, reference, options),
+    const debtRecoveryPlan =
+      options?.debtRecoveryPlan ?? (await this.prepareWalletFundingDebtRecovery(memberId, amount));
+
+    return this.prisma.runTransaction(
+      'wallet.creditWalletWithDebtRecovery',
+      (tx) =>
+        this.applyWalletFundingWithDebtRecovery(tx, memberId, amount, type, reference, {
+          ...options,
+          debtRecoveryPlan,
+        }),
     );
   }
 
@@ -276,13 +382,24 @@ export class WalletService {
       );
     }
 
-    const recovery = await this.settleOverdueDebtsFromFunding(client, memberId, wallet.id, amount, {
-      referenceBase: reference ?? `FUND-${fundingTransaction.id}`,
-      trigger: String(options?.metadata?.trigger ?? 'PAYMENT_APPROVAL'),
-      fundingTransactionId: fundingTransaction.id,
-      paymentId: options?.paymentId,
-      actorId: options?.actorId,
-    });
+    const recoveryPlan = options?.debtRecoveryPlan;
+    if (!recoveryPlan) {
+      throw new BadRequestException('Debt recovery plan must be prepared before applying wallet funding.');
+    }
+    const recovery = await this.applyPreparedDebtRecovery(
+      client,
+      memberId,
+      wallet.id,
+      amount,
+      {
+        referenceBase: reference ?? `FUND-${fundingTransaction.id}`,
+        trigger: String(options?.metadata?.trigger ?? 'PAYMENT_APPROVAL'),
+        fundingTransactionId: fundingTransaction.id,
+        paymentId: options?.paymentId,
+        actorId: options?.actorId,
+      },
+      recoveryPlan,
+    );
     const debtSettlementAmount = recovery.debtSettlementAmount;
     const walletCreditAmount = recovery.walletCreditAmount;
 
@@ -338,7 +455,7 @@ export class WalletService {
       outstandingAmount,
     };
 
-    const { updatedWallet, transaction } = await this.prisma.$transaction(async (tx) => {
+    const { updatedWallet, transaction } = await this.prisma.runTransaction('wallet.debitWallet', async (tx) => {
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
         data: {
@@ -521,7 +638,7 @@ export class WalletService {
       const newlyCovered = currentOutstanding - nextOutstanding;
       coveredAmount -= newlyCovered;
 
-      const updated = await this.prisma.$transaction(async (tx) => {
+      const updated = await this.prisma.runTransaction('wallet.settlePendingWeeklyDeduction', async (tx) => {
         const updatedTransaction = await tx.transaction.update({
           where: { id: transaction.id },
           data: {
@@ -1000,58 +1117,49 @@ export class WalletService {
     return settlements;
   }
 
-  private async settleOverdueDebtsFromFunding(
-    client: any,
+  async prepareWalletFundingDebtRecovery(
     memberId: string,
-    walletId: string,
     fundingAmount: number,
-    context: DebtRecoveryContext,
-  ) {
-    const settlements: SettlementRecord[] = [];
+  ): Promise<PreparedFundingDebtRecoveryPlan> {
     let remainingFunding = roundMoney(Math.max(fundingAmount, 0));
-
-    const weeklySettlements = await this.applyWeeklyDebtRecovery(client, memberId, walletId, remainingFunding, context);
-    settlements.push(...weeklySettlements);
-    remainingFunding = roundMoney(
-      remainingFunding - weeklySettlements.reduce((sum, settlement) => sum + settlement.amount, 0),
-    );
-
-    if (remainingFunding > 0) {
-      const packageSettlements = await this.applyPackageDebtRecovery(client, memberId, walletId, remainingFunding, context);
-      settlements.push(...packageSettlements);
-      remainingFunding = roundMoney(
-        remainingFunding - packageSettlements.reduce((sum, settlement) => sum + settlement.amount, 0),
-      );
-    }
-
-    if (remainingFunding > 0) {
-      const loanSettlements = await this.applyLoanDebtRecovery(client, memberId, walletId, remainingFunding, context);
-      settlements.push(...loanSettlements);
-      remainingFunding = roundMoney(
-        remainingFunding - loanSettlements.reduce((sum, settlement) => sum + settlement.amount, 0),
-      );
-    }
-
-    const walletCreditAmount = roundMoney(Math.max(remainingFunding, 0));
-    return {
-      settlements,
-      debtSettlementAmount: roundMoney(fundingAmount - walletCreditAmount),
-      walletCreditAmount,
+    const plan: PreparedFundingDebtRecoveryPlan = {
+      weekly: null,
+      packages: { entries: [], updates: [] },
+      loans: [],
+      debtSettlementAmount: 0,
+      walletCreditAmount: remainingFunding,
     };
+
+    const weekly = await this.prepareWeeklyDebtRecovery(memberId, remainingFunding);
+    if (weekly) {
+      plan.weekly = weekly;
+      remainingFunding = roundMoney(remainingFunding - weekly.amount);
+    }
+
+    if (remainingFunding > 0) {
+      plan.packages = await this.preparePackageDebtRecovery(memberId, remainingFunding);
+      const packageTotal = plan.packages.entries.reduce((sum, entry) => sum + entry.amount, 0);
+      remainingFunding = roundMoney(remainingFunding - packageTotal);
+    }
+
+    if (remainingFunding > 0) {
+      plan.loans = await this.prepareLoanDebtRecovery(memberId, remainingFunding);
+      const loanTotal = plan.loans.reduce((sum, entry) => sum + entry.amount, 0);
+      remainingFunding = roundMoney(remainingFunding - loanTotal);
+    }
+
+    plan.walletCreditAmount = roundMoney(Math.max(remainingFunding, 0));
+    plan.debtSettlementAmount = roundMoney(Math.max(fundingAmount - plan.walletCreditAmount, 0));
+
+    return plan;
   }
 
-  private async applyWeeklyDebtRecovery(
-    client: any,
-    memberId: string,
-    walletId: string,
-    availableAmount: number,
-    context: DebtRecoveryContext,
-  ): Promise<SettlementRecord[]> {
+  private async prepareWeeklyDebtRecovery(memberId: string, availableAmount: number) {
     if (availableAmount <= 0) {
-      return [];
+      return null;
     }
 
-    const member = await client.member.findUnique({
+    const member = await this.prisma.member.findUnique({
       where: { id: memberId },
       select: {
         id: true,
@@ -1064,18 +1172,18 @@ export class WalletService {
     });
 
     if (!member || member.status !== 'ACTIVE') {
-      return [];
+      return null;
     }
 
-    const settings = await this.getWeeklyDeductionSettings(client);
+    const settings = await this.getWeeklyDeductionSettings();
     if (settings.amount <= 0) {
-      return [];
+      return null;
     }
 
     const today = startOfIsoDay(new Date());
-    await this.ensureWeeklyCyclesForMember(member, today, settings, client);
+    await this.ensureWeeklyCyclesForMember(member, today, settings);
 
-    const dueCycles = await client.weeklyDeductionCycle.findMany({
+    const dueCycles = await (this.prisma as any).weeklyDeductionCycle.findMany({
       where: {
         memberId,
         dueDate: { lte: today },
@@ -1083,98 +1191,43 @@ export class WalletService {
       },
       orderBy: { dueDate: 'asc' },
     });
-    const outstanding = dueCycles.reduce(
-      (sum: number, cycle: any) => sum + Math.max(Number(cycle.amount) - Number(cycle.amountPaid), 0),
-      0,
+    const outstanding = roundMoney(
+      dueCycles.reduce((sum: number, cycle: any) => sum + Math.max(Number(cycle.amount) - Number(cycle.amountPaid), 0), 0),
     );
     const amountToApply = roundMoney(Math.min(Math.max(availableAmount, 0), outstanding));
 
     if (outstanding <= 0 || amountToApply <= 0) {
-      return [];
+      return null;
     }
 
+    const allocations = this.buildWeeklyAllocationPlan(dueCycles, amountToApply);
     const firstDueAt = dueCycles[0]?.dueDate ?? today;
     const lastDueAt = dueCycles[dueCycles.length - 1]?.dueDate ?? today;
-    const repaymentStatus = this.repaymentAttemptStatus(amountToApply, outstanding);
-    const reference = `${context.referenceBase}-WEEKLY`;
-    const transaction = await this.createDebtRecoveryTransaction(client, {
-      memberId,
-      walletId,
-      type: 'WEEKLY_COOPERATIVE',
+
+    return {
       amount: amountToApply,
-      reference,
-      category: 'admin payment debt recovery',
-      description: `Debt recovery from approved wallet funding for weekly deductions`,
-      metadata: {
-        fundingTransactionId: context.fundingTransactionId,
-        paymentId: context.paymentId,
-        deductionDate: today.toISOString(),
-        memberName: member.fullName,
+      outstanding,
+      firstDueAt,
+      lastDueAt,
+      repaymentStatus: this.repaymentAttemptStatus(amountToApply, outstanding),
+      dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
+      allocations,
+      member: {
+        fullName: member.fullName,
         membershipNumber: member.membershipNumber,
-        trigger: context.trigger,
-        adminAllocated: true,
-        settlementPriority: 'WEEKLY',
-        repaymentPhase: 'WEEKLY_DEDUCTION',
-        repaymentStatus,
-        expectedAmount: outstanding,
-        paidAmount: amountToApply,
-        remainingAmount: Math.max(outstanding - amountToApply, 0),
-        dueFrom: firstDueAt.toISOString(),
-        dueTo: lastDueAt.toISOString(),
-        dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
       },
-      repaymentAttempt: {
-        phase: 'WEEKLY_DEDUCTION',
-        targetType: 'WeeklyDeduction',
-        targetId: memberId,
-        expectedAmount: outstanding,
-        paidAmount: amountToApply,
-        remainingAmount: Math.max(outstanding - amountToApply, 0),
-        status: repaymentStatus,
-        mode: 'ADMIN',
-        dueAt: firstDueAt,
-        metadata: {
-          fundingTransactionId: context.fundingTransactionId,
-          paymentId: context.paymentId,
-          dueFrom: firstDueAt.toISOString(),
-          dueTo: lastDueAt.toISOString(),
-          dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
-          trigger: context.trigger,
-        },
-      },
-      actorId: context.actorId,
-    });
-
-    await this.allocateWeeklySettlement(client, memberId, transaction.id, amountToApply);
-
-    return [
-      {
-        type: 'WEEKLY_COOPERATIVE',
-        amount: amountToApply,
-        targetId: transaction.id,
-        transactionId: transaction.id,
-        reference: transaction.reference,
-        expectedAmount: outstanding,
-        remainingAmount: Math.max(outstanding - amountToApply, 0),
-        repaymentStatus,
-      },
-    ];
+    } satisfies PreparedWeeklyDebtRecovery;
   }
 
-  private async applyPackageDebtRecovery(
-    client: any,
-    memberId: string,
-    walletId: string,
-    availableAmount: number,
-    context: DebtRecoveryContext,
-  ): Promise<SettlementRecord[]> {
-    const settlements: SettlementRecord[] = [];
+  private async preparePackageDebtRecovery(memberId: string, availableAmount: number) {
+    const entries: PreparedPackageDebtEntry[] = [];
+    const updates: PreparedPackageTargetUpdate[] = [];
     let remainingFunding = roundMoney(Math.max(availableAmount, 0));
     if (remainingFunding <= 0) {
-      return settlements;
+      return { entries, updates };
     }
 
-    const subscriptions = await client.packageSubscription.findMany({
+    const subscriptions = await this.prisma.packageSubscription.findMany({
       where: {
         memberId,
         member: { status: 'ACTIVE' },
@@ -1188,10 +1241,10 @@ export class WalletService {
       orderBy: [{ createdAt: 'asc' }],
     });
 
-    const packageCandidates = [];
+    const candidates = [];
     for (const subscription of subscriptions as any[]) {
-      await this.ensurePackageRepaymentSchedule(subscription.id, client);
-      const principalDue = await this.getScheduleDueAmount(client, 'PackageSubscription', subscription.id, true);
+      const scheduleItems = await this.ensurePackageRepaymentSchedule(subscription.id);
+      const principalDue = this.getScheduleDueAmountFromItems(scheduleItems, true);
       const amountDueNow = Math.min(principalDue.amount, Number(subscription.amountRemaining));
       const expectedAmount = Math.min(
         Number(subscription.penaltyAccrued) + amountDueNow,
@@ -1200,157 +1253,75 @@ export class WalletService {
       if (expectedAmount <= 0) {
         continue;
       }
-      packageCandidates.push({
+
+      candidates.push({
         subscription,
+        scheduleItems,
         amountDueNow,
         expectedAmount,
         dueAt: principalDue.dueAt ?? subscription.nextDueAt ?? subscription.createdAt ?? new Date(),
+        dueItems: principalDue.items,
       });
     }
-    packageCandidates.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
+    candidates.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
 
-    let sequence = 0;
-    for (const candidate of packageCandidates) {
+    for (const candidate of candidates) {
       if (remainingFunding <= 0) {
         break;
       }
 
-      const { subscription, amountDueNow, expectedAmount, dueAt } = candidate;
+      const { subscription, scheduleItems, amountDueNow, expectedAmount, dueAt, dueItems } = candidate;
       let remainingToSpend = roundMoney(Math.min(remainingFunding, expectedAmount));
       let penaltyAccrued = Number(subscription.penaltyAccrued);
       let amountRemaining = Number(subscription.amountRemaining);
       let amountPaid = Number(subscription.amountPaid);
       const packageName = subscription.package.name;
       const dueKey = dueAt.toISOString().slice(0, 10);
+      const allocationsForTarget: ScheduleAllocationPlan[] = [];
 
       if (penaltyAccrued > 0 && remainingToSpend > 0) {
         const penaltyPayment = roundMoney(Math.min(remainingToSpend, penaltyAccrued));
         const expectedPenaltyAmount = penaltyAccrued;
-        const repaymentStatus = this.repaymentAttemptStatus(penaltyPayment, expectedPenaltyAmount);
-        const reference = `${context.referenceBase}-PKG-PEN-${++sequence}`;
-        const transaction = await this.createDebtRecoveryTransaction(client, {
-          memberId,
-          walletId,
-          type: 'PACKAGE_PENALTY',
-          amount: penaltyPayment,
-          reference,
-          category: 'admin payment package penalty recovery',
-          description: `Debt recovery from approved wallet funding for ${packageName} penalty`,
-          metadata: {
-            fundingTransactionId: context.fundingTransactionId,
-            paymentId: context.paymentId,
-            subscriptionId: subscription.id,
-            packageName,
-            dueAt: dueAt.toISOString(),
-            dueCycle: dueKey,
-            adminAllocated: true,
-            trigger: context.trigger,
-            repaymentPhase: 'PACKAGE_PENALTY',
-            repaymentStatus,
-            expectedAmount: expectedPenaltyAmount,
-            paidAmount: penaltyPayment,
-            remainingAmount: Math.max(expectedPenaltyAmount - penaltyPayment, 0),
-          },
-          repaymentAttempt: {
-            phase: 'PACKAGE_PENALTY',
-            targetType: 'PackageSubscription',
-            targetId: subscription.id,
-            expectedAmount: expectedPenaltyAmount,
-            paidAmount: penaltyPayment,
-            remainingAmount: Math.max(expectedPenaltyAmount - penaltyPayment, 0),
-            status: repaymentStatus,
-            mode: 'ADMIN',
-            dueAt,
-            metadata: {
-              fundingTransactionId: context.fundingTransactionId,
-              paymentId: context.paymentId,
-              packageName,
-              dueCycle: dueKey,
-              trigger: context.trigger,
-            },
-          },
-          actorId: context.actorId,
-        });
-
         penaltyAccrued = roundMoney(penaltyAccrued - penaltyPayment);
         remainingToSpend = roundMoney(remainingToSpend - penaltyPayment);
         remainingFunding = roundMoney(remainingFunding - penaltyPayment);
-        settlements.push({
+
+        entries.push({
           type: 'PACKAGE_PENALTY',
+          subscriptionId: subscription.id,
+          packageName,
           amount: penaltyPayment,
-          targetId: subscription.id,
-          transactionId: transaction.id,
-          reference: transaction.reference,
           expectedAmount: expectedPenaltyAmount,
-          remainingAmount: Math.max(expectedPenaltyAmount - penaltyPayment, 0),
-          repaymentStatus,
+          remainingAmount: roundMoney(Math.max(expectedPenaltyAmount - penaltyPayment, 0)),
+          dueAt,
+          dueKey,
+          repaymentStatus: this.repaymentAttemptStatus(penaltyPayment, expectedPenaltyAmount),
         });
       }
 
       if (amountRemaining > 0 && remainingToSpend > 0) {
         const principalPayment = roundMoney(Math.min(remainingToSpend, amountRemaining));
         const expectedPrincipalAmount = Math.max(Math.min(amountDueNow, amountRemaining), principalPayment);
-        const repaymentStatus = this.repaymentAttemptStatus(principalPayment, expectedPrincipalAmount);
-        const reference = `${context.referenceBase}-PKG-${++sequence}`;
-        const transaction = await this.createDebtRecoveryTransaction(client, {
-          memberId,
-          walletId,
-          type: 'PACKAGE_SUBSCRIPTION',
-          amount: principalPayment,
-          reference,
-          category: 'admin payment package recovery',
-          description: `Debt recovery from approved wallet funding for ${packageName}`,
-          metadata: {
-            fundingTransactionId: context.fundingTransactionId,
-            paymentId: context.paymentId,
-            subscriptionId: subscription.id,
-            packageName,
-            dueAt: dueAt.toISOString(),
-            dueCycle: dueKey,
-            adminAllocated: true,
-            trigger: context.trigger,
-            repaymentPhase: 'PACKAGE',
-            repaymentStatus,
-            expectedAmount: expectedPrincipalAmount,
-            paidAmount: principalPayment,
-            remainingAmount: Math.max(expectedPrincipalAmount - principalPayment, 0),
-          },
-          repaymentAttempt: {
-            phase: 'PACKAGE',
-            targetType: 'PackageSubscription',
-            targetId: subscription.id,
-            expectedAmount: expectedPrincipalAmount,
-            paidAmount: principalPayment,
-            remainingAmount: Math.max(expectedPrincipalAmount - principalPayment, 0),
-            status: repaymentStatus,
-            mode: 'ADMIN',
-            dueAt,
-            metadata: {
-              fundingTransactionId: context.fundingTransactionId,
-              paymentId: context.paymentId,
-              packageName,
-              dueCycle: dueKey,
-              trigger: context.trigger,
-            },
-          },
-          actorId: context.actorId,
-        });
+        const allocationPlan = this.buildScheduleAllocationPlan(dueItems, principalPayment);
+        allocationsForTarget.push(...allocationPlan.allocations);
 
-        await this.allocateRepaymentSchedule(client, 'PackageSubscription', subscription.id, principalPayment, true);
-        const scheduleTotals = await this.getScheduleTotals(client, 'PackageSubscription', subscription.id);
-        amountRemaining = scheduleTotals.remaining;
-        amountPaid = scheduleTotals.paid;
+        const totals = this.getScheduleTotalsAfterAllocations(scheduleItems, allocationsForTarget);
+        amountRemaining = totals.remaining;
+        amountPaid = totals.paid;
         remainingToSpend = roundMoney(remainingToSpend - principalPayment);
         remainingFunding = roundMoney(remainingFunding - principalPayment);
-        settlements.push({
+
+        entries.push({
           type: 'PACKAGE_SUBSCRIPTION',
+          subscriptionId: subscription.id,
+          packageName,
           amount: principalPayment,
-          targetId: subscription.id,
-          transactionId: transaction.id,
-          reference: transaction.reference,
           expectedAmount: expectedPrincipalAmount,
-          remainingAmount: Math.max(expectedPrincipalAmount - principalPayment, 0),
-          repaymentStatus,
+          remainingAmount: roundMoney(Math.max(expectedPrincipalAmount - principalPayment, 0)),
+          dueAt,
+          dueKey,
+          repaymentStatus: this.repaymentAttemptStatus(principalPayment, expectedPrincipalAmount),
+          scheduleAllocations: allocationPlan.allocations,
         });
       }
 
@@ -1358,38 +1329,35 @@ export class WalletService {
         roundMoney(Number(subscription.penaltyAccrued) - penaltyAccrued) > 0 ||
         roundMoney(Number(subscription.amountRemaining) - amountRemaining) > 0;
       if (subscriptionWasTouched) {
+        const totals = this.getScheduleTotalsAfterAllocations(scheduleItems, allocationsForTarget);
         const nextStatus = amountRemaining <= 0 && penaltyAccrued <= 0 ? 'COMPLETED' : 'IN_PROGRESS';
-        await client.packageSubscription.update({
-          where: { id: subscription.id },
-          data: {
-            penaltyAccrued,
-            amountRemaining,
-            amountPaid,
-            status: nextStatus,
-            completedAt: nextStatus === 'COMPLETED' ? new Date() : null,
-            nextDueAt: nextStatus === 'COMPLETED' ? null : await this.nextOpenScheduleDueDate(client, 'PackageSubscription', subscription.id),
-          },
+        updates.push({
+          subscriptionId: subscription.id,
+          previousPenaltyAccrued: Number(subscription.penaltyAccrued),
+          previousAmountRemaining: Number(subscription.amountRemaining),
+          previousAmountPaid: Number(subscription.amountPaid),
+          previousStatus: subscription.status,
+          penaltyAccrued,
+          amountRemaining,
+          amountPaid,
+          status: nextStatus,
+          completedAt: nextStatus === 'COMPLETED' ? new Date() : null,
+          nextDueAt: nextStatus === 'COMPLETED' ? null : totals.nextDueAt,
         });
       }
     }
 
-    return settlements;
+    return { entries, updates };
   }
 
-  private async applyLoanDebtRecovery(
-    client: any,
-    memberId: string,
-    walletId: string,
-    availableAmount: number,
-    context: DebtRecoveryContext,
-  ): Promise<SettlementRecord[]> {
-    const settlements: SettlementRecord[] = [];
+  private async prepareLoanDebtRecovery(memberId: string, availableAmount: number) {
+    const entries: PreparedLoanDebtEntry[] = [];
     let remainingFunding = roundMoney(Math.max(availableAmount, 0));
     if (remainingFunding <= 0) {
-      return settlements;
+      return entries;
     }
 
-    const activeLoans = await client.loanApplication.findMany({
+    const activeLoans = await this.prisma.loanApplication.findMany({
       where: {
         memberId,
         member: { status: 'ACTIVE' },
@@ -1400,115 +1368,512 @@ export class WalletService {
       orderBy: [{ submittedAt: 'asc' }],
     });
 
-    const loanCandidates = [];
+    const candidates = [];
     for (const loan of activeLoans as any[]) {
       const remainingBalance = Number(loan.remainingBalance);
-      await this.ensureLoanRepaymentSchedule(loan.id, client);
-      const principalDue = await this.getScheduleDueAmount(client, 'LoanApplication', loan.id, true);
+      const scheduleItems = await this.ensureLoanRepaymentSchedule(loan.id);
+      const principalDue = this.getScheduleDueAmountFromItems(scheduleItems, true);
       const expectedAmount = Math.min(principalDue.amount, remainingBalance);
       if (expectedAmount <= 0) {
         continue;
       }
-      loanCandidates.push({
+
+      candidates.push({
         loan,
-        remainingBalance,
+        scheduleItems,
         expectedAmount,
         dueAt: principalDue.dueAt ?? loan.nextRepaymentAt ?? loan.dueDate ?? loan.submittedAt ?? new Date(),
+        dueItems: principalDue.items,
       });
     }
-    loanCandidates.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
+    candidates.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
 
-    let sequence = 0;
-    for (const candidate of loanCandidates) {
+    for (const candidate of candidates) {
       if (remainingFunding <= 0) {
         break;
       }
 
-      const { loan, remainingBalance, expectedAmount, dueAt } = candidate;
+      const { loan, scheduleItems, expectedAmount, dueAt, dueItems } = candidate;
       const amountToApply = roundMoney(Math.min(remainingFunding, expectedAmount));
       if (expectedAmount <= 0 || amountToApply <= 0) {
         continue;
       }
 
+      const allocationPlan = this.buildScheduleAllocationPlan(dueItems, amountToApply);
+      const totals = this.getScheduleTotalsAfterAllocations(scheduleItems, allocationPlan.allocations);
+      const explicitDisbursedAmount = Number(loan.disbursedAmount ?? 0);
+      const disbursedAmount = explicitDisbursedAmount > 0 ? explicitDisbursedAmount : Number(loan.amount);
+      const isFullyRepaid = totals.remaining <= 0 && disbursedAmount >= Number(loan.amount);
       const dueKey = dueAt.toISOString().slice(0, 10);
       const loanName = loan.purpose || `loan for ${loan.member.fullName}`;
-      const repaymentStatus = this.repaymentAttemptStatus(amountToApply, expectedAmount);
-      const reference = `${context.referenceBase}-LOAN-${++sequence}`;
+
+      entries.push({
+        loanId: loan.id,
+        loanName,
+        amount: amountToApply,
+        expectedAmount,
+        remainingAmount: roundMoney(Math.max(expectedAmount - amountToApply, 0)),
+        dueAt,
+        dueKey,
+        repaymentStatus: this.repaymentAttemptStatus(amountToApply, expectedAmount),
+        scheduleAllocations: allocationPlan.allocations,
+        member: {
+          fullName: loan.member.fullName,
+          membershipNumber: loan.member.membershipNumber,
+        },
+        update: {
+          previousRemainingBalance: Number(loan.remainingBalance),
+          previousStatus: loan.status,
+          remainingBalance: totals.remaining,
+          status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
+          nextRepaymentAt: isFullyRepaid ? null : totals.nextDueAt,
+        },
+      });
+
+      remainingFunding = roundMoney(remainingFunding - amountToApply);
+    }
+
+    return entries;
+  }
+
+  private async applyPreparedDebtRecovery(
+    client: any,
+    memberId: string,
+    walletId: string,
+    fundingAmount: number,
+    context: DebtRecoveryContext,
+    plan: PreparedFundingDebtRecoveryPlan,
+  ) {
+    const settlements: SettlementRecord[] = [];
+
+    if (plan.weekly?.amount) {
+      const weekly = plan.weekly;
+      const reference = `${context.referenceBase}-WEEKLY`;
       const transaction = await this.createDebtRecoveryTransaction(client, {
         memberId,
         walletId,
-        type: 'LOAN_REPAYMENT',
-        amount: amountToApply,
+        type: 'WEEKLY_COOPERATIVE',
+        amount: weekly.amount,
         reference,
-        category: 'admin payment loan recovery',
-        description: `Debt recovery from approved wallet funding for ${loanName}`,
+        category: 'admin payment debt recovery',
+        description: 'Debt recovery from approved wallet funding for weekly deductions',
         metadata: {
           fundingTransactionId: context.fundingTransactionId,
           paymentId: context.paymentId,
-          loanId: loan.id,
-          loanName,
-          memberName: loan.member.fullName,
-          membershipNumber: loan.member.membershipNumber,
-          adminAllocated: true,
+          deductionDate: startOfIsoDay(new Date()).toISOString(),
+          memberName: weekly.member.fullName,
+          membershipNumber: weekly.member.membershipNumber,
           trigger: context.trigger,
-          repaymentPhase: 'LOAN',
-          repaymentStatus,
-          expectedAmount,
-          paidAmount: amountToApply,
-          remainingAmount: Math.max(expectedAmount - amountToApply, 0),
-          dueAt: dueAt.toISOString(),
-          dueCycle: dueKey,
+          adminAllocated: true,
+          settlementPriority: 'WEEKLY',
+          repaymentPhase: 'WEEKLY_DEDUCTION',
+          repaymentStatus: weekly.repaymentStatus,
+          expectedAmount: weekly.outstanding,
+          paidAmount: weekly.amount,
+          remainingAmount: roundMoney(Math.max(weekly.outstanding - weekly.amount, 0)),
+          dueFrom: weekly.firstDueAt.toISOString(),
+          dueTo: weekly.lastDueAt.toISOString(),
+          dueCycleIds: weekly.dueCycleIds,
         },
         repaymentAttempt: {
-          phase: 'LOAN',
-          targetType: 'LoanApplication',
-          targetId: loan.id,
-          expectedAmount,
-          paidAmount: amountToApply,
-          remainingAmount: Math.max(expectedAmount - amountToApply, 0),
-          status: repaymentStatus,
+          phase: 'WEEKLY_DEDUCTION',
+          targetType: 'WeeklyDeduction',
+          targetId: memberId,
+          expectedAmount: weekly.outstanding,
+          paidAmount: weekly.amount,
+          remainingAmount: roundMoney(Math.max(weekly.outstanding - weekly.amount, 0)),
+          status: weekly.repaymentStatus,
           mode: 'ADMIN',
-          dueAt,
+          dueAt: weekly.firstDueAt,
           metadata: {
             fundingTransactionId: context.fundingTransactionId,
             paymentId: context.paymentId,
-            loanName,
-            dueCycle: dueKey,
+            dueFrom: weekly.firstDueAt.toISOString(),
+            dueTo: weekly.lastDueAt.toISOString(),
+            dueCycleIds: weekly.dueCycleIds,
             trigger: context.trigger,
           },
         },
         actorId: context.actorId,
       });
 
-      await this.allocateRepaymentSchedule(client, 'LoanApplication', loan.id, amountToApply, true);
-      const scheduleTotals = await this.getScheduleTotals(client, 'LoanApplication', loan.id);
-      const nextRemaining = roundMoney(Math.max(remainingBalance - amountToApply, 0));
-      const explicitDisbursedAmount = Number(loan.disbursedAmount ?? 0);
-      const disbursedAmount = explicitDisbursedAmount > 0 ? explicitDisbursedAmount : Number(loan.amount);
-      const isFullyRepaid = nextRemaining <= 0 && disbursedAmount >= Number(loan.amount);
-      await client.loanApplication.update({
-        where: { id: loan.id },
-        data: {
-          remainingBalance: scheduleTotals.remaining,
-          status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
-          nextRepaymentAt: isFullyRepaid ? null : await this.nextOpenScheduleDueDate(client, 'LoanApplication', loan.id),
-        },
-      });
-
-      remainingFunding = roundMoney(remainingFunding - amountToApply);
+      await this.applyWeeklyAllocationPlan(client, memberId, transaction.id, weekly);
       settlements.push({
-        type: 'LOAN_REPAYMENT',
-        amount: amountToApply,
-        targetId: loan.id,
+        type: 'WEEKLY_COOPERATIVE',
+        amount: weekly.amount,
+        targetId: transaction.id,
         transactionId: transaction.id,
         reference: transaction.reference,
-        expectedAmount,
-        remainingAmount: Math.max(expectedAmount - amountToApply, 0),
-        repaymentStatus,
+        expectedAmount: weekly.outstanding,
+        remainingAmount: roundMoney(Math.max(weekly.outstanding - weekly.amount, 0)),
+        repaymentStatus: weekly.repaymentStatus,
       });
     }
 
-    return settlements;
+    let packageSequence = 0;
+    for (const entry of plan.packages.entries) {
+      const reference =
+        entry.type === 'PACKAGE_PENALTY'
+          ? `${context.referenceBase}-PKG-PEN-${++packageSequence}`
+          : `${context.referenceBase}-PKG-${++packageSequence}`;
+      const transaction = await this.createDebtRecoveryTransaction(client, {
+        memberId,
+        walletId,
+        type: entry.type,
+        amount: entry.amount,
+        reference,
+        category:
+          entry.type === 'PACKAGE_PENALTY'
+            ? 'admin payment package penalty recovery'
+            : 'admin payment package recovery',
+        description:
+          entry.type === 'PACKAGE_PENALTY'
+            ? `Debt recovery from approved wallet funding for ${entry.packageName} penalty`
+            : `Debt recovery from approved wallet funding for ${entry.packageName}`,
+        metadata: {
+          fundingTransactionId: context.fundingTransactionId,
+          paymentId: context.paymentId,
+          subscriptionId: entry.subscriptionId,
+          packageName: entry.packageName,
+          dueAt: entry.dueAt.toISOString(),
+          dueCycle: entry.dueKey,
+          adminAllocated: true,
+          trigger: context.trigger,
+          repaymentPhase: entry.type === 'PACKAGE_PENALTY' ? 'PACKAGE_PENALTY' : 'PACKAGE',
+          repaymentStatus: entry.repaymentStatus,
+          expectedAmount: entry.expectedAmount,
+          paidAmount: entry.amount,
+          remainingAmount: entry.remainingAmount,
+        },
+        repaymentAttempt: {
+          phase: entry.type === 'PACKAGE_PENALTY' ? 'PACKAGE_PENALTY' : 'PACKAGE',
+          targetType: 'PackageSubscription',
+          targetId: entry.subscriptionId,
+          expectedAmount: entry.expectedAmount,
+          paidAmount: entry.amount,
+          remainingAmount: entry.remainingAmount,
+          status: entry.repaymentStatus,
+          mode: 'ADMIN',
+          dueAt: entry.dueAt,
+          metadata: {
+            fundingTransactionId: context.fundingTransactionId,
+            paymentId: context.paymentId,
+            packageName: entry.packageName,
+            dueCycle: entry.dueKey,
+            trigger: context.trigger,
+          },
+        },
+        actorId: context.actorId,
+      });
+
+      if (entry.type === 'PACKAGE_SUBSCRIPTION' && entry.scheduleAllocations?.length) {
+        await this.applyScheduleAllocationPlan(client, entry.scheduleAllocations);
+      }
+
+      settlements.push({
+        type: entry.type,
+        amount: entry.amount,
+        targetId: entry.subscriptionId,
+        transactionId: transaction.id,
+        reference: transaction.reference,
+        expectedAmount: entry.expectedAmount,
+        remainingAmount: entry.remainingAmount,
+        repaymentStatus: entry.repaymentStatus,
+      });
+    }
+
+    for (const update of plan.packages.updates) {
+      const result = await client.packageSubscription.updateMany({
+        where: {
+          id: update.subscriptionId,
+          penaltyAccrued: update.previousPenaltyAccrued,
+          amountRemaining: update.previousAmountRemaining,
+          amountPaid: update.previousAmountPaid,
+          status: update.previousStatus,
+        },
+        data: {
+          penaltyAccrued: update.penaltyAccrued,
+          amountRemaining: update.amountRemaining,
+          amountPaid: update.amountPaid,
+          status: update.status,
+          completedAt: update.completedAt,
+          nextDueAt: update.nextDueAt,
+        },
+      });
+      if (result.count < 1) {
+        throw new BadRequestException('Package repayment balance changed during approval. Please retry the approval.');
+      }
+    }
+
+    let loanSequence = 0;
+    for (const loan of plan.loans) {
+      const reference = `${context.referenceBase}-LOAN-${++loanSequence}`;
+      const transaction = await this.createDebtRecoveryTransaction(client, {
+        memberId,
+        walletId,
+        type: 'LOAN_REPAYMENT',
+        amount: loan.amount,
+        reference,
+        category: 'admin payment loan recovery',
+        description: `Debt recovery from approved wallet funding for ${loan.loanName}`,
+        metadata: {
+          fundingTransactionId: context.fundingTransactionId,
+          paymentId: context.paymentId,
+          loanId: loan.loanId,
+          loanName: loan.loanName,
+          memberName: loan.member.fullName,
+          membershipNumber: loan.member.membershipNumber,
+          adminAllocated: true,
+          trigger: context.trigger,
+          repaymentPhase: 'LOAN',
+          repaymentStatus: loan.repaymentStatus,
+          expectedAmount: loan.expectedAmount,
+          paidAmount: loan.amount,
+          remainingAmount: loan.remainingAmount,
+          dueAt: loan.dueAt.toISOString(),
+          dueCycle: loan.dueKey,
+        },
+        repaymentAttempt: {
+          phase: 'LOAN',
+          targetType: 'LoanApplication',
+          targetId: loan.loanId,
+          expectedAmount: loan.expectedAmount,
+          paidAmount: loan.amount,
+          remainingAmount: loan.remainingAmount,
+          status: loan.repaymentStatus,
+          mode: 'ADMIN',
+          dueAt: loan.dueAt,
+          metadata: {
+            fundingTransactionId: context.fundingTransactionId,
+            paymentId: context.paymentId,
+            loanName: loan.loanName,
+            dueCycle: loan.dueKey,
+            trigger: context.trigger,
+          },
+        },
+        actorId: context.actorId,
+      });
+
+      await this.applyScheduleAllocationPlan(client, loan.scheduleAllocations);
+      const loanUpdate = await client.loanApplication.updateMany({
+        where: {
+          id: loan.loanId,
+          remainingBalance: loan.update.previousRemainingBalance,
+          status: loan.update.previousStatus,
+        },
+        data: {
+          remainingBalance: loan.update.remainingBalance,
+          status: loan.update.status,
+          nextRepaymentAt: loan.update.nextRepaymentAt,
+        },
+      });
+      if (loanUpdate.count < 1) {
+        throw new BadRequestException('Loan repayment balance changed during approval. Please retry the approval.');
+      }
+
+      settlements.push({
+        type: 'LOAN_REPAYMENT',
+        amount: loan.amount,
+        targetId: loan.loanId,
+        transactionId: transaction.id,
+        reference: transaction.reference,
+        expectedAmount: loan.expectedAmount,
+        remainingAmount: loan.remainingAmount,
+        repaymentStatus: loan.repaymentStatus,
+      });
+    }
+
+    const debtSettlementAmount = roundMoney(settlements.reduce((sum, settlement) => sum + settlement.amount, 0));
+    return {
+      settlements,
+      debtSettlementAmount,
+      walletCreditAmount: roundMoney(Math.max(fundingAmount - debtSettlementAmount, 0)),
+    };
+  }
+
+  private buildWeeklyAllocationPlan(cycles: any[], amount: number) {
+    let remaining = roundMoney(Math.max(amount, 0));
+    const allocations: WeeklyCycleAllocationPlan[] = [];
+
+    for (const cycle of cycles) {
+      if (remaining <= 0) {
+        break;
+      }
+
+      const cycleAmount = Number(cycle.amount);
+      const previousPaidAmount = Number(cycle.amountPaid);
+      const openAmount = Math.max(cycleAmount - previousPaidAmount, 0);
+      const paidAmount = roundMoney(Math.min(openAmount, remaining));
+      if (paidAmount <= 0) {
+        continue;
+      }
+
+      const nextPaidAmount = roundMoney(previousPaidAmount + paidAmount);
+      allocations.push({
+        cycleId: cycle.id,
+        dueDate: cycle.dueDate,
+        expectedAmount: cycleAmount,
+        previousPaidAmount,
+        paidAmount,
+        nextPaidAmount,
+        nextStatus: weeklyCycleStatus(cycle.dueDate, cycleAmount, nextPaidAmount),
+      });
+      remaining = roundMoney(remaining - paidAmount);
+    }
+
+    return allocations;
+  }
+
+  private buildScheduleAllocationPlan(items: any[], amount: number) {
+    let remaining = roundMoney(Math.max(amount, 0));
+    const allocations: ScheduleAllocationPlan[] = [];
+
+    for (const item of items) {
+      if (remaining <= 0) {
+        break;
+      }
+
+      const expectedAmount = Number(item.expectedAmount);
+      const previousPaidAmount = Number(item.paidAmount);
+      const openAmount = Math.max(Number(item.remainingAmount), 0);
+      const paidAmount = roundMoney(Math.min(openAmount, remaining));
+      if (paidAmount <= 0) {
+        continue;
+      }
+
+      const nextPaidAmount = roundMoney(previousPaidAmount + paidAmount);
+      const nextRemainingAmount = roundMoney(Math.max(expectedAmount - nextPaidAmount, 0));
+      allocations.push({
+        itemId: item.id,
+        sequence: item.sequence,
+        dueDate: item.dueDate,
+        expectedAmount,
+        previousPaidAmount,
+        paidAmount,
+        nextPaidAmount,
+        nextRemainingAmount,
+        nextStatus: this.scheduleItemStatus(item.dueDate, expectedAmount, nextPaidAmount),
+      });
+      remaining = roundMoney(remaining - paidAmount);
+    }
+
+    return {
+      allocations,
+      appliedAmount: roundMoney(amount - remaining),
+      unallocatedAmount: remaining,
+    };
+  }
+
+  private getScheduleDueAmountFromItems(items: any[], dueOnly = true) {
+    const dueBefore = addDays(startOfIsoDay(new Date()), 1);
+    const dueItems = [...items]
+      .filter((item) => Number(item.remainingAmount) > 0)
+      .filter((item) => !dueOnly || item.dueDate.getTime() < dueBefore.getTime())
+      .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime() || a.sequence - b.sequence);
+
+    return {
+      amount: roundMoney(dueItems.reduce((sum, item) => sum + Number(item.remainingAmount), 0)),
+      dueAt: dueItems[0]?.dueDate ?? null,
+      items: dueItems,
+    };
+  }
+
+  private getScheduleTotalsAfterAllocations(items: any[], allocations: ScheduleAllocationPlan[]) {
+    const allocationByItem = new Map(allocations.map((allocation) => [allocation.itemId, allocation]));
+    let expected = 0;
+    let paid = 0;
+    let remaining = 0;
+    let nextDueAt: Date | null = null;
+
+    for (const item of [...items].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime() || a.sequence - b.sequence)) {
+      const allocation = allocationByItem.get(item.id);
+      const itemExpected = Number(item.expectedAmount);
+      const itemPaid = allocation ? allocation.nextPaidAmount : Number(item.paidAmount);
+      const itemRemaining = allocation ? allocation.nextRemainingAmount : Number(item.remainingAmount);
+
+      expected = roundMoney(expected + itemExpected);
+      paid = roundMoney(paid + itemPaid);
+      remaining = roundMoney(remaining + itemRemaining);
+
+      if (!nextDueAt && itemRemaining > 0) {
+        nextDueAt = item.dueDate;
+      }
+    }
+
+    return { expected, paid, remaining, nextDueAt };
+  }
+
+  private async applyWeeklyAllocationPlan(
+    client: any,
+    memberId: string,
+    transactionId: string,
+    plan: PreparedWeeklyDebtRecovery,
+  ) {
+    if (plan.amount <= 0 || !plan.allocations.length) return;
+
+    const payment = await client.weeklyDeductionPayment.create({
+      data: {
+        memberId,
+        transactionId,
+        amount: plan.amount,
+        mode: 'SETTLEMENT',
+        metadata: {
+          transactionId,
+          settledFromFundingDebtRecovery: true,
+        },
+      },
+    });
+
+    await client.weeklyDeductionAllocation.createMany({
+      data: plan.allocations.map((allocation) => ({
+        paymentId: payment.id,
+        cycleId: allocation.cycleId,
+        amount: allocation.paidAmount,
+      })),
+      skipDuplicates: true,
+    });
+
+    await Promise.all(
+      plan.allocations.map(async (allocation) => {
+        const result = await client.weeklyDeductionCycle.updateMany({
+          where: {
+            id: allocation.cycleId,
+            amountPaid: allocation.previousPaidAmount,
+          },
+          data: {
+            amountPaid: allocation.nextPaidAmount,
+            status: allocation.nextStatus,
+          },
+        });
+        if (result.count < 1) {
+          throw new BadRequestException('Weekly deduction balance changed during approval. Please retry the approval.');
+        }
+      }),
+    );
+  }
+
+  private async applyScheduleAllocationPlan(client: any, allocations: ScheduleAllocationPlan[]) {
+    if (!allocations.length) return;
+
+    await Promise.all(
+      allocations.map(async (allocation) => {
+        const result = await (client as any).repaymentScheduleItem.updateMany({
+          where: {
+            id: allocation.itemId,
+            paidAmount: allocation.previousPaidAmount,
+            remainingAmount: roundMoney(Math.max(allocation.expectedAmount - allocation.previousPaidAmount, 0)),
+          },
+          data: {
+            paidAmount: allocation.nextPaidAmount,
+            remainingAmount: allocation.nextRemainingAmount,
+            status: allocation.nextStatus,
+          },
+        });
+        if (result.count < 1) {
+          throw new BadRequestException('Repayment schedule balance changed during approval. Please retry the approval.');
+        }
+      }),
+    );
   }
 
   private async createDebtRecoveryTransaction(

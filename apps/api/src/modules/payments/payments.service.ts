@@ -126,8 +126,26 @@ export class PaymentsService {
     const grossAmount = Number(payment.amount);
     const { charge, netAmount } = await this.membershipChargeService.applyCharge(grossAmount);
     const reference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const debtRecoveryPlan = await this.walletService.prepareWalletFundingDebtRecovery(payment.memberId, netAmount);
 
-    const { updated, fundingResult } = await this.prisma.$transaction(async (tx) => {
+    const { updated, fundingResult } = await this.prisma.runTransaction('payments.approve', async (tx) => {
+      const approvalGuard = await tx.payment.updateMany({
+        where: { id, status: 'PENDING' },
+        data: {
+          status: 'APPROVED',
+          verifiedById: actorId,
+          verifiedAt: new Date(),
+          netCreditAmount: netAmount,
+          debtSettlementAmount: 0,
+          walletCreditAmount: 0,
+          approvalReference: reference,
+        },
+      });
+
+      if (approvalGuard.count < 1) {
+        throw new BadRequestException('Payment is not pending');
+      }
+
       const fundingResult = await this.walletService.applyWalletFundingWithDebtRecovery(
         tx,
         payment.memberId,
@@ -148,6 +166,7 @@ export class PaymentsService {
             netAmount,
             trigger: 'PAYMENT_APPROVAL',
           },
+          debtRecoveryPlan,
         },
       );
 
@@ -208,13 +227,8 @@ export class PaymentsService {
       const updated = await tx.payment.update({
         where: { id },
         data: {
-          status: 'APPROVED',
-          verifiedById: actorId,
-          verifiedAt: new Date(),
-          netCreditAmount: netAmount,
           debtSettlementAmount: fundingResult.debtSettlementAmount,
           walletCreditAmount: fundingResult.walletCreditAmount,
-          approvalReference: reference,
         },
       });
 

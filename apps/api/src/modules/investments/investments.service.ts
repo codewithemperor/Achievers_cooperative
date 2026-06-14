@@ -412,7 +412,7 @@ export class InvestmentsService {
     }
 
     const reference = `INV-CANCEL-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.runTransaction('investments.approveCancellation', async (tx) => {
       await tx.investmentSubscription.update({
         where: { id: request.investmentId },
         data: { status: 'REJECTED' },

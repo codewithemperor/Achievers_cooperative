@@ -529,13 +529,15 @@ export class MembersService {
 
     await this.validateMemberProfileUpdate(member.id, member.userId, dto);
     const data = this.buildMemberUpdateData(dto);
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const nextPasswordHash =
+      dto.phoneNumber && dto.phoneNumber !== member.phoneNumber ? await bcrypt.hash(dto.phoneNumber, 12) : null;
+    const updated = await this.prisma.runTransaction('members.updateProfile', async (tx) => {
       const userData: { email?: string; passwordHash?: string } = {};
       if (dto.email) {
         userData.email = dto.email;
       }
-      if (dto.phoneNumber && dto.phoneNumber !== member.phoneNumber) {
-        userData.passwordHash = await bcrypt.hash(dto.phoneNumber, 12);
+      if (nextPasswordHash) {
+        userData.passwordHash = nextPasswordHash;
       }
       if (Object.keys(userData).length) {
         await tx.user.update({
@@ -565,13 +567,15 @@ export class MembersService {
 
     await this.validateMemberProfileUpdate(member.id, member.userId, dto);
     const data = this.buildMemberUpdateData(dto);
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const nextPasswordHash =
+      dto.phoneNumber && dto.phoneNumber !== member.phoneNumber ? await bcrypt.hash(dto.phoneNumber, 12) : null;
+    const updated = await this.prisma.runTransaction('members.updateById', async (tx) => {
       const userData: { email?: string; passwordHash?: string } = {};
       if (dto.email) {
         userData.email = dto.email;
       }
-      if (dto.phoneNumber && dto.phoneNumber !== member.phoneNumber) {
-        userData.passwordHash = await bcrypt.hash(dto.phoneNumber, 12);
+      if (nextPasswordHash) {
+        userData.passwordHash = nextPasswordHash;
       }
       if (Object.keys(userData).length) {
         await tx.user.update({
@@ -715,15 +719,16 @@ export class MembersService {
     }
 
     const wallet = await this.walletService.getMemberWallet(memberId);
-    await this.prisma.$transaction([
-      this.prisma.wallet.update({
+    const cooperativeWallet = await this.ensureCooperativeWallet();
+    await this.prisma.runTransaction('members.applyMembershipFee', async (tx) => {
+      await tx.wallet.update({
         where: { id: wallet.id },
         data: {
           availableBalance: { decrement: membershipFeeAmount },
           pendingBalance: membershipFeeAmount,
         },
-      }),
-      this.prisma.transaction.create({
+      });
+      await tx.transaction.create({
         data: {
           walletId: wallet.id,
           type: 'MEMBERSHIP_FEE',
@@ -738,9 +743,9 @@ export class MembersService {
             outstandingAmount: membershipFeeAmount,
           } as any,
         },
-      }),
-      this.prisma.cooperativeWallet.upsert({
-        where: { id: (await this.ensureCooperativeWallet()).id },
+      });
+      await tx.cooperativeWallet.upsert({
+        where: { id: cooperativeWallet.id },
         update: {
           balance: { increment: membershipFeeAmount },
           totalIncome: { increment: membershipFeeAmount },
@@ -749,20 +754,18 @@ export class MembersService {
           balance: membershipFeeAmount,
           totalIncome: membershipFeeAmount,
         },
-      }),
-    ]);
-
-    const cooperativeWallet = await this.ensureCooperativeWallet();
-    await this.prisma.cooperativeEntry.create({
-      data: {
-        walletId: cooperativeWallet.id,
-        type: 'INCOME',
-        amount: membershipFeeAmount,
-        category: 'membership fee',
-        description: `Membership fee recorded for ${fullName}`,
-        reference,
-        createdById: actorId,
-      },
+      });
+      await tx.cooperativeEntry.create({
+        data: {
+          walletId: cooperativeWallet.id,
+          type: 'INCOME',
+          amount: membershipFeeAmount,
+          category: 'membership fee',
+          description: `Membership fee recorded for ${fullName}`,
+          reference,
+          createdById: actorId,
+        },
+      });
     });
   }
 
