@@ -55,25 +55,22 @@ export class CooperativeWalletService {
     const ledgerPhysicalTreasuryCash = ledgerAccountTotal('PHYSICAL_TREASURY_CASH');
     const ledgerMemberWalletLiability = -ledgerAccountTotal('MEMBER_WALLET_LIABILITY');
     const ledgerAssociationAvailable = -ledgerAccountTotal('ASSOCIATION_AVAILABLE');
+    const memberWalletRows = await this.prisma.wallet.findMany({
+      select: { availableBalance: true },
+    });
+    const positiveMemberWalletHoldings = memberWalletRows.reduce(
+      (sum, memberWallet) => sum + Math.max(Number(memberWallet.availableBalance ?? 0), 0),
+      0,
+    );
     const cachedBalancesAreEmpty =
       Math.abs(physicalTreasuryCash) < 0.01 &&
       Math.abs(memberWalletLiability) < 0.01 &&
       Math.abs(associationAvailableBalance) < 0.01;
 
     if (cachedBalancesAreEmpty) {
-      const walletTotals = await this.prisma.wallet.aggregate({
-        _sum: {
-          availableBalance: true,
-          pendingBalance: true,
-        },
-      });
-      const memberWalletsCurrentBalance =
-        Number(walletTotals._sum.availableBalance ?? 0) +
-        Number(walletTotals._sum.pendingBalance ?? 0);
-
       memberWalletLiability = Math.max(
         ledgerMemberWalletLiability,
-        memberWalletsCurrentBalance,
+        positiveMemberWalletHoldings,
       );
       associationAvailableBalance = Math.max(
         ledgerAssociationAvailable,
@@ -93,6 +90,13 @@ export class CooperativeWalletService {
           balance: associationAvailableBalance,
         },
       });
+    } else {
+      memberWalletLiability = positiveMemberWalletHoldings;
+      physicalTreasuryCash = Math.max(
+        physicalTreasuryCash,
+        ledgerPhysicalTreasuryCash,
+        memberWalletLiability + associationAvailableBalance,
+      );
     }
 
     return {

@@ -18,6 +18,7 @@ interface ConfigItem {
 
 const labels: Record<string, string> = {
   MEMBERSHIP_FEE_AMOUNT: "Membership Fee Amount",
+  LOAN_BOND_AMOUNT: "Loan Bond Amount",
   COOPERATIVE_DEDUCTION_DAY: "Weekly Deduction Day",
   COOPERATIVE_DEDUCTION_AMOUNT: "Weekly Deduction Amount",
   COOPERATIVE_DEDUCTION_ENABLED: "Weekly Deduction Enabled",
@@ -34,6 +35,8 @@ const labels: Record<string, string> = {
 
 const descriptions: Record<string, string> = {
   MEMBERSHIP_FEE_AMOUNT: "Automatically posted during member registration.",
+  LOAN_BOND_AMOUNT:
+    "Amount members must pay from wallet before an approved loan can be disbursed.",
   COOPERATIVE_DEDUCTION_DAY:
     "The weekday on which weekly deductions become due.",
   COOPERATIVE_DEDUCTION_AMOUNT:
@@ -184,6 +187,7 @@ export default function SettingsPage() {
                 const isBoolean = item.key === "COOPERATIVE_DEDUCTION_ENABLED";
                 const isNumber =
                   item.key === "MEMBERSHIP_FEE_AMOUNT" ||
+                  item.key === "LOAN_BOND_AMOUNT" ||
                   item.key === "COOPERATIVE_DEDUCTION_AMOUNT";
 
                 return (

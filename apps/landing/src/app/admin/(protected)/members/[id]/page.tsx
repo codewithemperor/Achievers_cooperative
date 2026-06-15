@@ -298,6 +298,8 @@ export default function MemberDetailPage() {
     (sum, account) => sum + Number(account.balance ?? 0),
     0,
   );
+  const walletBalance = Number(member.data?.wallet?.availableBalance ?? 0);
+  const walletHasDebt = walletBalance < 0;
   const identificationPicture = watch("identificationPicture");
   const referrerOptions = (memberSearch.data?.items ?? []).filter(
     (item) => item.id !== member.data?.id,
@@ -441,12 +443,16 @@ export default function MemberDetailPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <DashboardMetricCard
-          description="Spendable wallet balance currently held by this member."
+          description={
+            walletHasDebt
+              ? "Current exposed wallet debt for this member."
+              : "Spendable wallet balance currently held by this member."
+          }
           href={`/admin/members/${params.id}`}
           icon={<WalletCards className="h-5 w-5" />}
           title="Wallet Balance"
-          tone="green"
-          value={currency.format(member.data?.wallet?.availableBalance ?? 0)}
+          tone={walletHasDebt ? "red" : "green"}
+          value={currency.format(walletBalance)}
         />
         <DashboardMetricCard
           description="Pending wallet deductions still waiting for settlement."

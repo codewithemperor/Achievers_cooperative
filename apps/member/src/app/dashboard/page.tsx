@@ -236,9 +236,11 @@ export default function DashboardPage() {
     : data.cooperativeAccount
       ? [data.cooperativeAccount]
       : [];
+  const walletBalance = Number(data.wallet.availableBalance ?? 0);
+  const walletHasDebt = walletBalance < 0;
 
   const cardValues = {
-    wallet: formatMoney(data.wallet.availableBalance),
+    wallet: formatMoney(walletBalance),
     savings: formatMoney(data.summary.totalSavings),
     investments: formatMoney(data.summary.totalInvestments),
     packages: formatMoney(data.summary.activePackage?.amountRemaining ?? 0),
@@ -338,9 +340,11 @@ export default function DashboardPage() {
           <div className="hide-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3">
             {cardMeta.map((card, index) => {
               const gradient =
-                card.valueKey === "loans" && data.summary.activeLoan
-                  ? loanActiveGradient
-                  : card.gradient;
+                card.valueKey === "wallet" && walletHasDebt
+                  ? "from-[#8a1616] via-[#681111] to-[#3b0808]"
+                  : card.valueKey === "loans" && data.summary.activeLoan
+                    ? loanActiveGradient
+                    : card.gradient;
 
               return (
                 <div
@@ -366,7 +370,9 @@ export default function DashboardPage() {
                             : `You have ${formatMoney(data.summary.pendingLoansTotal ?? 0)} in loan requests waiting for approval.`
                           : card.valueKey === "weekly"
                             ? `Weekly due is ${formatMoney(data.summary.weeklyDeduction?.weeklyAmount ?? 0)}. You have prepaid ${formatMoney(data.summary.weeklyDeduction?.prepaidAmount ?? 0)} and paid ${formatMoney(data.summary.weeklyDeduction?.paidThisMonth ?? 0)} this month.`
-                            : card.caption
+                            : card.valueKey === "wallet" && walletHasDebt
+                              ? "Outstanding dues are exposed on your wallet."
+                              : card.caption
                     }
                     href={card.href}
                     ctaLabel={card.ctaLabel}

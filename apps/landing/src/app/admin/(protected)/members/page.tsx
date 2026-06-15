@@ -149,7 +149,8 @@ export default function MembersPage() {
   const activeMembers = memberRows.filter((item) => item.status === "ACTIVE");
   const pendingMembers = memberRows.filter((item) => item.status === "PENDING");
   const totalWalletBalance = memberRows.reduce(
-    (sum, item) => sum + Number(item.wallet?.availableBalance ?? 0),
+    (sum, item) =>
+      sum + Math.max(Number(item.wallet?.availableBalance ?? 0), 0),
     0,
   );
   const { control, handleSubmit, reset, setValue, watch } =
@@ -542,8 +543,21 @@ export default function MembersPage() {
           {
             key: "wallet",
             header: "Wallet",
-            render: (item) =>
-              currency.format(item.wallet?.availableBalance ?? 0),
+            render: (item) => {
+              const balance = Number(item.wallet?.availableBalance ?? 0);
+
+              return (
+                <span
+                  className={
+                    balance < 0
+                      ? "font-semibold text-[#b42318]"
+                      : "text-text-900"
+                  }
+                >
+                  {currency.format(balance)}
+                </span>
+              );
+            },
           },
           {
             key: "actions",

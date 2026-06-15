@@ -416,27 +416,6 @@ export class PackagesService {
       disbursementBankAccountId,
     });
 
-    const wallet = await this.walletService.getMemberWallet(memberId);
-    await this.prisma.transaction.create({
-      data: {
-        walletId: wallet.id,
-        type: 'PACKAGE_SUBSCRIPTION',
-        amount: 0,
-        status: 'PENDING',
-        reference: `PACKAGE-SUB-${created.id}`,
-        category: 'package subscription',
-        description: `Package subscription created for ${(created as any).package.name}`,
-        editable: false,
-        lockReason: 'Package subscription activity is generated automatically by the system.',
-        metadata: {
-          subscriptionId: created.id,
-          packageId: created.packageId,
-          subscribedAmount: Number(((created as any).package as any).totalAmount),
-          event: 'SUBSCRIPTION_CREATED',
-        } as any,
-      },
-    });
-
     return this.serializeSubscription(created);
   }
 
@@ -658,32 +637,6 @@ export class PackagesService {
           });
           await this.walletService.rebuildPackageRepaymentSchedule(subscription.id, tx);
           createdSubscriptions.push({ ...subscription, member });
-        }
-
-        const activityTransactions = createdSubscriptions
-          .filter((subscription: any) => subscription.member.wallet?.id)
-          .map((subscription: any) => ({
-            walletId: subscription.member.wallet.id,
-            type: 'PACKAGE_SUBSCRIPTION',
-            amount: 0,
-            status: 'APPROVED',
-            reference: `PACKAGE-AUTO-SUB-${subscription.id}`,
-            category: 'package subscription',
-            description: `Package subscription created for ${selectedPackage.name}`,
-            editable: false,
-            lockReason: 'Package subscription activity is generated automatically by the system.',
-            metadata: {
-              subscriptionId: subscription.id,
-              packageId: selectedPackage.id,
-              subscribedAmount: Number(selectedPackage.totalAmount),
-              event: 'AUTO_SUBSCRIBED_BY_ADMIN',
-              memberName: subscription.member.fullName,
-              membershipNumber: subscription.member.membershipNumber,
-            },
-          }));
-
-        if (activityTransactions.length) {
-          await (tx as any).transaction.createMany({ data: activityTransactions });
         }
 
         return createdSubscriptions.length;

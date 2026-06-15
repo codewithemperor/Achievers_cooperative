@@ -10,6 +10,7 @@ export const NON_ACTIVE_MEMBER_STATUSES = new Set<MemberStatus>(['INACTIVE', 'SU
 export const LOCKED_TRANSACTION_TYPES = new Set<TransactionType>([
   'WALLET_FUNDING',
   'LOAN_REPAYMENT',
+  'LOAN_BOND',
   'MEMBERSHIP_FEE',
   'WEEKLY_COOPERATIVE',
   'LOAN_DISBURSEMENT',

@@ -516,16 +516,16 @@ export default function TransactionsPage() {
 
   const treasurySummary = {
     physicalTreasuryCash:
-      wallet.data?.physicalTreasuryCash ||
-      wallet.data?.combinedHoldings ||
+      wallet.data?.physicalTreasuryCash ??
+      wallet.data?.combinedHoldings ??
       ledgerDerivedTreasurySummary.physicalTreasuryCash,
     memberWalletLiability:
-      wallet.data?.memberWalletLiability ||
-      wallet.data?.memberWalletHoldings ||
+      wallet.data?.memberWalletLiability ??
+      wallet.data?.memberWalletHoldings ??
       ledgerDerivedTreasurySummary.memberWalletLiability,
     associationAvailableBalance:
-      wallet.data?.associationAvailableBalance ||
-      wallet.data?.balance ||
+      wallet.data?.associationAvailableBalance ??
+      wallet.data?.balance ??
       ledgerDerivedTreasurySummary.associationAvailableBalance,
     netTreasuryFlow:
       (wallet.data?.totalIncome ?? 0) - (wallet.data?.totalExpense ?? 0),
@@ -583,6 +583,7 @@ export default function TransactionsPage() {
 
     const loanDisbursed = sumTypes(["LOAN_DISBURSEMENT"]);
     const loanRepaid = sumTypes(["LOAN_REPAYMENT"]);
+    const loanBonds = sumTypes(["LOAN_BOND"]);
     const loanOutstandingMovement = Math.max(loanDisbursed - loanRepaid, 0);
     const walletFunding = sumTypes(["FUNDING", "WALLET_FUNDING"]);
     const walletWithdrawals = sumTypes(["WALLET_WITHDRAWAL"]);
@@ -682,6 +683,7 @@ export default function TransactionsPage() {
         rows: [
           ["Loan approved records", String(countTypes(["LOAN_DISBURSEMENT"], true)), "Loan approvals become financial movements when money is disbursed."],
           ["Loan disbursed", currency.format(loanDisbursed), "Approved loan money released to members in this period."],
+          ["Loan bonds", currency.format(loanBonds), "Required loan bond payments collected before disbursement."],
           ["Loan repaid", currency.format(loanRepaid), "Loan repayments received from members in this period."],
           ["Outstanding loan movement", currency.format(loanOutstandingMovement), "Loan disbursements minus repayments inside this report period."],
         ],

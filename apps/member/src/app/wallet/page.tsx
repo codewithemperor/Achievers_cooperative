@@ -102,6 +102,8 @@ export default function WalletPage() {
   const [activeTab, setActiveTab] = useState("funding");
   const [selectedTransaction, setSelectedTransaction] =
     useState<TransactionDetailItem | null>(null);
+  const walletBalance = Number(wallet.data.availableBalance ?? 0);
+  const walletHasDebt = walletBalance < 0;
 
   const { control, handleSubmit, reset } = useForm<FundingFormValues>({
     resolver: zodResolver(fundingSchema),
@@ -199,9 +201,13 @@ export default function WalletPage() {
     >
       <SummaryCard
         eyebrow="Wallet"
-        title="Available balance"
-        value={formatMoney(wallet.data.availableBalance)}
-        caption={`Pending balance: ${formatMoney(wallet.data.pendingBalance)}`}
+        title={walletHasDebt ? "Wallet debt" : "Available balance"}
+        value={formatMoney(walletBalance)}
+        caption={
+          walletHasDebt
+            ? "Outstanding dues are exposed on your wallet."
+            : `Pending balance: ${formatMoney(wallet.data.pendingBalance)}`
+        }
         ctaLabel={activeTab === "withdrawals" ? "Request withdrawal" : "Add money"}
         onCtaClick={() => {
           if (activeTab === "withdrawals") {
@@ -213,7 +219,11 @@ export default function WalletPage() {
           }
         }}
         icon={<Wallet className="h-5 w-5" />}
-        gradient="from-[#2a2420] via-[#1f1a17] to-[#151210]"
+        gradient={
+          walletHasDebt
+            ? "from-[#8a1616] via-[#681111] to-[#3b0808]"
+            : "from-[#2a2420] via-[#1f1a17] to-[#151210]"
+        }
       />
 
       <Tabs

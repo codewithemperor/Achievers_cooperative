@@ -27,7 +27,11 @@
     "db:patch:weekly-members": "tsx prisma/patch-weekly-member-repair.ts",
     "db:patch:repayment-attempts": "tsx prisma/patch-repayment-attempts.ts",
     "db:patch:payment-recovery": "tsx prisma/patch-payment-debt-recovery.ts",
-    "db:patch:repayment-schedules": "tsx prisma/patch-repayment-schedule-items.ts"
+    "db:patch:repayment-schedules": "tsx prisma/patch-repayment-schedule-items.ts",
+    "db:patch:wallet-debt-exposures": "tsx prisma/patch-wallet-debt-exposures.ts",
+    "db:audit:wallet-debt-exposures": "tsx prisma/audit-wallet-debt-exposures.ts",
+    "db:patch:alabi-package": "tsx prisma/patch-alabi-package-correction.ts",
+    "db:patch:loan-bond": "tsx prisma/patch-loan-bond.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.18",

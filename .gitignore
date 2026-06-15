@@ -8,6 +8,7 @@ dist
 coverage
 public/sw.js
 public/workbox-*.js
+apps/api/prisma/reports/
 
 # env
 .env
@@ -19,6 +20,8 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
+*.pid
 
 # misc
 .DS_Store

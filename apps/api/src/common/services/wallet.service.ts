@@ -33,6 +33,34 @@ type SettlementRecord = {
   repaymentStatus?: RepaymentAttemptStatus;
 };
 
+type ExposureRecord = {
+  phase: string;
+  sourceType: string;
+  sourceId: string;
+  sourceKey: string;
+  targetId: string;
+  amount: number;
+  dueAmount: number;
+  dueAt?: Date | null;
+};
+
+type ObligationSettlementResult = {
+  settlements: SettlementRecord[];
+  exposures: ExposureRecord[];
+};
+
+type DebtExposureFrame = {
+  phase: string;
+  sourceType: string;
+  sourceId: string;
+  sourceKey: string;
+  targetId: string;
+  dueAmount: number;
+  dueAt?: Date | null;
+  trigger?: string;
+  metadata?: Record<string, unknown>;
+};
+
 type DebtRecoveryContext = {
   referenceBase: string;
   trigger: string;
@@ -69,6 +97,7 @@ type WeeklyCycleAllocationPlan = {
 
 type ScheduleAllocationPlan = {
   itemId: string;
+  targetType?: RepaymentScheduleTargetType;
   sequence: number;
   dueDate: Date;
   expectedAmount: number;
@@ -163,6 +192,10 @@ function isUniqueConstraintError(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002';
 }
 
+function moneyKey(amount: number) {
+  return Math.round(roundMoney(amount) * 100);
+}
+
 function startOfIsoDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
@@ -236,71 +269,15 @@ export class WalletService {
     reference?: string,
     options?: TransactionOptions,
   ) {
-    const wallet = await this.getMemberWallet(memberId);
-
-    const transaction = await this.prisma.runTransaction('wallet.creditWallet', async (tx) => {
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          availableBalance: { increment: amount },
-          totalFunded: { increment: amount },
-        },
-      });
-
-      const transaction = await tx.transaction.create({
-        data: {
-          walletId: wallet.id,
-          type,
-          amount,
-          status: 'APPROVED',
-          reference,
-          category: options?.category,
-          description: options?.description,
-          editable: options?.editable ?? false,
-          lockReason: options?.lockReason,
-          metadata: options?.metadata as any,
-        },
-      });
-
-      if (type === 'WALLET_FUNDING' || type === 'FUNDING') {
-        await this.financialPosting.postWalletFunding(
-          {
-            memberId,
-            amount,
-            reference,
-            sourceType: 'Transaction',
-            sourceId: transaction.id,
-            description: options?.description || 'Member wallet funding',
-            category: options?.category,
-          } as any,
-          tx,
-        );
-      } else if (['INVESTMENT_CANCELLATION_REFUND', 'INVESTMENT_RETURN', 'ADMIN_REFUND'].includes(type)) {
-        await this.financialPosting.postAssociationToWallet(
-          {
-            memberId,
-            amount,
-            reference,
-            sourceType: 'Transaction',
-            sourceId: transaction.id,
-            description: options?.description || 'Association wallet credit',
-            category: options?.category,
-          },
-          tx,
-        );
-      }
-
-      return transaction;
+    const debtRecoveryPlan = await this.prepareWalletFundingDebtRecovery(memberId, amount);
+    return this.creditWalletWithDebtRecovery(memberId, amount, type, reference, {
+      ...options,
+      debtRecoveryPlan,
+      metadata: {
+        ...(options?.metadata ?? {}),
+        trigger: options?.metadata?.trigger ?? 'WALLET_CREDIT',
+      },
     });
-
-    const settlements = await this.settleOutstandingObligations(memberId);
-    const syncedWallet = await this.getMemberWallet(memberId);
-
-    return {
-      wallet: syncedWallet,
-      transaction,
-      settlements,
-    };
   }
 
   async creditWalletWithDebtRecovery(
@@ -420,6 +397,9 @@ export class WalletService {
           walletCreditAmount,
           settlementCount: recovery.settlements.length,
           settlements: recovery.settlements,
+          exposedDebtAmount: recovery.exposures.reduce((sum, exposure) => sum + exposure.amount, 0),
+          exposureCount: recovery.exposures.length,
+          exposures: recovery.exposures,
         } as any,
       },
     });
@@ -428,6 +408,7 @@ export class WalletService {
       wallet: updatedWallet,
       transaction,
       settlements: recovery.settlements,
+      exposures: recovery.exposures,
       debtSettlementAmount,
       walletCreditAmount,
     };
@@ -440,7 +421,20 @@ export class WalletService {
     reference?: string,
     options?: DebitWalletOptions,
   ) {
-    const wallet = await this.getMemberWallet(memberId);
+    return this.prisma.runTransaction('wallet.debitWallet', (tx) =>
+      this.debitWalletInTransaction(tx, memberId, amount, type, reference, options),
+    );
+  }
+
+  async debitWalletInTransaction(
+    client: any,
+    memberId: string,
+    amount: number,
+    type: TransactionType,
+    reference?: string,
+    options?: DebitWalletOptions,
+  ) {
+    const wallet = await this.getMemberWalletWithClient(client, memberId);
     const previousBalance = Number(wallet.availableBalance);
     const nextBalance = previousBalance - amount;
 
@@ -455,52 +449,48 @@ export class WalletService {
       outstandingAmount,
     };
 
-    const { updatedWallet, transaction } = await this.prisma.runTransaction('wallet.debitWallet', async (tx) => {
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          availableBalance: { decrement: amount },
-          pendingBalance: nextBalance < 0 ? Math.abs(nextBalance) : Number(wallet.pendingBalance),
-        },
-      });
-
-      const transaction = await tx.transaction.create({
-        data: {
-          walletId: wallet.id,
-          type,
-          amount,
-          status,
-          reference,
-          category: options?.category,
-          description: options?.description,
-          editable: options?.editable ?? false,
-          lockReason: options?.lockReason,
-          metadata: metadata as any,
-        },
-      });
-
-      const postedAmount = status === 'APPROVED' ? amount : Math.max(amount - outstandingAmount, 0);
-      if (postedAmount > 0 && this.financialPosting.isAssociationIncomeTransaction(type)) {
-        await this.financialPosting.postWalletToAssociation(
-          {
-            memberId,
-            amount: postedAmount,
-            reference,
-            sourceType: 'Transaction',
-            sourceId: transaction.id,
-            description: options?.description || 'Wallet payment to association',
-            category: options?.category,
-          },
-          tx,
-        );
-      }
-
-      if (options?.repaymentAttempt) {
-        await this.upsertRepaymentAttempt(tx, memberId, transaction.id, reference, options.repaymentAttempt);
-      }
-
-      return { updatedWallet, transaction };
+    const updatedWallet = await client.wallet.update({
+      where: { id: wallet.id },
+      data: {
+        availableBalance: { decrement: amount },
+        pendingBalance: nextBalance < 0 ? Math.abs(nextBalance) : Number(wallet.pendingBalance),
+      },
     });
+
+    const transaction = await client.transaction.create({
+      data: {
+        walletId: wallet.id,
+        type,
+        amount,
+        status,
+        reference,
+        category: options?.category,
+        description: options?.description,
+        editable: options?.editable ?? false,
+        lockReason: options?.lockReason,
+        metadata: metadata as any,
+      },
+    });
+
+    const postedAmount = status === 'APPROVED' ? amount : Math.max(amount - outstandingAmount, 0);
+    if (postedAmount > 0 && this.financialPosting.isAssociationIncomeTransaction(type)) {
+      await this.financialPosting.postWalletToAssociation(
+        {
+          memberId,
+          amount: postedAmount,
+          reference,
+          sourceType: 'Transaction',
+          sourceId: transaction.id,
+          description: options?.description || 'Wallet payment to association',
+          category: options?.category,
+        },
+        client,
+      );
+    }
+
+    if (options?.repaymentAttempt) {
+      await this.upsertRepaymentAttempt(client, memberId, transaction.id, reference, options.repaymentAttempt);
+    }
 
     return { wallet: updatedWallet, transaction };
   }
@@ -578,6 +568,193 @@ export class WalletService {
     }
 
     return (client as any).repaymentAttempt.create({ data });
+  }
+
+  private weeklyExposureSourceKey(cycleId: string) {
+    return `weekly:${cycleId}`;
+  }
+
+  private scheduleExposureSourceKey(targetType: RepaymentScheduleTargetType | string, itemId: string) {
+    return `${targetType === 'LoanApplication' ? 'loan' : 'package'}:${itemId}`;
+  }
+
+  private packagePenaltyExposureSourceKey(subscriptionId: string) {
+    return `package-penalty:${subscriptionId}`;
+  }
+
+  private openExposureAmount(exposure: any) {
+    if (!exposure) return 0;
+    return roundMoney(Math.max(Number(exposure.amountExposed ?? 0) - Number(exposure.amountCleared ?? 0), 0));
+  }
+
+  private async exposeDebtFrames(
+    client: any,
+    memberId: string,
+    frames: DebtExposureFrame[],
+  ): Promise<ExposureRecord[]> {
+    const validFrames = frames
+      .map((frame) => ({ ...frame, dueAmount: roundMoney(Math.max(Number(frame.dueAmount ?? 0), 0)) }))
+      .filter((frame: DebtExposureFrame) => frame.dueAmount > 0);
+    if (!validFrames.length) return [];
+
+    const wallet = await this.getMemberWalletWithClient(client, memberId);
+    const exposures: ExposureRecord[] = [];
+
+    for (const frame of validFrames) {
+      const existing = await (client as any).walletDebtExposure.findUnique({
+        where: { sourceKey: frame.sourceKey },
+      });
+      const openAmount = this.openExposureAmount(existing);
+      const newlyExposedAmount = roundMoney(Math.max(frame.dueAmount - openAmount, 0));
+
+      if (newlyExposedAmount <= 0) {
+        continue;
+      }
+      let appliedExposureAmount = newlyExposedAmount;
+
+      const metadata = {
+        ...((existing?.metadata as Record<string, unknown> | null) ?? {}),
+        ...(frame.metadata ?? {}),
+        dueAmount: frame.dueAmount,
+        newlyExposedAmount,
+      };
+
+      try {
+        if (existing) {
+          await (client as any).walletDebtExposure.update({
+            where: { id: existing.id },
+            data: {
+              amountExposed: { increment: newlyExposedAmount },
+              status: 'OPEN',
+              trigger: frame.trigger ?? existing.trigger,
+              dueAt: frame.dueAt ?? existing.dueAt,
+              clearedAt: null,
+              metadata: metadata as any,
+            },
+          });
+        } else {
+          await (client as any).walletDebtExposure.create({
+            data: {
+              memberId,
+              walletId: wallet.id,
+              phase: frame.phase,
+              sourceType: frame.sourceType,
+              sourceId: frame.sourceId,
+              sourceKey: frame.sourceKey,
+              dueAt: frame.dueAt ?? null,
+              amountExposed: newlyExposedAmount,
+              amountCleared: 0,
+              status: 'OPEN',
+              trigger: frame.trigger,
+              metadata: metadata as any,
+            },
+          });
+        }
+      } catch (error) {
+        if (!isUniqueConstraintError(error)) {
+          throw error;
+        }
+        const retryExisting = await (client as any).walletDebtExposure.findUnique({
+          where: { sourceKey: frame.sourceKey },
+        });
+        if (!retryExisting) {
+          throw error;
+        }
+        const retryOpenAmount = this.openExposureAmount(retryExisting);
+        const retryDelta = roundMoney(Math.max(frame.dueAmount - retryOpenAmount, 0));
+        if (retryDelta <= 0) {
+          continue;
+        }
+        appliedExposureAmount = retryDelta;
+        await (client as any).walletDebtExposure.update({
+          where: { id: retryExisting.id },
+          data: {
+            amountExposed: { increment: retryDelta },
+            status: 'OPEN',
+            trigger: frame.trigger ?? retryExisting.trigger,
+            dueAt: frame.dueAt ?? retryExisting.dueAt,
+            clearedAt: null,
+            metadata: {
+              ...((retryExisting?.metadata as Record<string, unknown> | null) ?? {}),
+              ...(frame.metadata ?? {}),
+              dueAmount: frame.dueAmount,
+              newlyExposedAmount: retryDelta,
+            } as any,
+          },
+        });
+      }
+
+      const latestWallet = await client.wallet.findUnique({ where: { id: wallet.id } });
+      await client.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          availableBalance: { decrement: appliedExposureAmount },
+          pendingBalance: roundMoney(Number(latestWallet?.pendingBalance ?? 0) + appliedExposureAmount),
+        },
+      });
+
+      exposures.push({
+        phase: frame.phase,
+        sourceType: frame.sourceType,
+        sourceId: frame.sourceId,
+        sourceKey: frame.sourceKey,
+        targetId: frame.targetId,
+        amount: appliedExposureAmount,
+        dueAmount: frame.dueAmount,
+        dueAt: frame.dueAt ?? null,
+      });
+    }
+
+    return exposures;
+  }
+
+  private exposeDebtFramesInTransaction(memberId: string, frames: DebtExposureFrame[]) {
+    return this.prisma.runTransaction(
+      'wallet.exposeDebtFrames',
+      (tx) => this.exposeDebtFrames(tx, memberId, frames),
+      { maxWait: 5000, timeout: 15000 },
+    );
+  }
+
+  private async clearDebtExposure(client: any, sourceKey: string, amount: number) {
+    const amountToClear = roundMoney(Math.max(amount, 0));
+    if (amountToClear <= 0) return 0;
+
+    const exposure = await (client as any).walletDebtExposure.findUnique({
+      where: { sourceKey },
+    });
+    const openAmount = this.openExposureAmount(exposure);
+    if (!exposure || openAmount <= 0) {
+      return 0;
+    }
+
+    const clearedAmount = roundMoney(Math.min(openAmount, amountToClear));
+    const nextOpenAmount = roundMoney(openAmount - clearedAmount);
+
+    await (client as any).walletDebtExposure.update({
+      where: { id: exposure.id },
+      data: {
+        amountCleared: { increment: clearedAmount },
+        status: nextOpenAmount <= 0 ? 'CLEARED' : 'OPEN',
+        clearedAt: nextOpenAmount <= 0 ? new Date() : null,
+        metadata: {
+          ...((exposure.metadata as Record<string, unknown> | null) ?? {}),
+          lastClearedAmount: clearedAmount,
+          lastClearedAt: new Date().toISOString(),
+        } as any,
+      },
+    });
+
+    const wallet = await client.wallet.findUnique({ where: { id: exposure.walletId } });
+    await client.wallet.update({
+      where: { id: exposure.walletId },
+      data: {
+        availableBalance: { increment: clearedAmount },
+        pendingBalance: roundMoney(Math.max(Number(wallet?.pendingBalance ?? 0) - clearedAmount, 0)),
+      },
+    });
+
+    return clearedAmount;
   }
 
   async settlePendingWeeklyDeductions(walletId: string) {
@@ -728,6 +905,7 @@ export class WalletService {
           status: weeklyCycleStatus(cycle.dueDate, cycleAmount, nextPaid),
         },
       });
+      await this.clearDebtExposure(client, this.weeklyExposureSourceKey(cycle.id), allocationAmount);
 
       remaining -= allocationAmount;
     }
@@ -1015,6 +1193,7 @@ export class WalletService {
           status: this.scheduleItemStatus(item.dueDate, expectedAmount, nextPaid),
         },
       });
+      await this.clearDebtExposure(client, this.scheduleExposureSourceKey(targetType, item.id), payment);
 
       allocations.push({
         itemId: item.id,
@@ -1033,6 +1212,353 @@ export class WalletService {
       appliedAmount: roundMoney(amount - remaining),
       unallocatedAmount: remaining,
     };
+  }
+
+  private async exposeDueWeeklyDebt(
+    member: { id: string; fullName?: string | null; membershipNumber?: string | null },
+    trigger?: string,
+  ) {
+    const today = startOfIsoDay(new Date());
+    const cycles = await (this.prisma as any).weeklyDeductionCycle.findMany({
+      where: {
+        memberId: member.id,
+        dueDate: { lte: today },
+        status: { in: WEEKLY_OPEN_STATUSES },
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    const frames = cycles
+      .map((cycle: any) => {
+        const dueAmount = roundMoney(Math.max(Number(cycle.amount) - Number(cycle.amountPaid), 0));
+        return {
+          phase: 'WEEKLY_DEDUCTION',
+          sourceType: 'WeeklyDeductionCycle',
+          sourceId: cycle.id,
+          sourceKey: this.weeklyExposureSourceKey(cycle.id),
+          targetId: cycle.id,
+          dueAmount,
+          dueAt: cycle.dueDate,
+          trigger: trigger ?? 'CRON',
+          metadata: {
+            memberName: member.fullName,
+            membershipNumber: member.membershipNumber,
+            cycleId: cycle.id,
+            expectedAmount: Number(cycle.amount),
+            paidAmount: Number(cycle.amountPaid),
+            remainingAmount: dueAmount,
+            dueAt: cycle.dueDate?.toISOString?.() ?? null,
+          },
+        } satisfies DebtExposureFrame;
+      })
+      .filter((frame: DebtExposureFrame) => frame.dueAmount > 0);
+
+    return this.exposeDebtFramesInTransaction(member.id, frames);
+  }
+
+  private async exposeDuePackageDebt(memberId: string, subscriptionId: string, trigger?: string) {
+    const subscription = (await this.prisma.packageSubscription.findUnique({
+      where: { id: subscriptionId },
+      include: {
+        package: true,
+        member: { select: { fullName: true, membershipNumber: true } },
+      } as any,
+    } as any)) as any;
+    if (!subscription || subscription.memberId !== memberId) {
+      return [];
+    }
+
+    await this.ensurePackageRepaymentSchedule(subscription.id);
+    const scheduleDue = await this.getScheduleDueAmount(this.prisma, 'PackageSubscription', subscription.id, true);
+    const packageName = subscription.package?.name ?? 'package';
+    const frames: DebtExposureFrame[] = [];
+    const penaltyAccrued = roundMoney(Math.max(Number(subscription.penaltyAccrued ?? 0), 0));
+    const penaltyDueAt = scheduleDue.dueAt ?? subscription.nextDueAt ?? subscription.createdAt ?? new Date();
+
+    if (penaltyAccrued > 0) {
+      frames.push({
+        phase: 'PACKAGE_PENALTY',
+        sourceType: 'PackageSubscriptionPenalty',
+        sourceId: subscription.id,
+        sourceKey: this.packagePenaltyExposureSourceKey(subscription.id),
+        targetId: subscription.id,
+        dueAmount: penaltyAccrued,
+        dueAt: penaltyDueAt,
+        trigger: trigger ?? 'CRON',
+        metadata: {
+          subscriptionId: subscription.id,
+          packageName,
+          memberName: subscription.member?.fullName,
+          membershipNumber: subscription.member?.membershipNumber,
+          remainingAmount: penaltyAccrued,
+          dueAt: penaltyDueAt?.toISOString?.() ?? null,
+        },
+      });
+    }
+
+    let amountRemainingCap = roundMoney(Math.max(Number(subscription.amountRemaining ?? 0), 0));
+    for (const item of scheduleDue.items) {
+      if (amountRemainingCap <= 0) break;
+      const dueAmount = roundMoney(Math.min(Number(item.remainingAmount), amountRemainingCap));
+      if (dueAmount <= 0) continue;
+      frames.push({
+        phase: 'PACKAGE',
+        sourceType: 'RepaymentScheduleItem',
+        sourceId: item.id,
+        sourceKey: this.scheduleExposureSourceKey('PackageSubscription', item.id),
+        targetId: subscription.id,
+        dueAmount,
+        dueAt: item.dueDate,
+        trigger: trigger ?? 'CRON',
+        metadata: {
+          subscriptionId: subscription.id,
+          packageName,
+          sequence: item.sequence,
+          memberName: subscription.member?.fullName,
+          membershipNumber: subscription.member?.membershipNumber,
+          expectedAmount: Number(item.expectedAmount),
+          paidAmount: Number(item.paidAmount),
+          remainingAmount: dueAmount,
+          dueAt: item.dueDate?.toISOString?.() ?? null,
+        },
+      });
+      amountRemainingCap = roundMoney(amountRemainingCap - dueAmount);
+    }
+
+    return this.exposeDebtFramesInTransaction(memberId, frames);
+  }
+
+  private async exposeDueLoanDebt(memberId: string, loanId: string, trigger?: string) {
+    const loan = (await this.prisma.loanApplication.findUnique({
+      where: { id: loanId },
+      include: { member: { select: { fullName: true, membershipNumber: true } } },
+    } as any)) as any;
+    if (!loan || loan.memberId !== memberId) {
+      return [];
+    }
+
+    await this.ensureLoanRepaymentSchedule(loan.id);
+    const scheduleDue = await this.getScheduleDueAmount(this.prisma, 'LoanApplication', loan.id, true);
+    const loanName = loan.purpose || `loan for ${loan.member?.fullName ?? 'member'}`;
+    const frames: DebtExposureFrame[] = [];
+    let remainingBalanceCap = roundMoney(Math.max(Number(loan.remainingBalance ?? 0), 0));
+
+    for (const item of scheduleDue.items) {
+      if (remainingBalanceCap <= 0) break;
+      const dueAmount = roundMoney(Math.min(Number(item.remainingAmount), remainingBalanceCap));
+      if (dueAmount <= 0) continue;
+      frames.push({
+        phase: 'LOAN',
+        sourceType: 'RepaymentScheduleItem',
+        sourceId: item.id,
+        sourceKey: this.scheduleExposureSourceKey('LoanApplication', item.id),
+        targetId: loan.id,
+        dueAmount,
+        dueAt: item.dueDate,
+        trigger: trigger ?? 'CRON',
+        metadata: {
+          loanId: loan.id,
+          loanName,
+          sequence: item.sequence,
+          memberName: loan.member?.fullName,
+          membershipNumber: loan.member?.membershipNumber,
+          expectedAmount: Number(item.expectedAmount),
+          paidAmount: Number(item.paidAmount),
+          remainingAmount: dueAmount,
+          dueAt: item.dueDate?.toISOString?.() ?? null,
+        },
+      });
+      remainingBalanceCap = roundMoney(remainingBalanceCap - dueAmount);
+    }
+
+    return this.exposeDebtFramesInTransaction(memberId, frames);
+  }
+
+  private async collectDueDebtExposureFrames(
+    client: any,
+    memberId: string,
+    trigger?: string,
+  ): Promise<DebtExposureFrame[]> {
+    const member = await client.member.findUnique({
+      where: { id: memberId },
+      select: { id: true, fullName: true, membershipNumber: true, status: true },
+    });
+    if (!member || member.status !== 'ACTIVE') {
+      return [];
+    }
+
+    const today = startOfIsoDay(new Date());
+    const dueBefore = addDays(today, 1);
+    const frames: DebtExposureFrame[] = [];
+
+    const weeklyCycles = await (client as any).weeklyDeductionCycle.findMany({
+      where: {
+        memberId,
+        dueDate: { lte: today },
+        status: { in: WEEKLY_OPEN_STATUSES },
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+    for (const cycle of weeklyCycles) {
+      const dueAmount = roundMoney(Math.max(Number(cycle.amount) - Number(cycle.amountPaid), 0));
+      if (dueAmount <= 0) continue;
+      frames.push({
+        phase: 'WEEKLY_DEDUCTION',
+        sourceType: 'WeeklyDeductionCycle',
+        sourceId: cycle.id,
+        sourceKey: this.weeklyExposureSourceKey(cycle.id),
+        targetId: cycle.id,
+        dueAmount,
+        dueAt: cycle.dueDate,
+        trigger: trigger ?? 'CRON',
+        metadata: {
+          memberName: member.fullName,
+          membershipNumber: member.membershipNumber,
+          cycleId: cycle.id,
+          expectedAmount: Number(cycle.amount),
+          paidAmount: Number(cycle.amountPaid),
+          remainingAmount: dueAmount,
+          dueAt: cycle.dueDate?.toISOString?.() ?? null,
+        },
+      });
+    }
+
+    const packageSubscriptions = await client.packageSubscription.findMany({
+      where: {
+        memberId,
+        status: { in: ['APPROVED', 'DISBURSED', 'IN_PROGRESS'] },
+        OR: [{ amountRemaining: { gt: 0 } }, { penaltyAccrued: { gt: 0 } }],
+      },
+      include: { package: true },
+      orderBy: { createdAt: 'asc' },
+    } as any);
+    const packageItems = await (client as any).repaymentScheduleItem.findMany({
+      where: {
+        memberId,
+        targetType: 'PackageSubscription',
+        dueDate: { lt: dueBefore },
+        remainingAmount: { gt: 0 },
+      },
+      orderBy: [{ dueDate: 'asc' }, { sequence: 'asc' }],
+    });
+    const packageItemsByTarget = new Map<string, any[]>();
+    for (const item of packageItems) {
+      packageItemsByTarget.set(item.targetId, [...(packageItemsByTarget.get(item.targetId) ?? []), item]);
+    }
+
+    for (const subscription of packageSubscriptions as any[]) {
+      const packageName = subscription.package?.name ?? 'package';
+      const dueItems = packageItemsByTarget.get(subscription.id) ?? [];
+      const penaltyAccrued = roundMoney(Math.max(Number(subscription.penaltyAccrued ?? 0), 0));
+      const firstDueAt = dueItems[0]?.dueDate ?? subscription.nextDueAt ?? subscription.createdAt ?? new Date();
+
+      if (penaltyAccrued > 0) {
+        frames.push({
+          phase: 'PACKAGE_PENALTY',
+          sourceType: 'PackageSubscriptionPenalty',
+          sourceId: subscription.id,
+          sourceKey: this.packagePenaltyExposureSourceKey(subscription.id),
+          targetId: subscription.id,
+          dueAmount: penaltyAccrued,
+          dueAt: firstDueAt,
+          trigger: trigger ?? 'CRON',
+          metadata: {
+            subscriptionId: subscription.id,
+            packageName,
+            memberName: member.fullName,
+            membershipNumber: member.membershipNumber,
+            remainingAmount: penaltyAccrued,
+            dueAt: firstDueAt?.toISOString?.() ?? null,
+          },
+        });
+      }
+
+      let amountRemainingCap = roundMoney(Math.max(Number(subscription.amountRemaining ?? 0), 0));
+      for (const item of dueItems) {
+        if (amountRemainingCap <= 0) break;
+        const dueAmount = roundMoney(Math.min(Number(item.remainingAmount), amountRemainingCap));
+        if (dueAmount <= 0) continue;
+        frames.push({
+          phase: 'PACKAGE',
+          sourceType: 'RepaymentScheduleItem',
+          sourceId: item.id,
+          sourceKey: this.scheduleExposureSourceKey('PackageSubscription', item.id),
+          targetId: subscription.id,
+          dueAmount,
+          dueAt: item.dueDate,
+          trigger: trigger ?? 'CRON',
+          metadata: {
+            subscriptionId: subscription.id,
+            packageName,
+            sequence: item.sequence,
+            memberName: member.fullName,
+            membershipNumber: member.membershipNumber,
+            expectedAmount: Number(item.expectedAmount),
+            paidAmount: Number(item.paidAmount),
+            remainingAmount: dueAmount,
+            dueAt: item.dueDate?.toISOString?.() ?? null,
+          },
+        });
+        amountRemainingCap = roundMoney(amountRemainingCap - dueAmount);
+      }
+    }
+
+    const loans = await client.loanApplication.findMany({
+      where: {
+        memberId,
+        status: { in: ['DISBURSED', 'IN_PROGRESS', 'OVERDUE'] },
+        remainingBalance: { gt: 0 },
+      },
+      orderBy: { submittedAt: 'asc' },
+    } as any);
+    const loanItems = await (client as any).repaymentScheduleItem.findMany({
+      where: {
+        memberId,
+        targetType: 'LoanApplication',
+        dueDate: { lt: dueBefore },
+        remainingAmount: { gt: 0 },
+      },
+      orderBy: [{ dueDate: 'asc' }, { sequence: 'asc' }],
+    });
+    const loanItemsByTarget = new Map<string, any[]>();
+    for (const item of loanItems) {
+      loanItemsByTarget.set(item.targetId, [...(loanItemsByTarget.get(item.targetId) ?? []), item]);
+    }
+
+    for (const loan of loans as any[]) {
+      const dueItems = loanItemsByTarget.get(loan.id) ?? [];
+      const loanName = loan.purpose || `loan for ${member.fullName}`;
+      let remainingBalanceCap = roundMoney(Math.max(Number(loan.remainingBalance ?? 0), 0));
+      for (const item of dueItems) {
+        if (remainingBalanceCap <= 0) break;
+        const dueAmount = roundMoney(Math.min(Number(item.remainingAmount), remainingBalanceCap));
+        if (dueAmount <= 0) continue;
+        frames.push({
+          phase: 'LOAN',
+          sourceType: 'RepaymentScheduleItem',
+          sourceId: item.id,
+          sourceKey: this.scheduleExposureSourceKey('LoanApplication', item.id),
+          targetId: loan.id,
+          dueAmount,
+          dueAt: item.dueDate,
+          trigger: trigger ?? 'CRON',
+          metadata: {
+            loanId: loan.id,
+            loanName,
+            sequence: item.sequence,
+            memberName: member.fullName,
+            membershipNumber: member.membershipNumber,
+            expectedAmount: Number(item.expectedAmount),
+            paidAmount: Number(item.paidAmount),
+            remainingAmount: dueAmount,
+            dueAt: item.dueDate?.toISOString?.() ?? null,
+          },
+        });
+        remainingBalanceCap = roundMoney(remainingBalanceCap - dueAmount);
+      }
+    }
+
+    return frames.filter((frame) => frame.dueAmount > 0);
   }
 
   private async getScheduleTotals(client: any, targetType: RepaymentScheduleTargetType, targetId: string) {
@@ -1568,6 +2094,8 @@ export class WalletService {
 
       if (entry.type === 'PACKAGE_SUBSCRIPTION' && entry.scheduleAllocations?.length) {
         await this.applyScheduleAllocationPlan(client, entry.scheduleAllocations);
+      } else if (entry.type === 'PACKAGE_PENALTY') {
+        await this.clearDebtExposure(client, this.packagePenaltyExposureSourceKey(entry.subscriptionId), entry.amount);
       }
 
       settlements.push({
@@ -1683,9 +2211,12 @@ export class WalletService {
       });
     }
 
+    const exposureFrames = await this.collectDueDebtExposureFrames(client, memberId, context.trigger);
+    const exposures = await this.exposeDebtFrames(client, memberId, exposureFrames);
     const debtSettlementAmount = roundMoney(settlements.reduce((sum, settlement) => sum + settlement.amount, 0));
     return {
       settlements,
+      exposures,
       debtSettlementAmount,
       walletCreditAmount: roundMoney(Math.max(fundingAmount - debtSettlementAmount, 0)),
     };
@@ -1745,6 +2276,7 @@ export class WalletService {
       const nextRemainingAmount = roundMoney(Math.max(expectedAmount - nextPaidAmount, 0));
       allocations.push({
         itemId: item.id,
+        targetType: item.targetType,
         sequence: item.sequence,
         dueDate: item.dueDate,
         expectedAmount,
@@ -1848,6 +2380,7 @@ export class WalletService {
         if (result.count < 1) {
           throw new BadRequestException('Weekly deduction balance changed during approval. Please retry the approval.');
         }
+        await this.clearDebtExposure(client, this.weeklyExposureSourceKey(allocation.cycleId), allocation.paidAmount);
       }),
     );
   }
@@ -1871,6 +2404,13 @@ export class WalletService {
         });
         if (result.count < 1) {
           throw new BadRequestException('Repayment schedule balance changed during approval. Please retry the approval.');
+        }
+        if (allocation.targetType) {
+          await this.clearDebtExposure(
+            client,
+            this.scheduleExposureSourceKey(allocation.targetType, allocation.itemId),
+            allocation.paidAmount,
+          );
         }
       }),
     );
@@ -1929,17 +2469,32 @@ export class WalletService {
 
   async settleWeeklyObligations(
     memberId: string,
-    options: { recordAttempts?: boolean; trigger?: string } = {},
+    options: { recordAttempts?: boolean; trigger?: string; exposeDebt?: boolean } = {},
   ): Promise<SettlementRecord[]> {
+    return (await this.settleWeeklyObligationsDetailed(memberId, options)).settlements;
+  }
+
+  async settleWeeklyObligationsDetailed(
+    memberId: string,
+    options: { recordAttempts?: boolean; trigger?: string; exposeDebt?: boolean } = {},
+  ): Promise<ObligationSettlementResult> {
     const wallet = await this.getMemberWallet(memberId);
-    return this.settleDueWeeklyDeductions(memberId, Number(wallet.availableBalance), options);
+    return this.settleDueWeeklyDeductionsDetailed(memberId, Number(wallet.availableBalance), options);
   }
 
   async settlePackageObligations(
     memberId: string,
-    options: { recordAttempts?: boolean; trigger?: string } = {},
+    options: { recordAttempts?: boolean; trigger?: string; exposeDebt?: boolean } = {},
   ): Promise<SettlementRecord[]> {
+    return (await this.settlePackageObligationsDetailed(memberId, options)).settlements;
+  }
+
+  async settlePackageObligationsDetailed(
+    memberId: string,
+    options: { recordAttempts?: boolean; trigger?: string; exposeDebt?: boolean } = {},
+  ): Promise<ObligationSettlementResult> {
     const settlements: SettlementRecord[] = [];
+    const exposures: ExposureRecord[] = [];
     let refreshedWallet = await this.getMemberWallet(memberId);
     let availableBalance = Number(refreshedWallet.availableBalance);
 
@@ -1979,60 +2534,12 @@ export class WalletService {
     packageCandidates.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
 
     for (const candidate of packageCandidates) {
-      const { subscription, expectedAmount, dueAt } = candidate;
+      const { subscription, expectedAmount } = candidate;
       const amountToSpend = Math.min(Math.max(availableBalance, 0), expectedAmount);
 
       if (amountToSpend <= 0) {
-        if (options.recordAttempts) {
-          const dueKey = dueAt.toISOString().slice(0, 10);
-          const attemptKey = startOfIsoDay(new Date()).toISOString().slice(0, 10);
-          const reference = `AUTO-PACKAGE-ATTEMPT-${subscription.id}-${dueKey}-${attemptKey}`;
-          const repaymentStatus = this.repaymentAttemptStatus(0, expectedAmount);
-          const result = await this.recordRepaymentAttempt(memberId, 'PACKAGE_SUBSCRIPTION', 0, reference, {
-            category: 'automatic package repayment',
-            description: `Automatic package repayment attempt for ${subscription.package.name}`,
-            editable: false,
-            lockReason: 'Package repayment attempts are system-generated and cannot be edited.',
-            metadata: {
-              subscriptionId: subscription.id,
-              packageName: subscription.package.name,
-              memberName: subscription.member?.fullName,
-              membershipNumber: subscription.member?.membershipNumber,
-              dueAt: dueAt.toISOString(),
-              dueCycle: dueKey,
-              trigger: options.trigger ?? 'CRON',
-              autoSettled: true,
-              repaymentPhase: 'PACKAGE',
-              repaymentStatus,
-              expectedAmount,
-              paidAmount: 0,
-              remainingAmount: expectedAmount,
-            },
-            repaymentAttempt: {
-              phase: 'PACKAGE',
-              targetType: 'PackageSubscription',
-              targetId: subscription.id,
-              expectedAmount,
-              paidAmount: 0,
-              remainingAmount: expectedAmount,
-              status: repaymentStatus,
-              mode: 'AUTO',
-              dueAt,
-              metadata: {
-                packageName: subscription.package.name,
-                dueCycle: dueKey,
-                trigger: options.trigger ?? 'CRON',
-              },
-            },
-          });
-          settlements.push({
-            type: 'PACKAGE_SUBSCRIPTION',
-            amount: 0,
-            targetId: result.transaction.id,
-            expectedAmount,
-            remainingAmount: expectedAmount,
-            repaymentStatus,
-          });
+        if (options.exposeDebt !== false) {
+          exposures.push(...(await this.exposeDuePackageDebt(memberId, subscription.id, options.trigger)));
         }
         continue;
       }
@@ -2042,18 +2549,29 @@ export class WalletService {
         trigger: options.trigger,
       });
       settlements.push(...applied.settlements);
+      if (options.exposeDebt !== false && amountToSpend < expectedAmount) {
+        exposures.push(...(await this.exposeDuePackageDebt(memberId, subscription.id, options.trigger)));
+      }
       refreshedWallet = applied.wallet;
       availableBalance = Number(refreshedWallet.availableBalance);
     }
 
-    return settlements;
+    return { settlements, exposures };
   }
 
   async settleLoanObligations(
     memberId: string,
-    options: { recordAttempts?: boolean; trigger?: string } = {},
+    options: { recordAttempts?: boolean; trigger?: string; exposeDebt?: boolean } = {},
   ): Promise<SettlementRecord[]> {
+    return (await this.settleLoanObligationsDetailed(memberId, options)).settlements;
+  }
+
+  async settleLoanObligationsDetailed(
+    memberId: string,
+    options: { recordAttempts?: boolean; trigger?: string; exposeDebt?: boolean } = {},
+  ): Promise<ObligationSettlementResult> {
     const settlements: SettlementRecord[] = [];
+    const exposures: ExposureRecord[] = [];
     let refreshedWallet = await this.getMemberWallet(memberId);
     let availableBalance = Number(refreshedWallet.availableBalance);
 
@@ -2087,61 +2605,12 @@ export class WalletService {
     loanCandidates.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
 
     for (const candidate of loanCandidates) {
-      const { loan, expectedAmount, dueAt } = candidate;
+      const { loan, expectedAmount } = candidate;
       const amountToDebit = Math.min(Math.max(availableBalance, 0), expectedAmount);
 
       if (amountToDebit <= 0) {
-        if (options.recordAttempts) {
-          const dueKey = dueAt.toISOString().slice(0, 10);
-          const attemptKey = startOfIsoDay(new Date()).toISOString().slice(0, 10);
-          const reference = `AUTO-LOAN-ATTEMPT-${loan.id}-${dueKey}-${attemptKey}`;
-          const loanName = loan.purpose || `loan for ${loan.member.fullName}`;
-          const repaymentStatus = this.repaymentAttemptStatus(0, expectedAmount);
-          const result = await this.recordRepaymentAttempt(memberId, 'LOAN_REPAYMENT', 0, reference, {
-            category: 'automatic loan repayment',
-            description: `Automatic loan repayment attempt for ${loanName}`,
-            editable: false,
-            lockReason: 'Loan repayment attempts are system-generated and cannot be edited.',
-            metadata: {
-              loanId: loan.id,
-              loanName,
-              memberName: loan.member.fullName,
-              membershipNumber: loan.member.membershipNumber,
-              dueAt: dueAt.toISOString(),
-              dueCycle: dueKey,
-              trigger: options.trigger ?? 'CRON',
-              autoSettled: true,
-              repaymentPhase: 'LOAN',
-              repaymentStatus,
-              expectedAmount,
-              paidAmount: 0,
-              remainingAmount: expectedAmount,
-            },
-            repaymentAttempt: {
-              phase: 'LOAN',
-              targetType: 'LoanApplication',
-              targetId: loan.id,
-              expectedAmount,
-              paidAmount: 0,
-              remainingAmount: expectedAmount,
-              status: repaymentStatus,
-              mode: 'AUTO',
-              dueAt,
-              metadata: {
-                loanName,
-                dueCycle: dueKey,
-                trigger: options.trigger ?? 'CRON',
-              },
-            },
-          });
-          settlements.push({
-            type: 'LOAN_REPAYMENT',
-            amount: 0,
-            targetId: result.transaction.id,
-            expectedAmount,
-            remainingAmount: expectedAmount,
-            repaymentStatus,
-          });
+        if (options.exposeDebt !== false) {
+          exposures.push(...(await this.exposeDueLoanDebt(memberId, loan.id, options.trigger)));
         }
         continue;
       }
@@ -2151,18 +2620,21 @@ export class WalletService {
         trigger: options.trigger,
       });
       settlements.push(applied.settlement);
+      if (options.exposeDebt !== false && amountToDebit < expectedAmount) {
+        exposures.push(...(await this.exposeDueLoanDebt(memberId, loan.id, options.trigger)));
+      }
       refreshedWallet = applied.wallet;
       availableBalance = Number(refreshedWallet.availableBalance);
     }
 
-    return settlements;
+    return { settlements, exposures };
   }
 
-  private async settleDueWeeklyDeductions(
+  private async settleDueWeeklyDeductionsDetailed(
     memberId: string,
     availableBalance: number,
-    options: { recordAttempts?: boolean; trigger?: string } = {},
-  ): Promise<SettlementRecord[]> {
+    options: { recordAttempts?: boolean; trigger?: string; exposeDebt?: boolean } = {},
+  ): Promise<ObligationSettlementResult> {
     const member = await this.prisma.member.findUnique({
       where: { id: memberId },
       select: {
@@ -2176,12 +2648,12 @@ export class WalletService {
     });
 
     if (!member || member.status !== 'ACTIVE') {
-      return [];
+      return { settlements: [], exposures: [] };
     }
 
     const settings = await this.getWeeklyDeductionSettings();
     if (settings.amount <= 0) {
-      return [];
+      return { settlements: [], exposures: [] };
     }
 
     const today = startOfIsoDay(new Date());
@@ -2202,125 +2674,89 @@ export class WalletService {
     const amountToDebit = Math.min(Math.max(availableBalance, 0), outstanding);
 
     if (outstanding <= 0) {
-      return [];
+      return { settlements: [], exposures: [] };
     }
 
     if (amountToDebit <= 0) {
-      if (options.recordAttempts) {
-        const firstDueAt = dueCycles[0]?.dueDate ?? today;
-        const lastDueAt = dueCycles[dueCycles.length - 1]?.dueDate ?? today;
-        const dueKey = firstDueAt.toISOString().slice(0, 10);
-        const attemptKey = today.toISOString().slice(0, 10);
-        const reference = `AUTO-WEEKLY-ATTEMPT-${memberId}-${dueKey}-${attemptKey}`;
-        const repaymentStatus = this.repaymentAttemptStatus(0, outstanding);
-        const result = await this.recordRepaymentAttempt(memberId, 'WEEKLY_COOPERATIVE', 0, reference, {
-          category: 'automatic weekly cooperative',
-          description: `Automatic weekly cooperative repayment attempt for ${dueKey}`,
-          editable: false,
-          lockReason: 'Weekly cooperative repayment attempts are system-generated and cannot be edited.',
-          metadata: {
-            deductionDate: today.toISOString(),
-            memberName: member.fullName,
-            membershipNumber: member.membershipNumber,
-            trigger: options.trigger ?? 'CRON',
-            autoSettled: true,
-            settlementPriority: 'WEEKLY',
-            repaymentPhase: 'WEEKLY_DEDUCTION',
-            repaymentStatus,
-            expectedAmount: outstanding,
-            paidAmount: 0,
-            remainingAmount: outstanding,
-            dueFrom: firstDueAt.toISOString(),
-            dueTo: lastDueAt.toISOString(),
-            dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
-          },
-          repaymentAttempt: {
-            phase: 'WEEKLY_DEDUCTION',
-            targetType: 'WeeklyDeduction',
-            targetId: memberId,
-            expectedAmount: outstanding,
-            paidAmount: 0,
-            remainingAmount: outstanding,
-            status: repaymentStatus,
-            mode: 'AUTO',
-            dueAt: firstDueAt,
-            metadata: {
-              dueFrom: firstDueAt.toISOString(),
-              dueTo: lastDueAt.toISOString(),
-              dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
-              trigger: options.trigger ?? 'CRON',
-            },
-          },
-        });
-        return [
-          {
-            type: 'WEEKLY_COOPERATIVE',
-            amount: 0,
-            targetId: result.transaction.id,
-            expectedAmount: outstanding,
-            remainingAmount: outstanding,
-            repaymentStatus,
-          },
-        ];
-      }
-      return [];
+      return {
+        settlements: [],
+        exposures: options.exposeDebt !== false ? await this.exposeDueWeeklyDebt(member, options.trigger) : [],
+      };
     }
 
     const runStamp = today.toISOString();
-    const reference = `AUTO-WEEKLY-FUNDING-${memberId}-${runStamp.slice(0, 10)}-${Date.now()}`;
+    const firstDueCycle = dueCycles[0];
+    const reference = firstDueCycle
+      ? `WEEKLY-${memberId}-${firstDueCycle.id}-${moneyKey(Number(firstDueCycle.amountPaid ?? 0))}`
+      : `WEEKLY-${memberId}-${runStamp.slice(0, 10)}`;
     const repaymentStatus = this.repaymentAttemptStatus(amountToDebit, outstanding);
-    const result = await this.debitWallet(memberId, amountToDebit, 'WEEKLY_COOPERATIVE', reference, {
-      category: 'automatic weekly cooperative',
-      description: `Automatic weekly cooperative settlement for ${runStamp.slice(0, 10)}`,
-      editable: false,
-      lockReason: 'Weekly cooperative deductions are settled automatically from wallet funding.',
-      metadata: {
-        deductionDate: runStamp,
-        memberName: member.fullName,
-        membershipNumber: member.membershipNumber,
-        autoSettled: true,
-        settlementPriority: 'WEEKLY',
-        trigger: options.trigger ?? 'SYSTEM',
-        repaymentPhase: 'WEEKLY_DEDUCTION',
-        repaymentStatus,
-        expectedAmount: outstanding,
-        paidAmount: amountToDebit,
-        remainingAmount: Math.max(outstanding - amountToDebit, 0),
-        dueFrom: dueCycles[0]?.dueDate?.toISOString?.() ?? null,
-        dueTo: dueCycles[dueCycles.length - 1]?.dueDate?.toISOString?.() ?? null,
-        dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
-      },
-      repaymentAttempt: {
-        phase: 'WEEKLY_DEDUCTION',
-        targetType: 'WeeklyDeduction',
-        targetId: memberId,
-        expectedAmount: outstanding,
-        paidAmount: amountToDebit,
-        remainingAmount: Math.max(outstanding - amountToDebit, 0),
-        status: repaymentStatus,
-        mode: 'AUTO',
-        dueAt: dueCycles[0]?.dueDate ?? today,
+    let result: Awaited<ReturnType<WalletService['debitWallet']>>;
+    try {
+      result = await this.debitWallet(memberId, amountToDebit, 'WEEKLY_COOPERATIVE', reference, {
+        category: 'automatic weekly cooperative',
+        description: `Automatic weekly cooperative settlement for ${runStamp.slice(0, 10)}`,
+        editable: false,
+        lockReason: 'Weekly cooperative deductions are settled automatically from wallet funding.',
         metadata: {
+          deductionDate: runStamp,
+          memberName: member.fullName,
+          membershipNumber: member.membershipNumber,
+          autoSettled: true,
+          settlementPriority: 'WEEKLY',
+          trigger: options.trigger ?? 'SYSTEM',
+          repaymentPhase: 'WEEKLY_DEDUCTION',
+          repaymentStatus,
+          expectedAmount: outstanding,
+          paidAmount: amountToDebit,
+          remainingAmount: Math.max(outstanding - amountToDebit, 0),
           dueFrom: dueCycles[0]?.dueDate?.toISOString?.() ?? null,
           dueTo: dueCycles[dueCycles.length - 1]?.dueDate?.toISOString?.() ?? null,
           dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
-          trigger: options.trigger ?? 'SYSTEM',
         },
-      },
-    });
+        repaymentAttempt: {
+          phase: 'WEEKLY_DEDUCTION',
+          targetType: 'WeeklyDeduction',
+          targetId: memberId,
+          expectedAmount: outstanding,
+          paidAmount: amountToDebit,
+          remainingAmount: Math.max(outstanding - amountToDebit, 0),
+          status: repaymentStatus,
+          mode: 'AUTO',
+          dueAt: dueCycles[0]?.dueDate ?? today,
+          metadata: {
+            dueFrom: dueCycles[0]?.dueDate?.toISOString?.() ?? null,
+            dueTo: dueCycles[dueCycles.length - 1]?.dueDate?.toISOString?.() ?? null,
+            dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
+            trigger: options.trigger ?? 'SYSTEM',
+          },
+        },
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        return { settlements: [], exposures: [] };
+      }
+      throw error;
+    }
 
     await this.allocateWeeklySettlement(this.prisma, memberId, result.transaction.id, amountToDebit);
+    const remainingAmount = roundMoney(Math.max(outstanding - amountToDebit, 0));
 
-    return [
-      {
-        type: 'WEEKLY_COOPERATIVE',
-        amount: amountToDebit,
-        targetId: result.transaction.id,
-        expectedAmount: outstanding,
-        remainingAmount: Math.max(outstanding - amountToDebit, 0),
-        repaymentStatus,
-      },
-    ];
+    return {
+      settlements: [
+        {
+          type: 'WEEKLY_COOPERATIVE',
+          amount: amountToDebit,
+          targetId: result.transaction.id,
+          expectedAmount: outstanding,
+          remainingAmount,
+          repaymentStatus,
+        },
+      ],
+      exposures:
+        options.exposeDebt !== false && remainingAmount > 0
+          ? await this.exposeDueWeeklyDebt(member, options.trigger)
+          : [],
+    };
   }
 
   private repaymentAttemptStatus(paidAmount: number, expectedAmount: number): RepaymentAttemptStatus {
@@ -2418,15 +2854,14 @@ export class WalletService {
     await this.ensureLoanRepaymentSchedule(loan.id);
     const scheduleDue = await this.getScheduleDueAmount(this.prisma, 'LoanApplication', loan.id, mode === 'AUTO');
     const dueAt = scheduleDue.dueAt ?? (loan as any).nextRepaymentAt ?? loan.dueDate ?? new Date();
-    const dueKey = mode === 'AUTO' ? dueAt.toISOString().slice(0, 10) : String(Date.now());
-    const referencePrefix = mode === 'AUTO' ? 'AUTO-LOAN' : mode === 'ADMIN' ? 'ADMIN-LOAN' : 'REPAY';
     const loanDisbursedAmount = Number((loan as any).disbursedAmount ?? 0);
     const loanTotalAmount = loanDisbursedAmount > 0 ? loanDisbursedAmount : Number(loan.amount);
     const amountPaidSoFar = Math.max(loanTotalAmount - repayableBalance, 0);
-    const reference =
-      mode === 'AUTO'
-        ? `${referencePrefix}-${loan.id}-${dueKey}-${Math.round(amountPaidSoFar * 100)}`
-        : `${referencePrefix}-${loan.id}-${dueKey}`;
+    const firstDueItem = scheduleDue.items[0] ?? null;
+    const dueKey = firstDueItem
+      ? `${firstDueItem.id}-${moneyKey(Number(firstDueItem.paidAmount ?? 0))}`
+      : `${dueAt.toISOString().slice(0, 10)}-${moneyKey(amountPaidSoFar)}`;
+    const reference = `LOAN-REPAY-${loan.id}-${dueKey}`;
     const loanName = loan.purpose || `loan for ${loan.member.fullName}`;
     const expectedAmount = Math.max(options.expectedAmount ?? scheduleDue.amount ?? amount, amount);
     const repaymentStatus = this.repaymentAttemptStatus(amount, expectedAmount);
@@ -2447,7 +2882,8 @@ export class WalletService {
       }
     }
 
-    await this.debitWallet(memberId, amount, 'LOAN_REPAYMENT', reference, {
+    try {
+      await this.debitWallet(memberId, amount, 'LOAN_REPAYMENT', reference, {
       category: mode === 'AUTO' ? 'automatic loan repayment' : 'loan repayment',
       description:
         mode === 'AUTO'
@@ -2489,7 +2925,25 @@ export class WalletService {
           trigger: options.trigger ?? mode,
         },
       },
-    });
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        if (mode === 'AUTO') {
+          const wallet = await this.getMemberWallet(memberId);
+          return {
+            wallet,
+            reference,
+            settlement: {
+              type: 'LOAN_REPAYMENT',
+              amount: 0,
+              targetId: loan.id,
+            },
+          };
+        }
+        throw new BadRequestException('This loan repayment was already processed. Please refresh the loan details.');
+      }
+      throw error;
+    }
 
     await this.allocateRepaymentSchedule(this.prisma, 'LoanApplication', loan.id, amount, mode === 'AUTO');
     const scheduleTotals = await this.getScheduleTotals(this.prisma, 'LoanApplication', loan.id);
@@ -2552,16 +3006,16 @@ export class WalletService {
     const principalDueAtStart = Math.min(scheduleDue.amount, amountRemaining);
     const dueAt = scheduleDue.dueAt ?? subscription.nextDueAt ?? subscription.createdAt ?? new Date();
     const expectedTotalAmount = Math.max(options.expectedAmount ?? penaltyAccrued + principalDueAtStart, amount);
-    const dueKey = mode === 'AUTO' ? dueAt.toISOString().slice(0, 10) : `${Date.now()}`;
+    const firstPrincipalItem = scheduleDue.items[0] ?? null;
+    const dueKey = firstPrincipalItem
+      ? `${firstPrincipalItem.id}-${moneyKey(Number(firstPrincipalItem.paidAmount ?? 0))}`
+      : `${dueAt.toISOString().slice(0, 10)}-${moneyKey(amountPaid)}`;
 
     if (penaltyAccrued > 0 && remainingToSpend > 0) {
       const penaltyPayment = Math.min(remainingToSpend, penaltyAccrued);
       const expectedPenaltyAmount = penaltyAccrued;
       const penaltyRepaymentStatus = this.repaymentAttemptStatus(penaltyPayment, expectedPenaltyAmount);
-      const penaltyReference =
-        mode === 'AUTO'
-          ? `AUTO-PACKAGE-PENALTY-${subscription.id}-${dueKey}-${Math.round(penaltyAccrued * 100)}`
-          : `PACKAGE-PENALTY-${subscription.id}-${Date.now()}`;
+      const penaltyReference = `PACKAGE-PENALTY-${subscription.id}-${moneyKey(penaltyAccrued)}`;
       const existingPenalty =
         mode === 'AUTO'
           ? await this.prisma.transaction.findUnique({ where: { reference: penaltyReference } })
@@ -2614,10 +3068,14 @@ export class WalletService {
           if (!isUniqueConstraintError(error)) {
             throw error;
           }
+          if (mode !== 'AUTO') {
+            throw new BadRequestException('This package penalty payment was already processed. Please refresh the package details.');
+          }
         }
       }
 
       if (penaltyWasApplied) {
+        await this.clearDebtExposure(this.prisma, this.packagePenaltyExposureSourceKey(subscription.id), penaltyPayment);
         penaltyAccrued -= penaltyPayment;
         remainingToSpend -= penaltyPayment;
         settlements.push({
@@ -2635,10 +3093,7 @@ export class WalletService {
       const principalPayment = Math.min(remainingToSpend, amountRemaining);
       const expectedPrincipalAmount = Math.max(Math.min(principalDueAtStart, amountRemaining), principalPayment);
       const principalRepaymentStatus = this.repaymentAttemptStatus(principalPayment, expectedPrincipalAmount);
-      const packageReference =
-        mode === 'AUTO'
-          ? `AUTO-PACKAGE-${subscription.id}-${dueKey}-${Math.round(amountPaid * 100)}`
-          : `PACKAGE-${subscription.id}-${Date.now()}`;
+      const packageReference = `PACKAGE-${subscription.id}-${dueKey}`;
       const existingPackage =
         mode === 'AUTO'
           ? await this.prisma.transaction.findUnique({ where: { reference: packageReference } })
@@ -2690,6 +3145,9 @@ export class WalletService {
         } catch (error) {
           if (!isUniqueConstraintError(error)) {
             throw error;
+          }
+          if (mode !== 'AUTO') {
+            throw new BadRequestException('This package payment was already processed. Please refresh the package details.');
           }
         }
       }
@@ -2753,8 +3211,7 @@ export class WalletService {
       });
     }
 
-    const referencePrefix = mode === 'AUTO' ? 'AUTO-SAVE' : mode === 'ADMIN' ? 'ADMIN-SAVE' : 'SAVE';
-    const reference = `${referencePrefix}-${account.id}-${Date.now()}`;
+    const reference = `SAVINGS-${account.id}-${moneyKey(Number(account.balance ?? 0))}`;
     const description =
       mode === 'AUTO'
         ? `Automatic savings contribution for ${account.member.fullName}`
@@ -2762,19 +3219,39 @@ export class WalletService {
           ? `Admin wallet allocation to ${account.member.fullName}'s savings`
           : `Savings contribution for ${account.member.fullName}`;
 
-    await this.debitWallet(memberId, amount, 'SAVINGS', reference, {
-      category: mode === 'AUTO' ? 'automatic savings contribution' : 'savings contribution',
-      description,
-      editable: false,
-      lockReason: 'Savings contribution transactions are system-generated and cannot be edited.',
-      metadata: {
-        savingsAccountId: account.id,
-        memberName: account.member.fullName,
-        membershipNumber: account.member.membershipNumber,
-        autoSettled: mode === 'AUTO',
-        adminAllocated: mode === 'ADMIN',
-      },
-    });
+    try {
+      await this.debitWallet(memberId, amount, 'SAVINGS', reference, {
+        category: mode === 'AUTO' ? 'automatic savings contribution' : 'savings contribution',
+        description,
+        editable: false,
+        lockReason: 'Savings contribution transactions are system-generated and cannot be edited.',
+        metadata: {
+          savingsAccountId: account.id,
+          memberName: account.member.fullName,
+          membershipNumber: account.member.membershipNumber,
+          autoSettled: mode === 'AUTO',
+          adminAllocated: mode === 'ADMIN',
+        },
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        if (mode === 'AUTO') {
+          const wallet = await this.getMemberWallet(memberId);
+          return {
+            wallet,
+            reference,
+            account,
+            settlement: {
+              type: 'SAVINGS',
+              amount: 0,
+              targetId: account.id,
+            },
+          };
+        }
+        throw new BadRequestException('This savings contribution was already processed. Please refresh the savings details.');
+      }
+      throw error;
+    }
 
     const updated = await this.prisma.savingsAccount.update({
       where: { id: account.id },

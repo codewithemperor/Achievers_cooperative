@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { WalletService } from './wallet.service';
 import { AuditService } from './audit.service';
@@ -38,6 +38,14 @@ function toNumber(value: unknown) {
   return Number(value ?? 0);
 }
 
+function moneyKey(value: unknown) {
+  return Math.round(toNumber(value) * 100);
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002';
+}
+
 function statusForCycle(dueDate: Date, amount: number, amountPaid: number, asOf = new Date()) {
   if (amountPaid >= amount) {
     return dueDate.getTime() > startOfIsoDay(asOf).getTime() ? 'PREPAID' : 'PAID';
@@ -48,6 +56,7 @@ function statusForCycle(dueDate: Date, amount: number, amountPaid: number, asOf 
 
 @Injectable()
 export class WeeklyDeductionsService {
+  private readonly logger = new Logger(WeeklyDeductionsService.name);
   private runInFlight = false;
 
   constructor(
@@ -168,19 +177,40 @@ export class WeeklyDeductionsService {
     }
 
     const member = await this.findMemberByUserId(userId);
-    const reference = `WEEKLY-PAY-${member.id}-${Date.now()}`;
-    const result = await this.walletService.debitWallet(member.id, amount, 'WEEKLY_COOPERATIVE', reference, {
-      category: 'weekly cooperative',
-      description: `Weekly cooperative payment by ${member.fullName}`,
-      editable: false,
-      lockReason: 'Weekly cooperative payments are system-generated and cannot be edited.',
-      metadata: {
+    const settings = await this.getSettings();
+    await this.ensureCyclesForMember(member, new Date(), settings);
+    const openCycle = await (this.prisma as any).weeklyDeductionCycle.findFirst({
+      where: {
         memberId: member.id,
-        memberName: member.fullName,
-        membershipNumber: member.membershipNumber,
-        manualWeeklyPayment: true,
+        status: { in: OPEN_STATUSES },
       },
+      orderBy: { dueDate: 'asc' },
     });
+    const reference = openCycle
+      ? `WEEKLY-${member.id}-${openCycle.id}-${moneyKey(openCycle.amountPaid)}`
+      : `WEEKLY-${member.id}-${startOfIsoDay(new Date()).toISOString().slice(0, 10)}`;
+
+    let result: Awaited<ReturnType<WalletService['debitWallet']>>;
+    try {
+      result = await this.walletService.debitWallet(member.id, amount, 'WEEKLY_COOPERATIVE', reference, {
+        category: 'weekly cooperative',
+        description: `Weekly cooperative payment by ${member.fullName}`,
+        editable: false,
+        lockReason: 'Weekly cooperative payments are system-generated and cannot be edited.',
+        metadata: {
+          memberId: member.id,
+          memberName: member.fullName,
+          membershipNumber: member.membershipNumber,
+          manualWeeklyPayment: true,
+          cycleId: openCycle?.id ?? null,
+        },
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new BadRequestException('This weekly payment was already processed. Please refresh your weekly deduction details.');
+      }
+      throw error;
+    }
 
     await this.allocatePayment(member.id, amount, {
       transactionId: result.transaction.id,
@@ -446,6 +476,9 @@ export class WeeklyDeductionsService {
     const totalSettled = weeklySummary.totalSettled;
     const partialCount = weeklySummary.partialCount;
     const unpaidCount = weeklySummary.unpaidCount;
+    const exposureCount = weeklySummary.exposureCount;
+    const exposedDebtAmount = weeklySummary.exposedDebtAmount;
+    const durationMs = weeklySummary.durationMs;
 
     await this.prisma.systemConfig.upsert({
       where: { key: LAST_RUN_KEY },
@@ -461,6 +494,9 @@ export class WeeklyDeductionsService {
       totalSettled,
       partialCount,
       unpaidCount,
+      exposureCount,
+      exposedDebtAmount,
+      durationMs,
       trigger: options?.trigger ?? 'ADMIN',
     });
 
@@ -470,6 +506,9 @@ export class WeeklyDeductionsService {
       totalSettled,
       partialCount,
       unpaidCount,
+      exposureCount,
+      exposedDebtAmount,
+      durationMs,
       amount: settings.amount,
       day: expectedDay,
       runStamp,
@@ -563,27 +602,27 @@ export class WeeklyDeductionsService {
     }
   }
 
-  async runWeeklyCron() {
+  async runWeeklyCron(options: { exposeDebt?: boolean } = {}) {
     const actor = await this.getCronActor();
     if (!actor) return { skipped: true, reason: 'no-admin-actor' };
-    return this.runWeeklyOutstanding(actor.id, { recordAttempts: true, trigger: 'CRON' });
+    return this.runWeeklyOutstanding(actor.id, { recordAttempts: true, trigger: 'CRON', exposeDebt: options.exposeDebt });
   }
 
-  async runPackageRepaymentsCron() {
+  async runPackageRepaymentsCron(options: { exposeDebt?: boolean } = {}) {
     const actor = await this.getCronActor();
     if (!actor) return { skipped: true, reason: 'no-admin-actor' };
-    return this.runPackageRepayments(actor.id, { recordAttempts: true, trigger: 'CRON' });
+    return this.runPackageRepayments(actor.id, { recordAttempts: true, trigger: 'CRON', exposeDebt: options.exposeDebt });
   }
 
-  async runLoanRepaymentsCron() {
+  async runLoanRepaymentsCron(options: { exposeDebt?: boolean } = {}) {
     const actor = await this.getCronActor();
     if (!actor) return { skipped: true, reason: 'no-admin-actor' };
-    return this.runLoanRepayments(actor.id, { recordAttempts: true, trigger: 'CRON' });
+    return this.runLoanRepayments(actor.id, { recordAttempts: true, trigger: 'CRON', exposeDebt: options.exposeDebt });
   }
 
   async runWeeklyOutstanding(
     actorId: string,
-    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string } = {},
+    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string; exposeDebt?: boolean } = {},
   ) {
     await this.ensureDefaults();
     await this.touchLastCheckedAt();
@@ -602,7 +641,7 @@ export class WeeklyDeductionsService {
 
   async runPackageRepayments(
     actorId: string,
-    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string } = {},
+    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string; exposeDebt?: boolean } = {},
   ) {
     await this.ensureDefaults();
     await this.touchLastCheckedAt();
@@ -616,7 +655,7 @@ export class WeeklyDeductionsService {
 
   async runLoanRepayments(
     actorId: string,
-    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string } = {},
+    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string; exposeDebt?: boolean } = {},
   ) {
     await this.ensureDefaults();
     await this.touchLastCheckedAt();
@@ -633,6 +672,7 @@ export class WeeklyDeductionsService {
       includeWeekly?: boolean;
       recordAttempts?: boolean;
       trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string;
+      exposeDebt?: boolean;
     } = {},
   ) {
     const weekly = options.includeWeekly === false
@@ -648,6 +688,9 @@ export class WeeklyDeductionsService {
       completedCount: number;
       partialCount: number;
       unpaidCount: number;
+      exposureCount: number;
+      exposedDebtAmount: number;
+      durationMs: number;
     }>;
 
     return {
@@ -661,13 +704,17 @@ export class WeeklyDeductionsService {
       completedCount: summaries.reduce((sum, item) => sum + item.completedCount, 0),
       partialCount: summaries.reduce((sum, item) => sum + item.partialCount, 0),
       unpaidCount: summaries.reduce((sum, item) => sum + item.unpaidCount, 0),
+      exposureCount: summaries.reduce((sum, item) => sum + item.exposureCount, 0),
+      exposedDebtAmount: summaries.reduce((sum, item) => sum + item.exposedDebtAmount, 0),
+      durationMs: summaries.reduce((sum, item) => sum + item.durationMs, 0),
     };
   }
 
   private async processObligationPhase(
     phase: 'weekly' | 'package' | 'loan',
-    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string } = {},
+    options: { recordAttempts?: boolean; trigger?: 'ADMIN' | 'CRON' | 'LAZY' | string; exposeDebt?: boolean } = {},
   ) {
+    const startedAt = Date.now();
     const now = new Date();
     const today = startOfIsoDay(now);
     let dueMembers: Array<{ memberId: string }>;
@@ -734,14 +781,16 @@ export class WeeklyDeductionsService {
 
     const dueMemberIds = dueMembers.map((item) => item.memberId);
     const results = await this.mapInBatches(dueMemberIds, 5, async (memberId) => {
-      const settlements =
+      const result =
         phase === 'weekly'
-          ? await this.walletService.settleWeeklyObligations(memberId, options)
+          ? await this.walletService.settleWeeklyObligationsDetailed(memberId, options)
           : phase === 'package'
-            ? await this.walletService.settlePackageObligations(memberId, options)
-            : await this.walletService.settleLoanObligations(memberId, options);
+            ? await this.walletService.settlePackageObligationsDetailed(memberId, options)
+            : await this.walletService.settleLoanObligationsDetailed(memberId, options);
+      const settlements = result.settlements.filter((item) => item.amount > 0);
+      const exposures = result.exposures;
 
-      if (!settlements.length) {
+      if (!settlements.length && !exposures.length) {
         return {
           processedMembers: 0,
           settlementCount: 0,
@@ -749,6 +798,8 @@ export class WeeklyDeductionsService {
           completedCount: 0,
           partialCount: 0,
           unpaidCount: 0,
+          exposureCount: 0,
+          exposedDebtAmount: 0,
         };
       }
 
@@ -758,9 +809,18 @@ export class WeeklyDeductionsService {
         totalSettled: settlements.reduce((sum, item) => sum + item.amount, 0),
         completedCount: settlements.filter((item) => (item.repaymentStatus ?? (item.amount > 0 ? 'COMPLETED' : 'UNPAID')) === 'COMPLETED').length,
         partialCount: settlements.filter((item) => item.repaymentStatus === 'PARTIAL').length,
-        unpaidCount: settlements.filter((item) => item.repaymentStatus === 'UNPAID').length,
+        unpaidCount: exposures.length,
+        exposureCount: exposures.length,
+        exposedDebtAmount: exposures.reduce((sum, item) => sum + item.amount, 0),
       };
     });
+    const durationMs = Date.now() - startedAt;
+    const message = `Deduction phase "${phase}" completed in ${durationMs}ms: checked=${dueMemberIds.length}, processed=${results.reduce((sum, item) => sum + item.processedMembers, 0)}, settled=${results.reduce((sum, item) => sum + item.totalSettled, 0)}, exposed=${results.reduce((sum, item) => sum + item.exposedDebtAmount, 0)}`;
+    if (durationMs >= 20000) {
+      this.logger.warn(`${message}. Approaching cron-job.org 30s timeout; schedule split cron endpoints separately if this grows.`);
+    } else {
+      this.logger.log(message);
+    }
 
     return {
       phase,
@@ -771,6 +831,9 @@ export class WeeklyDeductionsService {
       completedCount: results.reduce((sum, item) => sum + item.completedCount, 0),
       partialCount: results.reduce((sum, item) => sum + item.partialCount, 0),
       unpaidCount: results.reduce((sum, item) => sum + item.unpaidCount, 0),
+      exposureCount: results.reduce((sum, item) => sum + item.exposureCount, 0),
+      exposedDebtAmount: results.reduce((sum, item) => sum + item.exposedDebtAmount, 0),
+      durationMs,
     };
   }
 
@@ -1039,7 +1102,7 @@ export class WeeklyDeductionsService {
   private async findMemberByUserId(userId: string) {
     const member = await this.prisma.member.findUnique({
       where: { userId },
-      select: { id: true, fullName: true, membershipNumber: true },
+      select: { id: true, fullName: true, membershipNumber: true, joinedAt: true, weeklyDeductionStartsAt: true },
     });
     if (!member) throw new NotFoundException('Member profile not found');
     return member;

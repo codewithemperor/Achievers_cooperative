@@ -13,6 +13,11 @@ interface LoanDetail {
   remainingToDisburse?: number;
   remainingBalance: number;
   amountPaidSoFar: number;
+  loanBondAmount?: number;
+  loanBondPaidAt?: string | null;
+  loanBondTransactionId?: string | null;
+  loanBondPaid?: boolean;
+  canPayLoanBond?: boolean;
   tenorMonths: number;
   tenorUnit?: "MONTHS" | "WEEKS";
   purpose: string;
@@ -139,6 +144,9 @@ export default function LoanDetailPage() {
     loan &&
     ["DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(loan.status.toUpperCase()) &&
     (loan.remainingBalance ?? 0) > 0;
+  const canPayLoanBond =
+    loan &&
+    Boolean(loan.canPayLoanBond ?? (loan.status.toUpperCase() === "APPROVED" && !(loan.loanBondPaidAt || loan.loanBondPaid)));
 
   function loadLoan() {
     setLoading(true);
@@ -186,6 +194,34 @@ export default function LoanDetailPage() {
       apiCall: () => api.post(`/loans/${id}/repay`, { amount: Number(amount) }),
       successTitle: "Payment Successful",
       successText: `Your repayment of ${money.format(Number(amount))} has been processed.`,
+    });
+
+    loadLoan();
+  }
+
+  async function handlePayLoanBond() {
+    if (!loan) return;
+
+    const bondAmount = loan.loanBondAmount ?? 0;
+    const { isConfirmed } = await import("sweetalert2").then(({ default: Swal }) =>
+      Swal.fire({
+        title: "Pay Loan Bond?",
+        text: `This will deduct ${money.format(bondAmount)} from your wallet before your approved loan can be disbursed.`,
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Pay bond",
+        confirmButtonColor: "#2d5a27",
+      }),
+    );
+
+    if (!isConfirmed) return;
+
+    await apiCallWithAlert({
+      title: "Loan Bond",
+      loadingText: "Paying loan bond...",
+      apiCall: () => api.post(`/loans/${id}/pay-bond`),
+      successTitle: "Loan Bond Paid",
+      successText: "Your loan bond has been paid. Your approved loan can now be disbursed.",
     });
 
     loadLoan();
@@ -296,6 +332,10 @@ export default function LoanDetailPage() {
               <DetailRow label="Approved amount" value={money.format(loan.approvedAmount ?? loan.amount)} />
               <DetailRow label="Disbursed amount" value={money.format(loan.disbursedAmount ?? 0)} />
               <DetailRow label="Remaining to disburse" value={money.format(loan.remainingToDisburse ?? 0)} />
+              <DetailRow
+                label="Loan bond"
+                value={loan.loanBondPaidAt || loan.loanBondPaid ? "Paid" : money.format(loan.loanBondAmount ?? 0)}
+              />
               <DetailRow label="Paid so far" value={money.format(loan.amountPaidSoFar ?? 0)} />
               <DetailRow label="Repayment outstanding" value={money.format(loan.remainingBalance ?? 0)} />
               <DetailRow
@@ -323,6 +363,16 @@ export default function LoanDetailPage() {
                 <DetailRow label="Account number" value={loan.bankAccount.accountNumber} />
               </div>
             </section>
+          ) : null}
+
+          {canPayLoanBond ? (
+            <button
+              className="w-full min-h-[52px] rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+              onClick={() => void handlePayLoanBond()}
+              type="button"
+            >
+              Pay Loan Bond
+            </button>
           ) : null}
 
           {canPay ? (

@@ -11,6 +11,7 @@ export type TransactionType =
   | 'SAVINGS'
   | 'LOAN_DISBURSEMENT'
   | 'LOAN_REPAYMENT'
+  | 'LOAN_BOND'
   | 'INVESTMENT'
   | 'WALLET_FUNDING'
   | 'MEMBERSHIP_CHARGE'

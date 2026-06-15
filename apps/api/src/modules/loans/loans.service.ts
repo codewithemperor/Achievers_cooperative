@@ -13,6 +13,13 @@ import { ApplyLoanDto, DisburseLoanDto, IncreaseLoanAmountDto, QueryLoansDto, Re
 import type { LoanStatus, LoanTenorUnit } from '../../common/prisma-types';
 import { normalizePagination } from '../../common/pagination';
 
+const LOAN_BOND_AMOUNT_KEY = 'LOAN_BOND_AMOUNT';
+const DEFAULT_LOAN_BOND_AMOUNT = 2000;
+
+function isUniqueConstraintError(error: unknown) {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002';
+}
+
 type LoanLike = {
   amount: any;
   disbursedAmount?: any;
@@ -25,6 +32,9 @@ type LoanLike = {
   rejectedAt?: Date | null;
   dueDate?: Date | null;
   nextRepaymentAt?: Date | null;
+  loanBondAmount?: any;
+  loanBondPaidAt?: Date | null;
+  loanBondTransactionId?: string | null;
   status: LoanStatus;
 };
 
@@ -179,6 +189,8 @@ export class LoansService {
         const amount = Number(l.amount);
         const disbursedAmount = this.resolveDisbursedAmount(l);
         const remainingBalance = this.shouldExposeRemainingBalance(l.status) ? Number(l.remainingBalance) : 0;
+        const loanBondAmount = this.resolveStoredLoanBondAmount(l) ?? 0;
+        const loanBondPaid = Boolean((l as any).loanBondPaidAt);
         return {
           ...l,
           amount,
@@ -191,6 +203,12 @@ export class LoansService {
             ? Math.max(disbursedAmount - remainingBalance, 0)
             : 0,
           repaymentProgress: this.calculateRepaymentProgress(l),
+          loanBondAmount,
+          loanBondPaidAt: (l as any).loanBondPaidAt ?? null,
+          loanBondTransactionId: (l as any).loanBondTransactionId ?? null,
+          loanBondPaid,
+          canPayLoanBond: l.status === 'APPROVED' && !loanBondPaid,
+          canDisburse: ['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(l.status) && loanBondPaid && Math.max(amount - disbursedAmount, 0) > 0,
           canEdit: l.status === 'PENDING',
           canDelete: l.status === 'PENDING',
         };
@@ -231,7 +249,7 @@ export class LoansService {
           where: {
             walletId: loan.member.wallet.id,
             metadata: { path: ['loanId'], equals: loan.id },
-            type: { in: ['LOAN_DISBURSEMENT', 'LOAN_REPAYMENT'] as any },
+            type: { in: ['LOAN_BOND', 'LOAN_DISBURSEMENT', 'LOAN_REPAYMENT'] as any },
           },
           orderBy: { createdAt: 'asc' },
         })
@@ -249,6 +267,9 @@ export class LoansService {
     const amount = Number(loan.amount);
     const disbursedAmount = this.resolveDisbursedAmount(loan);
     const remainingToDisburse = Math.max(amount - disbursedAmount, 0);
+    const storedLoanBondAmount = this.resolveStoredLoanBondAmount(loan);
+    const loanBondAmount = storedLoanBondAmount ?? (await this.getLoanBondAmount());
+    const loanBondPaid = Boolean((loan as any).loanBondPaidAt);
     const remainingBalance = this.shouldExposeRemainingBalance(loan.status) ? Number(loan.remainingBalance) : 0;
     const amountPaidSoFar = this.shouldExposeRemainingBalance(loan.status) ? Math.max(disbursedAmount - remainingBalance, 0) : 0;
     const repaymentProgress = this.calculateRepaymentProgress(loan);
@@ -313,6 +334,12 @@ export class LoansService {
       remainingBalance,
       amountPaidSoFar,
       repaymentProgress,
+      loanBondAmount,
+      loanBondPaidAt: (loan as any).loanBondPaidAt ?? null,
+      loanBondTransactionId: (loan as any).loanBondTransactionId ?? null,
+      loanBondPaid,
+      canPayLoanBond: loan.status === 'APPROVED' && !loanBondPaid,
+      canDisburse: ['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(loan.status) && loanBondPaid && remainingToDisburse > 0,
       nextRepaymentAt,
       paymentSchedule,
       timeline,
@@ -379,26 +406,30 @@ export class LoansService {
     if (!loan) throw new NotFoundException('Loan application not found');
     if (loan.status !== 'PENDING') throw new BadRequestException('Only pending loan applications can be approved.');
 
+    const loanBondAmount = await this.getLoanBondAmount();
     const updated = await this.prisma.loanApplication.update({
       where: { id },
-      data: { status: 'APPROVED', approvedAt: new Date() },
+      data: { status: 'APPROVED', approvedAt: new Date(), loanBondAmount },
     });
 
     await this.audit.log(actorId, 'APPROVE_LOAN', 'LoanApplication', id, {
       amount: Number(loan.amount),
+      loanBondAmount,
     });
 
     await this.notifications.notifyMember(
       loan.member.userId,
       'Loan Approved',
-      `Your loan application for ₦${Number(loan.amount).toLocaleString()} has been approved. Awaiting disbursement.`,
+      `Your loan application for ₦${Number(loan.amount).toLocaleString()} has been approved. Please pay the loan bond of ₦${loanBondAmount.toLocaleString()} before disbursement.`,
     );
 
     const amount = Number(updated.amount);
     return {
       ...updated,
       amount,
-      message: `Loan application for ₦${amount.toLocaleString()} from ${loan.member.fullName} has been approved. Awaiting disbursement.`,
+      loanBondAmount,
+      loanBondPaid: false,
+      message: `Loan application for ₦${amount.toLocaleString()} from ${loan.member.fullName} has been approved. Loan bond of ₦${loanBondAmount.toLocaleString()} must be paid before disbursement.`,
     };
   }
 
@@ -539,6 +570,129 @@ export class LoansService {
     };
   }
 
+  async payLoanBond(id: string, actorId: string) {
+    const actor = await this.prisma.user.findUnique({ where: { id: actorId } });
+    if (!actor) throw new NotFoundException('Actor not found');
+
+    const loan = await this.prisma.loanApplication.findUnique({
+      where: { id },
+      include: {
+        member: {
+          include: {
+            wallet: true,
+          },
+        },
+      },
+    });
+    if (!loan) throw new NotFoundException('Loan application not found');
+    if (actor.role === 'MEMBER' && loan.member.userId !== actorId) {
+      throw new ForbiddenException('You can only pay the loan bond for your own loan.');
+    }
+    if (loan.status !== 'APPROVED') {
+      throw new BadRequestException('Loan bond can only be paid after the loan is approved and before disbursement.');
+    }
+    if ((loan as any).loanBondPaidAt || (loan as any).loanBondTransactionId) {
+      throw new BadRequestException('Loan bond has already been paid for this loan.');
+    }
+
+    const amount = this.resolveStoredLoanBondAmount(loan) ?? (await this.getLoanBondAmount());
+    const walletBalance = loan.member.wallet ? Number(loan.member.wallet.availableBalance) : 0;
+    if (walletBalance < amount) {
+      throw new BadRequestException(
+        `Insufficient wallet balance. Loan bond is ₦${amount.toLocaleString()} but wallet balance is ₦${walletBalance.toLocaleString()}.`,
+      );
+    }
+
+    const reference = `LOAN-BOND-${loan.id}`;
+    const paidAt = new Date();
+
+    let result: { transaction: any };
+    try {
+      result = await this.prisma.runTransaction('loans.payLoanBond', async (tx) => {
+      const currentLoan = await tx.loanApplication.findUnique({
+        where: { id },
+        include: {
+          member: {
+            include: {
+              wallet: true,
+            },
+          },
+        },
+      });
+      if (!currentLoan) throw new NotFoundException('Loan application not found');
+      if (currentLoan.status !== 'APPROVED') {
+        throw new BadRequestException('Loan bond can only be paid before disbursement.');
+      }
+      if ((currentLoan as any).loanBondPaidAt || (currentLoan as any).loanBondTransactionId) {
+        throw new BadRequestException('Loan bond has already been paid for this loan.');
+      }
+
+      const currentBalance = currentLoan.member.wallet ? Number(currentLoan.member.wallet.availableBalance) : 0;
+      if (currentBalance < amount) {
+        throw new BadRequestException(
+          `Insufficient wallet balance. Loan bond is ₦${amount.toLocaleString()} but wallet balance is ₦${currentBalance.toLocaleString()}.`,
+        );
+      }
+
+      const debit = await this.walletService.debitWalletInTransaction(tx, currentLoan.memberId, amount, 'LOAN_BOND', reference, {
+        category: 'loan bond',
+        description: `Loan bond payment for ${currentLoan.member.fullName}`,
+        editable: false,
+        lockReason: 'Loan bond transactions are tied to approved loan records and cannot be edited.',
+        metadata: {
+          loanId: currentLoan.id,
+          memberId: currentLoan.memberId,
+          membershipNumber: currentLoan.member.membershipNumber,
+          paidBy: actor.role,
+        },
+      });
+
+      const updatedLoan = await tx.loanApplication.updateMany({
+        where: {
+          id,
+          status: 'APPROVED',
+          loanBondPaidAt: null,
+          loanBondTransactionId: null,
+        },
+        data: {
+          loanBondAmount: amount,
+          loanBondPaidAt: paidAt,
+          loanBondTransactionId: debit.transaction.id,
+        },
+      });
+      if (updatedLoan.count !== 1) {
+        throw new BadRequestException('Loan bond has already been paid for this loan.');
+      }
+
+        return { transaction: debit.transaction };
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new BadRequestException('Loan bond has already been paid for this loan.');
+      }
+      throw error;
+    }
+
+    await this.audit.log(actorId, 'PAY_LOAN_BOND', 'LoanApplication', id, {
+      amount,
+      reference,
+      transactionId: result.transaction.id,
+      paidBy: actor.role,
+    });
+
+    await this.notifications.notifyMember(
+      loan.member.userId,
+      'Loan Bond Paid',
+      `Loan bond of ₦${amount.toLocaleString()} has been paid. Your approved loan can now be disbursed.`,
+    );
+
+    return {
+      ...(await this.findOne(id)),
+      message: `Loan bond of ₦${amount.toLocaleString()} has been paid.`,
+      reference,
+    };
+  }
+
   async disburse(id: string, actorId: string, dto: DisburseLoanDto) {
     const loan = await this.prisma.loanApplication.findUnique({
       where: { id },
@@ -550,6 +704,9 @@ export class LoansService {
     if (!loan) throw new NotFoundException('Loan application not found');
     if (!['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(loan.status)) {
       throw new BadRequestException('Loan must be approved, disbursed, or in progress before funds can be disbursed.');
+    }
+    if (!(loan as any).loanBondPaidAt) {
+      throw new BadRequestException('Loan bond must be paid before this loan can be disbursed.');
     }
 
     const approvedAmount = Number(loan.amount);
@@ -573,10 +730,12 @@ export class LoansService {
     const dueDate = loan.dueDate ?? this.addCalendarMonths(now, Math.max(loan.tenorMonths, 1));
 
     // Create a LOAN_DISBURSEMENT transaction for record-keeping only (no wallet credit)
-    const reference = `LOAN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const reference = `LOAN-DISBURSE-${loan.id}-${Math.round(alreadyDisbursed * 100)}`;
     const wallet = await this.walletService.getMemberWallet(loan.memberId);
 
-    const updated = await this.prisma.runTransaction('loans.disburse', async (tx) => {
+    let updated: any;
+    try {
+      updated = await this.prisma.runTransaction('loans.disburse', async (tx) => {
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
@@ -646,7 +805,13 @@ export class LoansService {
 
       await this.walletService.rebuildLoanRepaymentSchedule(updatedLoan.id, tx);
       return updatedLoan;
-    });
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new BadRequestException('This loan disbursement was already processed. Please refresh the loan details.');
+      }
+      throw error;
+    }
 
     await this.audit.log(actorId, 'DISBURSE_LOAN', 'LoanApplication', id, {
       amount: disbursementAmount,
@@ -882,6 +1047,21 @@ export class LoansService {
     } as any);
   }
 
+  private async getLoanBondAmount(client: any = this.prisma) {
+    const config = await client.systemConfig.upsert({
+      where: { key: LOAN_BOND_AMOUNT_KEY },
+      update: {},
+      create: { key: LOAN_BOND_AMOUNT_KEY, value: String(DEFAULT_LOAN_BOND_AMOUNT) },
+    });
+    const amount = Number(config.value);
+    return Number.isFinite(amount) && amount > 0 ? amount : DEFAULT_LOAN_BOND_AMOUNT;
+  }
+
+  private resolveStoredLoanBondAmount(loan: Pick<LoanLike, 'loanBondAmount'>) {
+    const amount = Number((loan as any).loanBondAmount ?? 0);
+    return Number.isFinite(amount) && amount > 0 ? amount : null;
+  }
+
   private shouldExposeRemainingBalance(status: LoanStatus) {
     return ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(status);
   }
@@ -980,11 +1160,22 @@ export class LoansService {
               : 'UPCOMING',
       },
       {
+        label: 'Loan bond',
+        date: loan.loanBondPaidAt ? null : loan.approvedAt ?? null,
+        status: loan.loanBondPaidAt
+          ? 'COMPLETED'
+          : loan.status === 'APPROVED'
+            ? 'CURRENT'
+            : loan.status === 'REJECTED'
+              ? 'CANCELLED'
+              : 'UPCOMING',
+      },
+      {
         label: 'Disbursed',
         date: loan.disbursedAt ?? loan.approvedAt ?? null,
         status: loan.disbursedAt
           ? 'COMPLETED'
-          : ['APPROVED'].includes(loan.status)
+          : ['APPROVED'].includes(loan.status) && loan.loanBondPaidAt
             ? 'CURRENT'
             : ['PENDING', 'REJECTED'].includes(loan.status)
               ? 'UPCOMING'
@@ -1026,6 +1217,16 @@ export class LoansService {
         reference: item.reference,
       }));
 
+    const bondPayments = relatedTransactions
+      .filter((item) => item.type === 'LOAN_BOND')
+      .map((item) => ({
+        label: 'Loan bond paid',
+        date: item.createdAt,
+        status: item.status,
+        amount: Number(item.amount),
+        reference: item.reference,
+      }));
+
     const repayments = relatedTransactions
       .filter((item) => item.type === 'LOAN_REPAYMENT')
       .map((item) => ({
@@ -1038,7 +1239,7 @@ export class LoansService {
 
     const withoutCompletion = baseTimeline.filter((item) => item.label !== 'Completed');
     const completion = baseTimeline.find((item) => item.label === 'Completed');
-    const moneyEvents = [...disbursements, ...repayments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const moneyEvents = [...bondPayments, ...disbursements, ...repayments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const stageEvents = withoutCompletion.filter((item) => item.label !== 'Repayment');
     const repaymentStage = withoutCompletion.find((item) => item.label === 'Repayment');
     return completion

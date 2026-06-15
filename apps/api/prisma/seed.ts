@@ -357,6 +357,7 @@ async function main() {
 
   const systemConfigs = [
     { key: "MEMBERSHIP_FEE_AMOUNT", value: "5000" },
+    { key: "LOAN_BOND_AMOUNT", value: "2000" },
     { key: "COOPERATIVE_DEDUCTION_DAY", value: "MONDAY" },
     { key: "COOPERATIVE_DEDUCTION_AMOUNT", value: "10000" },
     { key: "MEMBER_TERMS_HTML", value: "<p>Members agree to weekly deductions, cooperative rules, and accurate profile documentation.</p>" },

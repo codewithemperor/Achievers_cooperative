@@ -15,6 +15,7 @@ export class SystemConfigService {
     await Promise.all(
       [
         ['MEMBERSHIP_FEE_AMOUNT', '20000'],
+        ['LOAN_BOND_AMOUNT', '2000'],
         ['COOPERATIVE_DEDUCTION_DAY', 'SUNDAY'],
         ['COOPERATIVE_DEDUCTION_AMOUNT', '250'],
         ['COOPERATIVE_DEDUCTION_ENABLED', 'true'],

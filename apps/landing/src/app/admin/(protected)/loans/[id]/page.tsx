@@ -40,6 +40,12 @@ interface LoanDetail {
   remainingBalance: number;
   amountPaidSoFar: number;
   repaymentProgress: number;
+  loanBondAmount?: number;
+  loanBondPaidAt?: string | null;
+  loanBondTransactionId?: string | null;
+  loanBondPaid?: boolean;
+  canPayLoanBond?: boolean;
+  canDisburse?: boolean;
   tenorMonths: number;
   tenorUnit?: "MONTHS" | "WEEKS";
   purpose: string;
@@ -147,6 +153,7 @@ export default function LoanDetailPage() {
   const [rejecting, setRejecting] = useState(false);
   const [repaying, setRepaying] = useState(false);
   const [increasing, setIncreasing] = useState(false);
+  const [payingBond, setPayingBond] = useState(false);
   const [disbursing, setDisbursing] = useState(false);
   const { control, handleSubmit, reset, watch } = useForm<{
     reason: string;
@@ -166,11 +173,16 @@ export default function LoanDetailPage() {
   const approvedAmount = loan.data?.approvedAmount ?? loan.data?.amount ?? 0;
   const disbursedAmount = loan.data?.disbursedAmount ?? 0;
   const remainingToDisburse = loan.data?.remainingToDisburse ?? Math.max(approvedAmount - disbursedAmount, 0);
+  const loanBondAmount = loan.data?.loanBondAmount ?? 0;
+  const loanBondPaid = Boolean(loan.data?.loanBondPaidAt || loan.data?.loanBondPaid);
   const increaseValue = Number(watch("newAmount") ?? 0);
   const tenorValue = Number(watch("tenorMonths") ?? 0);
   const disburseValue = Number(watch("disburseAmount") ?? 0);
   const canIncreaseAmount = ["PENDING", "APPROVED", "DISBURSED", "IN_PROGRESS"].includes(status || "");
-  const canDisburse = ["APPROVED", "DISBURSED", "IN_PROGRESS"].includes(status || "") && remainingToDisburse > 0;
+  const canPayLoanBond = Boolean(loan.data?.canPayLoanBond ?? (status === "APPROVED" && !loanBondPaid));
+  const canDisburse =
+    loan.data?.canDisburse ??
+    (["APPROVED", "DISBURSED", "IN_PROGRESS"].includes(status || "") && loanBondPaid && remainingToDisburse > 0);
   const isRepayable = ["DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(
     status || "",
   );
@@ -198,6 +210,20 @@ export default function LoanDetailPage() {
         error?.response?.data?.message || `Unable to ${action} loan.`,
       );
       throw error;
+    }
+  }
+
+  async function handlePayLoanBond() {
+    try {
+      setPayingBond(true);
+      await api.post(`/loans/${params.id}/pay-bond`);
+      showSuccessToast("Loan bond paid successfully.");
+      await loan.refetch();
+    } catch (error: any) {
+      showErrorToast(error?.response?.data?.message || "Unable to pay loan bond.");
+      throw error;
+    } finally {
+      setPayingBond(false);
     }
   }
 
@@ -415,6 +441,17 @@ export default function LoanDetailPage() {
                 </AdminModal>
               </>
             ) : null}
+            {canPayLoanBond ? (
+              <ConfirmActionButton
+                confirmMessage={`Deduct ${currency.format(loanBondAmount)} from the member wallet as the required loan bond. Disbursement will be available after this payment succeeds.`}
+                confirmTitle="Pay loan bond?"
+                isDisabled={payingBond}
+                label="Pay Loan Bond"
+                onConfirm={() => handlePayLoanBond()}
+                pendingLabel="Paying..."
+                tone="success"
+              />
+            ) : null}
             {canDisburse ? (
               <AdminModal
                 description="Record the amount actually transferred now. The member repays only disbursed funds."
@@ -555,7 +592,7 @@ export default function LoanDetailPage() {
         }
       />
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <DashboardMetricCard
           description="Maximum total amount currently approved for this loan."
           href={`/admin/loans/${params.id}`}
@@ -571,6 +608,14 @@ export default function LoanDetailPage() {
           title="Disbursed"
           tone="green"
           value={currency.format(disbursedAmount)}
+        />
+        <DashboardMetricCard
+          description={loanBondPaid ? "Required loan bond has been paid." : "Required before this loan can be disbursed."}
+          href={`/admin/loans/${params.id}`}
+          icon={<ShieldCheck className="h-5 w-5" />}
+          title="Loan Bond"
+          tone={loanBondPaid ? "green" : "amber"}
+          value={loanBondPaid ? "Paid" : currency.format(loanBondAmount)}
         />
         <DashboardMetricCard
           description="Total repayments already applied to this loan."
@@ -654,6 +699,19 @@ export default function LoanDetailPage() {
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-400">
+                    Loan Bond
+                  </p>
+                  <p className="mt-1 font-semibold text-text-900 dark:text-text-50">
+                    {loanBondPaid ? "Paid" : currency.format(loanBondAmount)}
+                  </p>
+                  {loan.data?.loanBondPaidAt ? (
+                    <p className="mt-1 text-xs text-text-400">
+                      {formatLoanDate(loan.data.loanBondPaidAt)}
+                    </p>
+                  ) : null}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text-400">
                     Next Repayment
                   </p>
                   <p className="mt-1 font-semibold text-text-900 dark:text-text-50">
@@ -734,8 +792,9 @@ export default function LoanDetailPage() {
 
               {(isApprovedLoan || isDisbursedLoan) && (
                 <div className="rounded-2xl bg-background-50 p-4 text-sm leading-6 text-text-500 dark:bg-[var(--background-800)] dark:text-text-300">
-                  Disbursement will be made to the member's bank account.
-                  A LOAN_DISBURSEMENT transaction record will be created.
+                  {loanBondPaid
+                    ? "Disbursement will be made to the member's bank account. A LOAN_DISBURSEMENT transaction record will be created."
+                    : `Loan bond of ${currency.format(loanBondAmount)} must be paid from the member wallet before disbursement.`}
                 </div>
               )}
             </div>

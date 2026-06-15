@@ -37,6 +37,7 @@ type BalanceDelta = {
 const ASSOCIATION_INCOME_TRANSACTION_TYPES = new Set<TransactionType | string>([
   'SAVINGS',
   'LOAN_REPAYMENT',
+  'LOAN_BOND',
   'PACKAGE_SUBSCRIPTION',
   'PACKAGE_PENALTY',
   'MEMBERSHIP_CHARGE',
@@ -422,13 +423,15 @@ export class FinancialPostingService {
     const ledgerCount = await client.financialLedgerEntry.count();
     if (ledgerCount > 0) return wallet;
 
-    const memberWalletAggregate = await client.wallet.aggregate({
-      _sum: { availableBalance: true, pendingBalance: true },
+    const memberWalletRows = await client.wallet.findMany({
+      select: { availableBalance: true },
     });
     const associationAvailableBalance = Number(wallet.balance ?? 0);
-    const memberWalletLiability =
-      Number(memberWalletAggregate._sum.availableBalance ?? 0) +
-      Number(memberWalletAggregate._sum.pendingBalance ?? 0);
+    const memberWalletLiability = memberWalletRows.reduce(
+      (sum: number, memberWallet: { availableBalance: unknown }) =>
+        sum + Math.max(Number(memberWallet.availableBalance ?? 0), 0),
+      0,
+    );
     const physicalTreasuryCash = associationAvailableBalance + memberWalletLiability;
 
     if (physicalTreasuryCash === 0 && memberWalletLiability === 0 && associationAvailableBalance === 0) {

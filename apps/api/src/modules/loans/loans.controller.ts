@@ -86,6 +86,13 @@ export class LoansController {
     return this.loansService.increaseAmount(id, req.user.id, dto);
   }
 
+  @Post(':id/pay-bond')
+  @ApiOperation({ summary: 'Pay loan bond from member wallet' })
+  @ApiOkResponse({ description: 'Loan bond paid' })
+  payLoanBond(@Param('id') id: string, @Request() req: any) {
+    return this.loansService.payLoanBond(id, req.user.id);
+  }
+
   @Post(':id/disburse')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Disburse an approved loan' })

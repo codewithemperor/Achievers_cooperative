@@ -37,6 +37,7 @@ enum TransactionType {
   SAVINGS
   LOAN_DISBURSEMENT
   LOAN_REPAYMENT
+  LOAN_BOND
   INVESTMENT
   WALLET_FUNDING
   MEMBERSHIP_CHARGE
@@ -158,6 +159,7 @@ model Member {
   packageSubscriptions  PackageSubscription[]
   repaymentAttempts     RepaymentAttempt[]
   repaymentScheduleItems RepaymentScheduleItem[]
+  debtExposures          WalletDebtExposure[]
   guaranteedLoansOne    LoanApplication[]      @relation("LoanGuarantorOne")
   guaranteedLoansTwo    LoanApplication[]      @relation("LoanGuarantorTwo")
   bankAccounts          BankAccount[]
@@ -175,6 +177,33 @@ model Wallet {
   member           Member        @relation(fields: [memberId], references: [id])
   transactions     Transaction[]
   withdrawalRequests WalletWithdrawalRequest[]
+  debtExposures    WalletDebtExposure[]
+}
+
+model WalletDebtExposure {
+  id             String   @id @default(cuid())
+  memberId       String
+  walletId       String
+  phase          String
+  sourceType     String
+  sourceId       String
+  sourceKey      String   @unique
+  dueAt          DateTime?
+  amountExposed  Decimal  @default(0)
+  amountCleared  Decimal  @default(0)
+  status         String   @default("OPEN")
+  trigger        String?
+  metadata       Json?
+  exposedAt      DateTime @default(now())
+  clearedAt      DateTime?
+  updatedAt      DateTime @updatedAt
+  member         Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  wallet         Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, status, dueAt])
+  @@index([walletId, status])
+  @@index([phase, status])
+  @@index([sourceType, sourceId])
 }
 
 model Transaction {
@@ -322,6 +351,9 @@ model LoanApplication {
   nextRepaymentAt  DateTime?
   disbursedAmount  Decimal        @default(0)
   remainingBalance Decimal        @default(0)
+  loanBondAmount   Decimal        @default(0)
+  loanBondPaidAt   DateTime?
+  loanBondTransactionId String?
   bankAccountId    String?
   member           Member         @relation(fields: [memberId], references: [id])
   guarantorOne     Member?        @relation("LoanGuarantorOne", fields: [guarantorOneId], references: [id])
@@ -330,6 +362,7 @@ model LoanApplication {
   activities       LoanActivity[]
 
   @@index([nextRepaymentAt])
+  @@index([loanBondTransactionId])
 }
 
 model LoanActivity {
