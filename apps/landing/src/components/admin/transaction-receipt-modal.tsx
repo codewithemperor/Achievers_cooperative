@@ -5,7 +5,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 function formatDateTime(value?: string | null) {

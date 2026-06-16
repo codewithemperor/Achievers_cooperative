@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { normalizeMoney } from '../utils/money';
 import type {
   FinancialAccountCode,
   FinancialLineDirection,
@@ -74,7 +75,7 @@ export class FinancialPostingService {
           create: input.lines.map((line) => ({
             account: line.account,
             direction: line.direction,
-            amount: line.amount,
+            amount: normalizeMoney(line.amount),
             memberId: line.memberId || undefined,
             metadata: line.metadata as any,
           })),
@@ -98,6 +99,7 @@ export class FinancialPostingService {
     },
     client: PrismaClientLike = this.prisma,
   ) {
+    input = { ...input, amount: normalizeMoney(input.amount) };
     await this.applyBalanceDelta(
       {
         physicalTreasuryCash: input.amount,
@@ -145,6 +147,7 @@ export class FinancialPostingService {
     },
     client: PrismaClientLike = this.prisma,
   ) {
+    input = { ...input, amount: normalizeMoney(input.amount) };
     await this.applyBalanceDelta(
       {
         memberWalletLiability: -input.amount,
@@ -193,6 +196,7 @@ export class FinancialPostingService {
     },
     client: PrismaClientLike = this.prisma,
   ) {
+    input = { ...input, amount: normalizeMoney(input.amount) };
     await this.applyBalanceDelta(
       {
         physicalTreasuryCash: -input.amount,
@@ -240,6 +244,7 @@ export class FinancialPostingService {
     },
     client: PrismaClientLike = this.prisma,
   ) {
+    input = { ...input, amount: normalizeMoney(input.amount) };
     await this.applyBalanceDelta(
       {
         memberWalletLiability: input.amount,
@@ -290,6 +295,7 @@ export class FinancialPostingService {
     },
     client: PrismaClientLike = this.prisma,
   ) {
+    input = { ...input, amount: normalizeMoney(input.amount) };
     if (input.enforceAvailable) {
       await this.ensureWallet(client);
       const updated = await client.cooperativeWallet.updateMany({
@@ -355,6 +361,7 @@ export class FinancialPostingService {
     },
     client: PrismaClientLike = this.prisma,
   ) {
+    input = { ...input, amount: normalizeMoney(input.amount) };
     await this.applyBalanceDelta(
       {
         physicalTreasuryCash: input.amount,
@@ -395,19 +402,34 @@ export class FinancialPostingService {
 
   private async applyBalanceDelta(delta: BalanceDelta, client: PrismaClientLike) {
     const wallet = await this.ensureWallet(client);
+    const normalizedDelta = {
+      physicalTreasuryCash:
+        delta.physicalTreasuryCash === undefined ? undefined : normalizeMoney(delta.physicalTreasuryCash),
+      memberWalletLiability:
+        delta.memberWalletLiability === undefined ? undefined : normalizeMoney(delta.memberWalletLiability),
+      associationAvailableBalance:
+        delta.associationAvailableBalance === undefined ? undefined : normalizeMoney(delta.associationAvailableBalance),
+      totalIncome: delta.totalIncome === undefined ? undefined : normalizeMoney(delta.totalIncome),
+      totalExpense: delta.totalExpense === undefined ? undefined : normalizeMoney(delta.totalExpense),
+    };
+
     await client.cooperativeWallet.update({
       where: { id: wallet.id },
       data: {
         physicalTreasuryCash:
-          delta.physicalTreasuryCash === undefined ? undefined : { increment: delta.physicalTreasuryCash },
+          normalizedDelta.physicalTreasuryCash === undefined ? undefined : { increment: normalizedDelta.physicalTreasuryCash },
         memberWalletLiability:
-          delta.memberWalletLiability === undefined ? undefined : { increment: delta.memberWalletLiability },
+          normalizedDelta.memberWalletLiability === undefined ? undefined : { increment: normalizedDelta.memberWalletLiability },
         associationAvailableBalance:
-          delta.associationAvailableBalance === undefined ? undefined : { increment: delta.associationAvailableBalance },
+          normalizedDelta.associationAvailableBalance === undefined
+            ? undefined
+            : { increment: normalizedDelta.associationAvailableBalance },
         balance:
-          delta.associationAvailableBalance === undefined ? undefined : { increment: delta.associationAvailableBalance },
-        totalIncome: delta.totalIncome === undefined ? undefined : { increment: delta.totalIncome },
-        totalExpense: delta.totalExpense === undefined ? undefined : { increment: delta.totalExpense },
+          normalizedDelta.associationAvailableBalance === undefined
+            ? undefined
+            : { increment: normalizedDelta.associationAvailableBalance },
+        totalIncome: normalizedDelta.totalIncome === undefined ? undefined : { increment: normalizedDelta.totalIncome },
+        totalExpense: normalizedDelta.totalExpense === undefined ? undefined : { increment: normalizedDelta.totalExpense },
       },
     });
   }

@@ -350,7 +350,8 @@ export default function WalletPage() {
             formatOptions={{
               style: "currency",
               currency: "NGN",
-              maximumFractionDigits: 0,
+              minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
             }}
           />
           <div className="grid gap-2">
@@ -409,7 +410,8 @@ export default function WalletPage() {
             formatOptions={{
               style: "currency",
               currency: "NGN",
-              maximumFractionDigits: 0,
+              minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
             }}
           />
           <SelectInput

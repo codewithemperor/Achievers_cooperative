@@ -5,6 +5,7 @@ import { MembershipChargeService } from '../../common/services/membership-charge
 import { WalletService } from '../../common/services/wallet.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { FinancialPostingService } from '../../common/services/financial-posting.service';
+import { normalizeMoney } from '../../common/utils/money';
 
 @Injectable()
 export class PaymentsService {
@@ -46,7 +47,8 @@ export class PaymentsService {
   }
 
   async create(userId: string, body: { amount: number; receiptUrl?: string; memberId?: string }) {
-    this.assertValidAmount(body.amount);
+    const amount = normalizeMoney(body.amount);
+    this.assertValidAmount(amount);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     let memberId = body.memberId;
 
@@ -62,19 +64,20 @@ export class PaymentsService {
     const created = await this.prisma.payment.create({
       data: {
         memberId,
-        amount: body.amount,
+        amount,
         receiptUrl: body.receiptUrl,
         status: 'PENDING',
       },
     });
 
-    await this.audit.log(userId, 'CREATE_PAYMENT', 'Payment', created.id, body);
+    await this.audit.log(userId, 'CREATE_PAYMENT', 'Payment', created.id, { ...body, amount });
 
     return this.serializePayment(created);
   }
 
   async createApprovedByAdmin(actorId: string, body: { amount: number; receiptUrl?: string; memberId?: string }) {
-    this.assertValidAmount(body.amount);
+    const amount = normalizeMoney(body.amount);
+    this.assertValidAmount(amount);
 
     if (!body.memberId) {
       throw new BadRequestException('Member is required');
@@ -92,13 +95,13 @@ export class PaymentsService {
     const created = await this.prisma.payment.create({
       data: {
         memberId: body.memberId,
-        amount: body.amount,
+        amount,
         receiptUrl: body.receiptUrl,
         status: 'PENDING',
       },
     });
 
-    await this.audit.log(actorId, 'CREATE_ADMIN_PAYMENT', 'Payment', created.id, body);
+    await this.audit.log(actorId, 'CREATE_ADMIN_PAYMENT', 'Payment', created.id, { ...body, amount });
 
     return this.approve(created.id, actorId);
   }
@@ -123,7 +126,7 @@ export class PaymentsService {
       throw new BadRequestException('Payment is not pending');
     }
 
-    const grossAmount = Number(payment.amount);
+    const grossAmount = normalizeMoney(payment.amount);
     const { charge, netAmount } = await this.membershipChargeService.applyCharge(grossAmount);
     const reference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const debtRecoveryPlan = await this.walletService.prepareWalletFundingDebtRecovery(payment.memberId, netAmount);

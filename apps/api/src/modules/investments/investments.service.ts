@@ -5,6 +5,7 @@ import { NotificationService } from '../../common/services/notification.service'
 import { AuditService } from '../../common/services/audit.service';
 import { SubscribeInvestmentDto, QueryInvestmentsDto } from './dto/index';
 import { normalizePagination } from '../../common/pagination';
+import { formatMoney, normalizeMoney } from '../../common/utils/money';
 
 @Injectable()
 export class InvestmentsService {
@@ -237,6 +238,7 @@ export class InvestmentsService {
   }
 
   async subscribe(userId: string, dto: SubscribeInvestmentDto) {
+    const principal = normalizeMoney(dto.principal);
     const member = await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');
 
@@ -245,15 +247,15 @@ export class InvestmentsService {
     });
     if (!product) throw new NotFoundException('Product not found');
     if (product.status !== 'ACTIVE') throw new BadRequestException('Product is not active');
-    if (dto.principal < Number(product.minimumAmount)) {
+    if (principal < Number(product.minimumAmount)) {
       throw new BadRequestException(
-        `Minimum investment amount is ₦${Number(product.minimumAmount).toLocaleString()}`,
+        `Minimum investment amount is ₦${formatMoney(product.minimumAmount)}`,
       );
     }
 
     // Debit wallet
     const reference = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    await this.walletService.debitWallet(member.id, dto.principal, 'INVESTMENT', reference);
+    await this.walletService.debitWallet(member.id, principal, 'INVESTMENT', reference);
 
     const maturityDate = new Date();
     maturityDate.setMonth(maturityDate.getMonth() + product.durationMonths);
@@ -262,7 +264,7 @@ export class InvestmentsService {
       data: {
         memberId: member.id,
         productId: product.id,
-        principal: dto.principal,
+        principal,
         maturityDate,
         status: 'APPROVED',
       },
@@ -271,13 +273,13 @@ export class InvestmentsService {
 
     await this.audit.log(userId, 'SUBSCRIBE_INVESTMENT', 'InvestmentSubscription', subscription.id, {
       productId: product.id,
-      principal: dto.principal,
+      principal,
     });
 
     await this.notifications.notifyMember(
       userId,
       'Investment Confirmed',
-      `Your investment of ₦${dto.principal.toLocaleString()} in ${product.name} is confirmed. Matures on ${maturityDate.toDateString()}.`,
+      `Your investment of ₦${formatMoney(principal)} in ${product.name} is confirmed. Matures on ${maturityDate.toDateString()}.`,
     );
 
     return {

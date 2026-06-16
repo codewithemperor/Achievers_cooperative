@@ -3,6 +3,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
 import { UpdateTransactionDto, QueryTransactionsDto } from './dto/index';
 import { normalizePagination } from '../../common/pagination';
+import { normalizeMoney } from '../../common/utils/money';
 
 function isCreditTransaction(type: string) {
   return ['FUNDING', 'CREDIT', 'REFUND', 'RETURN', 'LOAN_DISBURSEMENT', 'WALLET_FUNDING'].some((key) =>
@@ -121,7 +122,7 @@ export class TransactionsService {
     const updated = await this.prisma.transaction.update({
       where: { id },
       data: {
-        ...(dto.amount !== undefined && { amount: dto.amount }),
+        ...(dto.amount !== undefined && { amount: normalizeMoney(dto.amount) }),
         ...(dto.category !== undefined && { category: dto.category }),
         ...(dto.description !== undefined && { description: dto.description }),
       },

@@ -4,6 +4,7 @@ import { WalletService } from '../../common/services/wallet.service';
 import { AuditService } from '../../common/services/audit.service';
 import { FinancialPostingService } from '../../common/services/financial-posting.service';
 import { ContributeSavingsDto, RequestSavingsWithdrawalDto } from './dto/index';
+import { normalizeMoney } from '../../common/utils/money';
 
 @Injectable()
 export class SavingsService {
@@ -47,13 +48,14 @@ export class SavingsService {
   }
 
   async contribute(userId: string, dto: ContributeSavingsDto) {
+    const amount = normalizeMoney(dto.amount);
     const member = await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');
 
-    const result = await this.walletService.applySavingsContribution(member.id, dto.amount, 'MEMBER');
+    const result = await this.walletService.applySavingsContribution(member.id, amount, 'MEMBER');
 
     await this.audit.log(userId, 'SAVINGS_CONTRIBUTION', 'SavingsAccount', result.account.id, {
-      amount: dto.amount,
+      amount,
       newBalance: Number(result.account.balance),
     });
 
@@ -63,12 +65,13 @@ export class SavingsService {
         balance: Number(result.account.balance),
         contributionFrequency: result.account.contributionFrequency,
       },
-      amount: dto.amount,
+      amount,
       reference: result.reference,
     };
   }
 
   async requestWithdrawal(userId: string, dto: RequestSavingsWithdrawalDto) {
+    const amount = normalizeMoney(dto.amount);
     const member = await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');
 
@@ -81,7 +84,7 @@ export class SavingsService {
       throw new BadRequestException('Savings account not found.');
     }
 
-    if (Number(account.balance) < dto.amount) {
+    if (Number(account.balance) < amount) {
       throw new BadRequestException('Insufficient savings balance for this withdrawal request.');
     }
 
@@ -108,7 +111,7 @@ export class SavingsService {
       data: {
         memberId: member.id,
         savingsAccountId: account.id,
-        amount: dto.amount,
+        amount,
         bankName,
         accountNumber,
         accountName,
@@ -117,7 +120,7 @@ export class SavingsService {
     });
 
     await this.audit.log(userId, 'REQUEST_SAVINGS_WITHDRAWAL', 'SavingsWithdrawalRequest', created.id, {
-      amount: dto.amount,
+      amount,
       bankName,
       accountNumber,
       bankAccountId: dto.bankAccountId ?? selectedBankAccount?.id,
@@ -196,7 +199,8 @@ export class SavingsService {
       throw new BadRequestException('Withdrawal request is not pending.');
     }
 
-    if (Number(request.savingsAccount.balance) < Number(request.amount)) {
+    const amount = normalizeMoney(request.amount);
+    if (Number(request.savingsAccount.balance) < amount) {
       throw new BadRequestException('Member savings balance is no longer sufficient for this withdrawal request.');
     }
 
@@ -205,13 +209,13 @@ export class SavingsService {
       await tx.savingsAccount.update({
         where: { id: request.savingsAccountId },
         data: {
-          balance: { decrement: request.amount },
+          balance: { decrement: amount },
         },
       });
 
       await this.financialPosting.postAssociationOutflow(
         {
-          amount: Number(request.amount),
+          amount,
           reference,
           sourceType: 'SavingsWithdrawalRequest',
           sourceId: id,
@@ -233,7 +237,7 @@ export class SavingsService {
     });
 
     await this.audit.log(actorId, 'APPROVE_SAVINGS_WITHDRAWAL', 'SavingsWithdrawalRequest', id, {
-      amount: Number(request.amount),
+      amount,
       reference,
     });
 

@@ -13,6 +13,7 @@ interface LoanDetail {
   remainingToDisburse?: number;
   remainingBalance: number;
   amountPaidSoFar: number;
+  loanBondRequired?: boolean;
   loanBondAmount?: number;
   loanBondPaidAt?: string | null;
   loanBondTransactionId?: string | null;
@@ -75,7 +76,8 @@ interface LoanDetail {
 const money = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 function formatDate(date?: string | null) {
@@ -146,7 +148,12 @@ export default function LoanDetailPage() {
     (loan.remainingBalance ?? 0) > 0;
   const canPayLoanBond =
     loan &&
-    Boolean(loan.canPayLoanBond ?? (loan.status.toUpperCase() === "APPROVED" && !(loan.loanBondPaidAt || loan.loanBondPaid)));
+    Boolean(
+      loan.canPayLoanBond ??
+        (loan.loanBondRequired &&
+          loan.status.toUpperCase() === "APPROVED" &&
+          !(loan.loanBondPaidAt || loan.loanBondPaid)),
+    );
 
   function loadLoan() {
     setLoading(true);
@@ -262,6 +269,8 @@ export default function LoanDetailPage() {
     (loan.disbursedAmount ?? 0) > 0
       ? loan.repaymentProgress ?? Math.min(100, ((loan.amountPaidSoFar ?? 0) / (loan.disbursedAmount ?? loan.amount)) * 100)
       : 0;
+  const loanBondRequired = Boolean(loan.loanBondRequired);
+  const loanBondPaid = loanBondRequired && Boolean(loan.loanBondPaidAt || loan.loanBondPaid);
   const isActiveLoan = ["DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(
     loan.status.toUpperCase(),
   );
@@ -332,10 +341,12 @@ export default function LoanDetailPage() {
               <DetailRow label="Approved amount" value={money.format(loan.approvedAmount ?? loan.amount)} />
               <DetailRow label="Disbursed amount" value={money.format(loan.disbursedAmount ?? 0)} />
               <DetailRow label="Remaining to disburse" value={money.format(loan.remainingToDisburse ?? 0)} />
-              <DetailRow
-                label="Loan bond"
-                value={loan.loanBondPaidAt || loan.loanBondPaid ? "Paid" : money.format(loan.loanBondAmount ?? 0)}
-              />
+              {loanBondRequired ? (
+                <DetailRow
+                  label="Loan bond"
+                  value={loanBondPaid ? "Paid" : money.format(loan.loanBondAmount ?? 0)}
+                />
+              ) : null}
               <DetailRow label="Paid so far" value={money.format(loan.amountPaidSoFar ?? 0)} />
               <DetailRow label="Repayment outstanding" value={money.format(loan.remainingBalance ?? 0)} />
               <DetailRow

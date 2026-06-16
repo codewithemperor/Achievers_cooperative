@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
 import { WalletService } from '../../common/services/wallet.service';
+import { normalizeMoney } from '../../common/utils/money';
 
 const PACKAGE_ACTIVE_STATUSES = ['PENDING', 'APPROVED', 'DISBURSED', 'IN_PROGRESS'] as const;
 const PACKAGE_PAYABLE_STATUSES = ['APPROVED', 'DISBURSED', 'IN_PROGRESS'] as const;
@@ -113,6 +114,8 @@ export class PackagesService {
     addAllMembers?: boolean;
   }) {
     const { addAllMembers, ...packageBody } = body;
+    packageBody.totalAmount = normalizeMoney(packageBody.totalAmount);
+    packageBody.penaltyValue = normalizeMoney(packageBody.penaltyValue);
     this.validatePackagePayload(packageBody);
     const schedule = this.resolvePackageSchedule(packageBody.startDate, packageBody.endDate, packageBody.durationMonths);
     const created = await this.prisma.package.create({
@@ -156,6 +159,8 @@ export class PackagesService {
     addAllMembers?: boolean;
   }>) {
     const { addAllMembers, ...packageBody } = body;
+    if (packageBody.totalAmount !== undefined) packageBody.totalAmount = normalizeMoney(packageBody.totalAmount);
+    if (packageBody.penaltyValue !== undefined) packageBody.penaltyValue = normalizeMoney(packageBody.penaltyValue);
     const existing = await this.prisma.package.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Package not found');
@@ -398,7 +403,7 @@ export class PackagesService {
       data: {
         packageId: body.packageId,
         memberId,
-        amountRemaining: selectedPackage.totalAmount,
+        amountRemaining: normalizeMoney(selectedPackage.totalAmount),
         status: 'PENDING',
         nextDueAt: null,
         disbursementBankAccountId,
@@ -428,6 +433,7 @@ export class PackagesService {
   }
 
   async makeManualAllocation(id: string, actorId: string, amount: number) {
+    amount = normalizeMoney(amount);
     const subscription = await this.prisma.packageSubscription.findUnique({ where: { id } });
     if (!subscription) {
       throw new NotFoundException('Package subscription not found');
@@ -854,7 +860,7 @@ export class PackagesService {
     const durationMonths = Math.max(Number(subscription.package?.durationMonths ?? 1), 1);
     const repaymentFrequency = String(subscription.package?.repaymentFrequency ?? 'WEEKLY').toUpperCase();
     const installmentCount = repaymentFrequency === 'MONTHLY' ? durationMonths : Math.max(durationMonths * 4, 1);
-    const installmentAmount = totalAmount / installmentCount;
+    const installmentAmount = normalizeMoney(totalAmount / installmentCount);
     const anchor = this.getPackageScheduleAnchor(subscription) ?? subscription.createdAt ?? new Date();
     let remainingPaid = amountPaid;
 
@@ -867,9 +873,9 @@ export class PackagesService {
       }
 
       const paidForInstallment = remainingPaid >= installmentAmount;
-      const paidAmount = Math.min(Math.max(remainingPaid, 0), installmentAmount);
+      const paidAmount = normalizeMoney(Math.min(Math.max(remainingPaid, 0), installmentAmount));
       if (paidForInstallment) {
-        remainingPaid -= installmentAmount;
+        remainingPaid = normalizeMoney(remainingPaid - installmentAmount);
       } else {
         remainingPaid = 0;
       }
@@ -880,7 +886,7 @@ export class PackagesService {
         amount: installmentAmount,
         expectedAmount: installmentAmount,
         paidAmount,
-        remainingAmount: Math.max(installmentAmount - paidAmount, 0),
+        remainingAmount: normalizeMoney(Math.max(installmentAmount - paidAmount, 0)),
         status: paidForInstallment ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'PENDING',
       };
     });

@@ -448,7 +448,8 @@ export default function LoansPage() {
             formatOptions={{
               style: "currency",
               currency: "NGN",
-              maximumFractionDigits: 0,
+              minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
             }}
           />
           <NumberInput

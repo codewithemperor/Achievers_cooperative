@@ -54,7 +54,8 @@ const penaltyOptions: Array<{ id: string; label: string }> = [
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 export default function PackagesPage() {

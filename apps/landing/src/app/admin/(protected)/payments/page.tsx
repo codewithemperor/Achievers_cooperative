@@ -81,7 +81,8 @@ interface AdminPaymentFormValues {
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 export default function PaymentsPage() {
@@ -272,7 +273,8 @@ export default function PaymentsPage() {
                     formatOptions={{
                       style: "currency",
                       currency: "NGN",
-                      maximumFractionDigits: 0,
+                      minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
                     }}
                     isRequired
                     label="Amount"

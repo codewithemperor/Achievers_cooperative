@@ -9,9 +9,20 @@ async function main() {
 
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "LoanApplication"
+      ADD COLUMN IF NOT EXISTS "loanBondRequired" BOOLEAN NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS "loanBondAmount" DECIMAL(65,30) NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS "loanBondPaidAt" TIMESTAMP(3),
       ADD COLUMN IF NOT EXISTS "loanBondTransactionId" TEXT;
+  `);
+
+  const completedLoans = await prisma.$executeRawUnsafe(`
+    UPDATE "LoanApplication"
+    SET
+      "status" = 'COMPLETED',
+      "remainingBalance" = 0,
+      "nextRepaymentAt" = NULL
+    WHERE "status" IN ('DISBURSED', 'IN_PROGRESS', 'OVERDUE')
+      AND "remainingBalance" <= 0.01;
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -25,7 +36,7 @@ async function main() {
     create: { key: 'LOAN_BOND_AMOUNT', value: '2000' },
   });
 
-  console.log('Loan bond schema and default setting are ready.');
+  console.log(`Loan bond schema and default setting are ready. Normalized completed loans: ${completedLoans}.`);
 }
 
 main()

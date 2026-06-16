@@ -351,6 +351,7 @@ model LoanApplication {
   nextRepaymentAt  DateTime?
   disbursedAmount  Decimal        @default(0)
   remainingBalance Decimal        @default(0)
+  loanBondRequired Boolean        @default(false)
   loanBondAmount   Decimal        @default(0)
   loanBondPaidAt   DateTime?
   loanBondTransactionId String?

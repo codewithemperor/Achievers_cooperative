@@ -3,6 +3,7 @@ import type { CooperativeEntryType } from '../../common/prisma-types';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
 import { FinancialPostingService } from '../../common/services/financial-posting.service';
+import { normalizeMoney } from '../../common/utils/money';
 
 interface CreateEntryInput {
   type: CooperativeEntryType;
@@ -173,6 +174,7 @@ export class CooperativeWalletService {
   }
 
   async createEntry(actorId: string, input: CreateEntryInput) {
+    input = { ...input, amount: normalizeMoney(input.amount) };
     const wallet = await this.ensureWallet();
     const isIncome = input.type === 'INCOME';
 

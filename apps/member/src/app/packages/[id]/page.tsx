@@ -73,7 +73,8 @@ interface PackageDetail {
 const money = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 function formatDate(date?: string | null) {

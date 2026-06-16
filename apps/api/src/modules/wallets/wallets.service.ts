@@ -4,6 +4,7 @@ import { WalletService } from '../../common/services/wallet.service';
 import { AuditService } from '../../common/services/audit.service';
 import { FinancialPostingService } from '../../common/services/financial-posting.service';
 import { AdminWalletSpendDto, FundWalletDto, RequestWalletWithdrawalDto } from './dto/index';
+import { normalizeMoney } from '../../common/utils/money';
 
 @Injectable()
 export class WalletsService {
@@ -49,6 +50,7 @@ export class WalletsService {
   }
 
   async fund(userId: string, dto: FundWalletDto) {
+    const amount = normalizeMoney(dto.amount);
     const member = await this.prisma.member.findUnique({ where: { userId } });
     if (!member) throw new NotFoundException('Member profile not found');
 
@@ -56,7 +58,7 @@ export class WalletsService {
 
     const result = await this.walletService.creditWallet(
       member.id,
-      dto.amount,
+      amount,
       'WALLET_FUNDING',
       reference,
       {
@@ -68,7 +70,7 @@ export class WalletsService {
     );
 
     await this.audit.log(userId, 'FUND_WALLET', 'Wallet', result.wallet!.id, {
-      amount: dto.amount,
+      amount,
       reference,
       settlements: result.settlements,
     });
@@ -103,20 +105,23 @@ export class WalletsService {
       | undefined;
 
     if (dto.targetType === 'LOAN') {
-      if (!dto.targetId || !dto.amount) {
+      const amount = normalizeMoney(dto.amount);
+      if (!dto.targetId || !amount) {
         throw new NotFoundException('Loan target and amount are required');
       }
-      result = await this.walletService.applyLoanRepayment(member.id, dto.targetId, dto.amount, 'ADMIN');
+      result = await this.walletService.applyLoanRepayment(member.id, dto.targetId, amount, 'ADMIN');
     } else if (dto.targetType === 'PACKAGE') {
-      if (!dto.targetId || !dto.amount) {
+      const amount = normalizeMoney(dto.amount);
+      if (!dto.targetId || !amount) {
         throw new NotFoundException('Package target and amount are required');
       }
-      result = await this.walletService.applyPackagePayment(member.id, dto.targetId, dto.amount, 'ADMIN');
+      result = await this.walletService.applyPackagePayment(member.id, dto.targetId, amount, 'ADMIN');
     } else if (dto.targetType === 'SAVINGS') {
-      if (!dto.amount) {
+      const amount = normalizeMoney(dto.amount);
+      if (!amount) {
         throw new NotFoundException('Amount is required for savings allocation');
       }
-      result = await this.walletService.applySavingsContribution(member.id, dto.amount, 'ADMIN', dto.savingsAccountId);
+      result = await this.walletService.applySavingsContribution(member.id, amount, 'ADMIN', dto.savingsAccountId);
     } else {
       const pending = await this.walletService.settlePendingWeeklyDeductions(member.wallet.id);
       result = {
@@ -349,13 +354,14 @@ export class WalletsService {
   }
 
   async requestWithdrawal(userId: string, dto: RequestWalletWithdrawalDto) {
+    const amount = normalizeMoney(dto.amount);
     const member = await this.prisma.member.findUnique({
       where: { userId },
       include: { wallet: true },
     });
     if (!member || !member.wallet) throw new NotFoundException('Wallet not found');
 
-    if (Number(member.wallet.availableBalance) < dto.amount) {
+    if (Number(member.wallet.availableBalance) < amount) {
       throw new NotFoundException('Insufficient wallet balance for this withdrawal request');
     }
 
@@ -368,7 +374,7 @@ export class WalletsService {
       data: {
         memberId: member.id,
         walletId: member.wallet.id,
-        amount: dto.amount,
+        amount,
         bankName: bankAccount.bankName,
         accountNumber: bankAccount.accountNumber,
         accountName: bankAccount.accountName,
@@ -376,7 +382,7 @@ export class WalletsService {
     });
 
     await this.audit.log(userId, 'REQUEST_WALLET_WITHDRAWAL', 'WalletWithdrawalRequest', created.id, {
-      amount: dto.amount,
+      amount,
       bankAccountId: dto.bankAccountId,
     });
 
@@ -434,7 +440,8 @@ export class WalletsService {
     if (!request) throw new NotFoundException('Wallet withdrawal request not found');
     if (request.status !== 'APPROVED') throw new NotFoundException('Withdrawal request must be approved first');
     if (request.disbursedAt) throw new NotFoundException('Withdrawal request has already been disbursed');
-    if (Number(request.wallet.availableBalance) < Number(request.amount)) {
+    const amount = normalizeMoney(request.amount);
+    if (Number(request.wallet.availableBalance) < amount) {
       throw new NotFoundException('Member wallet balance is no longer sufficient');
     }
 
@@ -442,13 +449,13 @@ export class WalletsService {
     const updated = await this.prisma.runTransaction('wallets.disburseWithdrawal', async (tx) => {
       await tx.wallet.update({
         where: { id: request.walletId },
-        data: { availableBalance: { decrement: request.amount }, totalCharges: { increment: request.amount } },
+        data: { availableBalance: { decrement: amount }, totalCharges: { increment: amount } },
       });
       await tx.transaction.create({
         data: {
           walletId: request.walletId,
           type: 'WALLET_WITHDRAWAL' as any,
-          amount: request.amount,
+          amount,
           status: 'APPROVED',
           reference,
           category: 'wallet withdrawal',
@@ -461,7 +468,7 @@ export class WalletsService {
       await this.financialPosting.postWalletWithdrawal(
         {
           memberId: request.memberId,
-          amount: Number(request.amount),
+          amount,
           reference,
           sourceType: 'WalletWithdrawalRequest',
           sourceId: id,

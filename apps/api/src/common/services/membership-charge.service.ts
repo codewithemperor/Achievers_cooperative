@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { normalizeMoney } from '../utils/money';
 
 @Injectable()
 export class MembershipChargeService {
@@ -21,12 +22,13 @@ export class MembershipChargeService {
 
   async calculateCharge(amount: number): Promise<number> {
     const rate = await this.getConfig();
-    return Math.round(amount * rate * 100) / 100;
+    return normalizeMoney(normalizeMoney(amount) * rate);
   }
 
   async applyCharge(amount: number): Promise<{ charge: number; netAmount: number }> {
+    amount = normalizeMoney(amount);
     const charge = await this.calculateCharge(amount);
-    const netAmount = Math.round((amount - charge) * 100) / 100;
+    const netAmount = normalizeMoney(amount - charge);
     return { charge, netAmount };
   }
 }

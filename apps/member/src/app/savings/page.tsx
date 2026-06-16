@@ -306,7 +306,8 @@ export default function SavingsPage() {
             formatOptions={{
               style: "currency",
               currency: "NGN",
-              maximumFractionDigits: 0,
+              minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
             }}
           />
           <button
@@ -338,7 +339,8 @@ export default function SavingsPage() {
             formatOptions={{
               style: "currency",
               currency: "NGN",
-              maximumFractionDigits: 0,
+              minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
             }}
           />
           <SelectInput

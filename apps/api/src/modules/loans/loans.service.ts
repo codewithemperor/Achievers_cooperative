@@ -12,9 +12,11 @@ import { FinancialPostingService } from '../../common/services/financial-posting
 import { ApplyLoanDto, DisburseLoanDto, IncreaseLoanAmountDto, QueryLoansDto, RepayLoanDto } from './dto/index';
 import type { LoanStatus, LoanTenorUnit } from '../../common/prisma-types';
 import { normalizePagination } from '../../common/pagination';
+import { formatMoney, normalizeMoney } from '../../common/utils/money';
 
 const LOAN_BOND_AMOUNT_KEY = 'LOAN_BOND_AMOUNT';
 const DEFAULT_LOAN_BOND_AMOUNT = 2000;
+const MONEY_COMPLETION_TOLERANCE = 0.01;
 
 function isUniqueConstraintError(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002';
@@ -32,6 +34,7 @@ type LoanLike = {
   rejectedAt?: Date | null;
   dueDate?: Date | null;
   nextRepaymentAt?: Date | null;
+  loanBondRequired?: boolean;
   loanBondAmount?: any;
   loanBondPaidAt?: Date | null;
   loanBondTransactionId?: string | null;
@@ -50,6 +53,7 @@ export class LoansService {
 
   // ─── Apply for a loan ──────────────────────────────────────────────
   async apply(userId: string, dto: ApplyLoanDto) {
+    const amount = normalizeMoney(dto.amount);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const member =
       user?.role === 'SUPER_ADMIN' && dto.memberId
@@ -111,18 +115,19 @@ export class LoansService {
         memberId: member.id,
         guarantorOneId: dto.guarantorOneId,
         guarantorTwoId: dto.guarantorTwoId,
-        amount: dto.amount,
+        amount,
         tenorMonths: repaymentSchedule.tenorMonths,
         tenorUnit: repaymentSchedule.tenorUnit,
         purpose: dto.purpose,
         disbursedAmount: 0,
         remainingBalance: 0,
+        loanBondRequired: true,
         bankAccountId: dto.bankAccountId,
       } as any,
     });
 
     await this.audit.log(userId, 'APPLY_LOAN', 'LoanApplication', loan.id, {
-      amount: dto.amount,
+      amount,
       tenorMonths: dto.tenorMonths,
       tenorUnit: dto.tenorUnit ?? 'WEEKS',
       repaymentInstallments: repaymentSchedule.installments,
@@ -189,8 +194,9 @@ export class LoansService {
         const amount = Number(l.amount);
         const disbursedAmount = this.resolveDisbursedAmount(l);
         const remainingBalance = this.shouldExposeRemainingBalance(l.status) ? Number(l.remainingBalance) : 0;
-        const loanBondAmount = this.resolveStoredLoanBondAmount(l) ?? 0;
-        const loanBondPaid = Boolean((l as any).loanBondPaidAt);
+        const loanBondRequired = this.loanRequiresBond(l);
+        const loanBondAmount = loanBondRequired ? this.resolveStoredLoanBondAmount(l) ?? 0 : 0;
+        const loanBondPaid = loanBondRequired && this.isLoanBondPaid(l);
         return {
           ...l,
           amount,
@@ -203,12 +209,16 @@ export class LoansService {
             ? Math.max(disbursedAmount - remainingBalance, 0)
             : 0,
           repaymentProgress: this.calculateRepaymentProgress(l),
+          loanBondRequired,
           loanBondAmount,
           loanBondPaidAt: (l as any).loanBondPaidAt ?? null,
           loanBondTransactionId: (l as any).loanBondTransactionId ?? null,
           loanBondPaid,
-          canPayLoanBond: l.status === 'APPROVED' && !loanBondPaid,
-          canDisburse: ['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(l.status) && loanBondPaid && Math.max(amount - disbursedAmount, 0) > 0,
+          canPayLoanBond: loanBondRequired && l.status === 'APPROVED' && !loanBondPaid,
+          canDisburse:
+            ['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(l.status) &&
+            (!loanBondRequired || loanBondPaid) &&
+            Math.max(amount - disbursedAmount, 0) > 0,
           canEdit: l.status === 'PENDING',
           canDelete: l.status === 'PENDING',
         };
@@ -267,9 +277,10 @@ export class LoansService {
     const amount = Number(loan.amount);
     const disbursedAmount = this.resolveDisbursedAmount(loan);
     const remainingToDisburse = Math.max(amount - disbursedAmount, 0);
+    const loanBondRequired = this.loanRequiresBond(loan);
     const storedLoanBondAmount = this.resolveStoredLoanBondAmount(loan);
-    const loanBondAmount = storedLoanBondAmount ?? (await this.getLoanBondAmount());
-    const loanBondPaid = Boolean((loan as any).loanBondPaidAt);
+    const loanBondAmount = loanBondRequired ? storedLoanBondAmount ?? (await this.getLoanBondAmount()) : 0;
+    const loanBondPaid = loanBondRequired && this.isLoanBondPaid(loan);
     const remainingBalance = this.shouldExposeRemainingBalance(loan.status) ? Number(loan.remainingBalance) : 0;
     const amountPaidSoFar = this.shouldExposeRemainingBalance(loan.status) ? Math.max(disbursedAmount - remainingBalance, 0) : 0;
     const repaymentProgress = this.calculateRepaymentProgress(loan);
@@ -334,12 +345,13 @@ export class LoansService {
       remainingBalance,
       amountPaidSoFar,
       repaymentProgress,
+      loanBondRequired,
       loanBondAmount,
       loanBondPaidAt: (loan as any).loanBondPaidAt ?? null,
       loanBondTransactionId: (loan as any).loanBondTransactionId ?? null,
       loanBondPaid,
-      canPayLoanBond: loan.status === 'APPROVED' && !loanBondPaid,
-      canDisburse: ['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(loan.status) && loanBondPaid && remainingToDisburse > 0,
+      canPayLoanBond: loanBondRequired && loan.status === 'APPROVED' && !loanBondPaid,
+      canDisburse: ['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(loan.status) && (!loanBondRequired || loanBondPaid) && remainingToDisburse > 0,
       nextRepaymentAt,
       paymentSchedule,
       timeline,
@@ -406,7 +418,8 @@ export class LoansService {
     if (!loan) throw new NotFoundException('Loan application not found');
     if (loan.status !== 'PENDING') throw new BadRequestException('Only pending loan applications can be approved.');
 
-    const loanBondAmount = await this.getLoanBondAmount();
+    const loanBondRequired = this.loanRequiresBond(loan);
+    const loanBondAmount = loanBondRequired ? await this.getLoanBondAmount() : 0;
     const updated = await this.prisma.loanApplication.update({
       where: { id },
       data: { status: 'APPROVED', approvedAt: new Date(), loanBondAmount },
@@ -414,22 +427,36 @@ export class LoansService {
 
     await this.audit.log(actorId, 'APPROVE_LOAN', 'LoanApplication', id, {
       amount: Number(loan.amount),
+      loanBondRequired,
       loanBondAmount,
     });
 
-    await this.notifications.notifyMember(
-      loan.member.userId,
-      'Loan Approved',
-      `Your loan application for ₦${Number(loan.amount).toLocaleString()} has been approved. Please pay the loan bond of ₦${loanBondAmount.toLocaleString()} before disbursement.`,
-    );
+    if (loanBondRequired) {
+      await this.notifications.notifyMember(
+        loan.member.userId,
+        'Loan Approved',
+        `Your loan application for ₦${Number(loan.amount).toLocaleString()} has been approved. Please pay the loan bond of ₦${loanBondAmount.toLocaleString()} before disbursement.`,
+      );
+    } else {
+      await this.notifications.notifyMember(
+        loan.member.userId,
+        'Loan Approved',
+        `Your loan application for NGN ${Number(loan.amount).toLocaleString()} has been approved.`,
+      );
+    }
 
     const amount = Number(updated.amount);
     return {
       ...updated,
       amount,
+      loanBondRequired,
       loanBondAmount,
       loanBondPaid: false,
-      message: `Loan application for ₦${amount.toLocaleString()} from ${loan.member.fullName} has been approved. Loan bond of ₦${loanBondAmount.toLocaleString()} must be paid before disbursement.`,
+      canPayLoanBond: loanBondRequired,
+      canDisburse: !loanBondRequired,
+      message: loanBondRequired
+        ? `Loan application for ₦${amount.toLocaleString()} from ${loan.member.fullName} has been approved. Loan bond of ₦${loanBondAmount.toLocaleString()} must be paid before disbursement.`
+        : `Loan application for ₦${amount.toLocaleString()} from ${loan.member.fullName} has been approved.`,
     };
   }
 
@@ -478,14 +505,14 @@ export class LoansService {
     }
 
     const previousAmount = Number(loan.amount);
-    const newAmount = Number(dto.amount);
+    const newAmount = normalizeMoney(dto.amount);
     if (!Number.isFinite(newAmount) || newAmount <= previousAmount) {
       throw new BadRequestException(
         `New approved amount must be greater than the current approved amount of ₦${previousAmount.toLocaleString()}.`,
       );
     }
 
-    const deltaAmount = newAmount - previousAmount;
+    const deltaAmount = normalizeMoney(newAmount - previousAmount);
     const currentDisbursedAmount = this.resolveDisbursedAmount(loan);
     const nextTenorUnit = dto.tenorUnit ?? ((loan as any).tenorUnit ?? 'MONTHS');
     const scheduleAnchorDate = loan.disbursedAt ?? loan.approvedAt ?? loan.submittedAt;
@@ -591,6 +618,9 @@ export class LoansService {
     if (loan.status !== 'APPROVED') {
       throw new BadRequestException('Loan bond can only be paid after the loan is approved and before disbursement.');
     }
+    if (!this.loanRequiresBond(loan)) {
+      throw new BadRequestException('Loan bond is not required for this loan.');
+    }
     if ((loan as any).loanBondPaidAt || (loan as any).loanBondTransactionId) {
       throw new BadRequestException('Loan bond has already been paid for this loan.');
     }
@@ -623,6 +653,9 @@ export class LoansService {
       if (currentLoan.status !== 'APPROVED') {
         throw new BadRequestException('Loan bond can only be paid before disbursement.');
       }
+      if (!this.loanRequiresBond(currentLoan)) {
+        throw new BadRequestException('Loan bond is not required for this loan.');
+      }
       if ((currentLoan as any).loanBondPaidAt || (currentLoan as any).loanBondTransactionId) {
         throw new BadRequestException('Loan bond has already been paid for this loan.');
       }
@@ -651,9 +684,10 @@ export class LoansService {
         where: {
           id,
           status: 'APPROVED',
+          loanBondRequired: true,
           loanBondPaidAt: null,
           loanBondTransactionId: null,
-        },
+        } as any,
         data: {
           loanBondAmount: amount,
           loanBondPaidAt: paidAt,
@@ -705,14 +739,14 @@ export class LoansService {
     if (!['APPROVED', 'DISBURSED', 'IN_PROGRESS'].includes(loan.status)) {
       throw new BadRequestException('Loan must be approved, disbursed, or in progress before funds can be disbursed.');
     }
-    if (!(loan as any).loanBondPaidAt) {
+    if (this.loanRequiresBond(loan) && !(loan as any).loanBondPaidAt) {
       throw new BadRequestException('Loan bond must be paid before this loan can be disbursed.');
     }
 
     const approvedAmount = Number(loan.amount);
     const alreadyDisbursed = this.resolveDisbursedAmount(loan);
     const remainingToDisburse = Math.max(approvedAmount - alreadyDisbursed, 0);
-    const disbursementAmount = Number(dto.amount);
+    const disbursementAmount = normalizeMoney(dto.amount);
     if (!Number.isFinite(disbursementAmount) || disbursementAmount <= 0) {
       throw new BadRequestException('Enter a valid disbursement amount.');
     }
@@ -891,7 +925,7 @@ export class LoansService {
       data: {
         ...(dto.guarantorOneId !== undefined && { guarantorOneId: dto.guarantorOneId || null }),
         ...(dto.guarantorTwoId !== undefined && { guarantorTwoId: dto.guarantorTwoId || null }),
-        ...(dto.amount !== undefined && { amount: dto.amount, remainingBalance: 0 }),
+        ...(dto.amount !== undefined && { amount: normalizeMoney(dto.amount), remainingBalance: 0 }),
         ...(repaymentSchedule && { tenorMonths: repaymentSchedule.tenorMonths }),
         tenorUnit: repaymentSchedule?.tenorUnit ?? nextTenorUnit,
         ...(dto.purpose !== undefined && { purpose: dto.purpose }),
@@ -900,7 +934,7 @@ export class LoansService {
     });
 
     await this.audit.log(userId, 'UPDATE_PENDING_LOAN', 'LoanApplication', id, {
-      amount: dto.amount,
+      amount: dto.amount === undefined ? undefined : normalizeMoney(dto.amount),
       tenorMonths: dto.tenorMonths,
       tenorUnit: nextTenorUnit,
       repaymentInstallments: repaymentSchedule?.installments ?? loan.tenorMonths,
@@ -947,24 +981,25 @@ export class LoansService {
     }
     if (loan.memberId !== member.id) throw new BadRequestException('You can only repay your own loans.');
 
+    const amount = normalizeMoney(dto.amount);
     const walletBalance = member.wallet ? Number(member.wallet.availableBalance) : 0;
-    if (walletBalance < dto.amount) {
+    if (walletBalance < amount) {
       throw new BadRequestException(
-        `Insufficient wallet balance. You need ₦${dto.amount.toLocaleString()} but your balance is ₦${walletBalance.toLocaleString()}. Please fund your wallet first.`,
+        `Insufficient wallet balance. You need ₦${formatMoney(amount)} but your balance is ₦${formatMoney(walletBalance)}. Please fund your wallet first.`,
       );
     }
 
     const repayableBalance = Number(loan.remainingBalance);
-    if (dto.amount > repayableBalance) {
-      throw new BadRequestException(`Repayment amount cannot exceed the outstanding balance of ₦${repayableBalance.toLocaleString()}.`);
+    if (amount > repayableBalance) {
+      throw new BadRequestException(`Repayment amount cannot exceed the outstanding balance of ₦${formatMoney(repayableBalance)}.`);
     }
 
-    const repayment = await this.walletService.applyLoanRepayment(member.id, loan.id, dto.amount, 'MEMBER');
-    const newRemainingBalance = repayableBalance - dto.amount;
-    const isFullyRepaid = newRemainingBalance <= 0 && this.resolveDisbursedAmount(loan) >= Number(loan.amount);
+    const repayment = await this.walletService.applyLoanRepayment(member.id, loan.id, amount, 'MEMBER');
+    const newRemainingBalance = normalizeMoney(repayableBalance - amount);
+    const isFullyRepaid = this.isRepaymentFullySettled(newRemainingBalance);
 
     await this.audit.log(userId, 'REPAY_LOAN', 'LoanApplication', id, {
-      amount: dto.amount,
+      amount,
       reference: repayment.reference,
     });
 
@@ -972,16 +1007,16 @@ export class LoansService {
       await this.notifications.notifyMember(
         userId,
         'Loan Fully Repaid',
-        `Congratulations! Your loan of ₦${Number(loan.amount).toLocaleString()} has been fully repaid. Thank you, ${member.fullName}!`,
+        `Congratulations! Your loan of ₦${formatMoney(loan.amount)} has been fully repaid. Thank you, ${member.fullName}!`,
       );
     }
 
-    const remaining = Math.max(newRemainingBalance, 0);
+    const remaining = isFullyRepaid ? 0 : Math.max(newRemainingBalance, 0);
     return {
       message: isFullyRepaid
         ? `Congratulations! Your loan has been fully repaid. Thank you, ${member.fullName}!`
-        : `Payment of ₦${dto.amount.toLocaleString()} received. Remaining balance: ₦${remaining.toLocaleString()}. Thank you, ${member.fullName}!`,
-      amount: dto.amount,
+        : `Payment of ₦${formatMoney(amount)} received. Remaining balance: ₦${formatMoney(remaining)}. Thank you, ${member.fullName}!`,
+      amount,
       remainingBalance: remaining,
       reference: repayment.reference,
       status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
@@ -1005,29 +1040,31 @@ export class LoansService {
       throw new BadRequestException('This loan is not currently active for repayment.');
     }
 
+    const amount = normalizeMoney(dto.amount);
     const walletBalance = loan.member.wallet ? Number(loan.member.wallet.availableBalance) : 0;
-    if (walletBalance < dto.amount) {
+    if (walletBalance < amount) {
       throw new BadRequestException(
-        `Insufficient wallet balance. Member wallet balance is ₦${walletBalance.toLocaleString()}.`,
+        `Insufficient wallet balance. Member wallet balance is ₦${formatMoney(walletBalance)}.`,
       );
     }
 
     const repayableBalance = Number(loan.remainingBalance);
-    if (dto.amount > repayableBalance) {
-      throw new BadRequestException(`Repayment amount cannot exceed the outstanding balance of ₦${repayableBalance.toLocaleString()}.`);
+    if (amount > repayableBalance) {
+      throw new BadRequestException(`Repayment amount cannot exceed the outstanding balance of ₦${formatMoney(repayableBalance)}.`);
     }
 
-    const repayment = await this.walletService.applyLoanRepayment(loan.memberId, loan.id, dto.amount, 'ADMIN');
-    const remaining = Math.max(repayableBalance - dto.amount, 0);
-    const isFullyRepaid = remaining <= 0 && this.resolveDisbursedAmount(loan) >= Number(loan.amount);
+    const repayment = await this.walletService.applyLoanRepayment(loan.memberId, loan.id, amount, 'ADMIN');
+    const remainingBeforeNormalization = normalizeMoney(repayableBalance - amount);
+    const isFullyRepaid = this.isRepaymentFullySettled(remainingBeforeNormalization);
+    const remaining = isFullyRepaid ? 0 : Math.max(remainingBeforeNormalization, 0);
 
     await this.audit.log(actorId, 'ADMIN_REPAY_LOAN', 'LoanApplication', id, {
-      amount: dto.amount,
+      amount,
       reference: repayment.reference,
     });
 
     return {
-      amount: dto.amount,
+      amount,
       remainingBalance: remaining,
       reference: repayment.reference,
       status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
@@ -1062,6 +1099,18 @@ export class LoansService {
     return Number.isFinite(amount) && amount > 0 ? amount : null;
   }
 
+  private loanRequiresBond(loan: unknown) {
+    return Boolean((loan as any).loanBondRequired);
+  }
+
+  private isLoanBondPaid(loan: unknown) {
+    return Boolean((loan as any).loanBondPaidAt || (loan as any).loanBondTransactionId);
+  }
+
+  private isRepaymentFullySettled(remainingBalance: number) {
+    return normalizeMoney(Math.max(remainingBalance, 0)) <= MONEY_COMPLETION_TOLERANCE;
+  }
+
   private shouldExposeRemainingBalance(status: LoanStatus) {
     return ['DISBURSED', 'IN_PROGRESS', 'OVERDUE', 'COMPLETED'].includes(status);
   }
@@ -1087,7 +1136,7 @@ export class LoansService {
     const amount = this.resolveDisbursedAmount(loan);
     const remaining = Number(loan.remainingBalance);
     if (amount <= 0 || !this.shouldExposeRemainingBalance(loan.status)) return 0;
-    if (loan.status === 'COMPLETED') return 100;
+    if (loan.status === 'COMPLETED' || this.isRepaymentFullySettled(remaining)) return 100;
     if (remaining <= 0) return amount >= Number(loan.amount) ? 100 : 99.9;
     const paid = Math.max(amount - remaining, 0);
     const raw = Math.min((paid / amount) * 100, 99.9);
@@ -1142,6 +1191,8 @@ export class LoansService {
     loan: LoanLike,
     relatedTransactions: Array<{ type: string; status: string; createdAt: Date; amount: any; reference?: string | null }>,
   ) {
+    const loanBondRequired = this.loanRequiresBond(loan);
+    const loanBondPaid = this.isLoanBondPaid(loan);
     const baseTimeline = [
       {
         label: 'Applied',
@@ -1159,23 +1210,27 @@ export class LoansService {
               ? 'CURRENT'
               : 'UPCOMING',
       },
-      {
-        label: 'Loan bond',
-        date: loan.loanBondPaidAt ? null : loan.approvedAt ?? null,
-        status: loan.loanBondPaidAt
-          ? 'COMPLETED'
-          : loan.status === 'APPROVED'
-            ? 'CURRENT'
-            : loan.status === 'REJECTED'
-              ? 'CANCELLED'
-              : 'UPCOMING',
-      },
+      ...(loanBondRequired
+        ? [
+            {
+              label: 'Loan bond',
+              date: loanBondPaid ? null : loan.approvedAt ?? null,
+              status: loanBondPaid
+                ? 'COMPLETED'
+                : loan.status === 'APPROVED'
+                  ? 'CURRENT'
+                  : loan.status === 'REJECTED'
+                    ? 'CANCELLED'
+                    : 'UPCOMING',
+            },
+          ]
+        : []),
       {
         label: 'Disbursed',
         date: loan.disbursedAt ?? loan.approvedAt ?? null,
         status: loan.disbursedAt
           ? 'COMPLETED'
-          : ['APPROVED'].includes(loan.status) && loan.loanBondPaidAt
+          : ['APPROVED'].includes(loan.status) && (!loanBondRequired || loanBondPaid)
             ? 'CURRENT'
             : ['PENDING', 'REJECTED'].includes(loan.status)
               ? 'UPCOMING'

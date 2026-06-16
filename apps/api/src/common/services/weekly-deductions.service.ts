@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { PrismaService } from '../prisma.service';
 import { WalletService } from './wallet.service';
 import { AuditService } from './audit.service';
+import { normalizeMoney } from '../utils/money';
 
 const DEDUCTION_DAY_KEY = 'COOPERATIVE_DEDUCTION_DAY';
 const DEDUCTION_AMOUNT_KEY = 'COOPERATIVE_DEDUCTION_AMOUNT';
@@ -172,6 +173,7 @@ export class WeeklyDeductionsService {
   }
 
   async payMyWeeklyDeduction(userId: string, amount: number) {
+    amount = normalizeMoney(amount);
     if (!amount || amount <= 0) {
       throw new BadRequestException('Enter a valid amount to pay.');
     }

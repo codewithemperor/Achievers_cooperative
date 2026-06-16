@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma.service';
 import type { LoanTenorUnit, TransactionType } from '../prisma-types';
 import { FinancialPostingService } from './financial-posting.service';
+import { normalizeMoney } from '../utils/money';
 
 interface TransactionOptions {
   category?: string;
@@ -187,6 +188,7 @@ const WEEKLY_DEDUCTION_AMOUNT_KEY = 'COOPERATIVE_DEDUCTION_AMOUNT';
 const WEEKLY_DEDUCTION_DAY_KEY = 'COOPERATIVE_DEDUCTION_DAY';
 const WEEKLY_OPEN_STATUSES = ['OUTSTANDING', 'PARTIAL', 'UPCOMING'];
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+const MONEY_COMPLETION_TOLERANCE = 0.01;
 
 function isUniqueConstraintError(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002';
@@ -207,7 +209,7 @@ function addDays(date: Date, days: number) {
 }
 
 function roundMoney(amount: number) {
-  return Math.round(amount * 100) / 100;
+  return normalizeMoney(amount);
 }
 
 function weeklyCycleStatus(dueDate: Date, amount: number, amountPaid: number, asOf = new Date()) {
@@ -269,8 +271,9 @@ export class WalletService {
     reference?: string,
     options?: TransactionOptions,
   ) {
-    const debtRecoveryPlan = await this.prepareWalletFundingDebtRecovery(memberId, amount);
-    return this.creditWalletWithDebtRecovery(memberId, amount, type, reference, {
+    const normalizedAmount = roundMoney(amount);
+    const debtRecoveryPlan = await this.prepareWalletFundingDebtRecovery(memberId, normalizedAmount);
+    return this.creditWalletWithDebtRecovery(memberId, normalizedAmount, type, reference, {
       ...options,
       debtRecoveryPlan,
       metadata: {
@@ -287,13 +290,14 @@ export class WalletService {
     reference?: string,
     options?: FundingDebtRecoveryOptions,
   ) {
+    const normalizedAmount = roundMoney(amount);
     const debtRecoveryPlan =
-      options?.debtRecoveryPlan ?? (await this.prepareWalletFundingDebtRecovery(memberId, amount));
+      options?.debtRecoveryPlan ?? (await this.prepareWalletFundingDebtRecovery(memberId, normalizedAmount));
 
     return this.prisma.runTransaction(
       'wallet.creditWalletWithDebtRecovery',
       (tx) =>
-        this.applyWalletFundingWithDebtRecovery(tx, memberId, amount, type, reference, {
+        this.applyWalletFundingWithDebtRecovery(tx, memberId, normalizedAmount, type, reference, {
           ...options,
           debtRecoveryPlan,
         }),
@@ -308,6 +312,7 @@ export class WalletService {
     reference?: string,
     options?: FundingDebtRecoveryOptions,
   ) {
+    amount = roundMoney(amount);
     const wallet = await this.getMemberWalletWithClient(client, memberId);
     const fundingMetadata = {
       ...(options?.metadata ?? {}),
@@ -421,8 +426,9 @@ export class WalletService {
     reference?: string,
     options?: DebitWalletOptions,
   ) {
+    const normalizedAmount = roundMoney(amount);
     return this.prisma.runTransaction('wallet.debitWallet', (tx) =>
-      this.debitWalletInTransaction(tx, memberId, amount, type, reference, options),
+      this.debitWalletInTransaction(tx, memberId, normalizedAmount, type, reference, options),
     );
   }
 
@@ -434,6 +440,7 @@ export class WalletService {
     reference?: string,
     options?: DebitWalletOptions,
   ) {
+    amount = roundMoney(amount);
     const wallet = await this.getMemberWalletWithClient(client, memberId);
     const previousBalance = Number(wallet.availableBalance);
     const nextBalance = previousBalance - amount;
@@ -1647,6 +1654,7 @@ export class WalletService {
     memberId: string,
     fundingAmount: number,
   ): Promise<PreparedFundingDebtRecoveryPlan> {
+    fundingAmount = roundMoney(fundingAmount);
     let remainingFunding = roundMoney(Math.max(fundingAmount, 0));
     const plan: PreparedFundingDebtRecoveryPlan = {
       weekly: null,
@@ -1927,9 +1935,8 @@ export class WalletService {
 
       const allocationPlan = this.buildScheduleAllocationPlan(dueItems, amountToApply);
       const totals = this.getScheduleTotalsAfterAllocations(scheduleItems, allocationPlan.allocations);
-      const explicitDisbursedAmount = Number(loan.disbursedAmount ?? 0);
-      const disbursedAmount = explicitDisbursedAmount > 0 ? explicitDisbursedAmount : Number(loan.amount);
-      const isFullyRepaid = totals.remaining <= 0 && disbursedAmount >= Number(loan.amount);
+      const nextRemainingBalance = roundMoney(Math.max(totals.remaining, 0));
+      const isFullyRepaid = nextRemainingBalance <= MONEY_COMPLETION_TOLERANCE;
       const dueKey = dueAt.toISOString().slice(0, 10);
       const loanName = loan.purpose || `loan for ${loan.member.fullName}`;
 
@@ -1950,7 +1957,7 @@ export class WalletService {
         update: {
           previousRemainingBalance: Number(loan.remainingBalance),
           previousStatus: loan.status,
-          remainingBalance: totals.remaining,
+          remainingBalance: isFullyRepaid ? 0 : nextRemainingBalance,
           status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
           nextRepaymentAt: isFullyRepaid ? null : totals.nextDueAt,
         },
@@ -2835,6 +2842,7 @@ export class WalletService {
     mode: 'AUTO' | 'ADMIN' | 'MEMBER' = 'MEMBER',
     options: { expectedAmount?: number; trigger?: string } = {},
   ) {
+    amount = roundMoney(amount);
     const loan = await this.prisma.loanApplication.findUnique({
       where: { id: loanId },
       include: { member: { select: { fullName: true, membershipNumber: true } } },
@@ -2947,14 +2955,12 @@ export class WalletService {
 
     await this.allocateRepaymentSchedule(this.prisma, 'LoanApplication', loan.id, amount, mode === 'AUTO');
     const scheduleTotals = await this.getScheduleTotals(this.prisma, 'LoanApplication', loan.id);
-    const nextRemaining = scheduleTotals.remaining;
-    const explicitDisbursedAmount = Number((loan as any).disbursedAmount ?? 0);
-    const disbursedAmount = explicitDisbursedAmount > 0 ? explicitDisbursedAmount : Number(loan.amount);
-    const isFullyRepaid = nextRemaining <= 0 && disbursedAmount >= Number(loan.amount);
+    const nextRemaining = roundMoney(Math.max(scheduleTotals.remaining, 0));
+    const isFullyRepaid = nextRemaining <= MONEY_COMPLETION_TOLERANCE;
     await this.prisma.loanApplication.update({
       where: { id: loan.id },
       data: {
-        remainingBalance: nextRemaining,
+        remainingBalance: isFullyRepaid ? 0 : nextRemaining,
         status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
         nextRepaymentAt: isFullyRepaid ? null : await this.nextOpenScheduleDueDate(this.prisma, 'LoanApplication', loan.id),
       } as any,
@@ -2982,6 +2988,7 @@ export class WalletService {
     mode: 'AUTO' | 'ADMIN' | 'MEMBER' = 'MEMBER',
     options: { expectedAmount?: number; trigger?: string } = {},
   ) {
+    amount = roundMoney(amount);
     const subscription = await this.prisma.packageSubscription.findUnique({
       where: { id: subscriptionId },
       include: { package: true },
@@ -3192,6 +3199,7 @@ export class WalletService {
     mode: 'AUTO' | 'ADMIN' | 'MEMBER' = 'MEMBER',
     accountId?: string,
   ) {
+    amount = roundMoney(amount);
     let account =
       (accountId
         ? await this.prisma.savingsAccount.findUnique({ where: { id: accountId }, include: { member: true } })
