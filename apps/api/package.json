@@ -31,7 +31,8 @@
     "db:patch:wallet-debt-exposures": "tsx prisma/patch-wallet-debt-exposures.ts",
     "db:audit:wallet-debt-exposures": "tsx prisma/audit-wallet-debt-exposures.ts",
     "db:patch:alabi-package": "tsx prisma/patch-alabi-package-correction.ts",
-    "db:patch:loan-bond": "tsx prisma/patch-loan-bond.ts"
+    "db:patch:loan-bond": "tsx prisma/patch-loan-bond.ts",
+    "db:patch:isiaq-aminat": "tsx prisma/patch-isiaq-aminat.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.18",

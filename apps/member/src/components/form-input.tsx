@@ -230,6 +230,48 @@ interface NumberInputProps<T extends FieldValues> extends BaseInputProps<T> {
 
 export type { NumberInputProps };
 
+const integerGroupingFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 0,
+  useGrouping: true,
+});
+
+function formatGroupedNumberInput(value: string) {
+  const withoutCommas = value.replace(/,/g, "");
+  const isNegative = withoutCommas.trim().startsWith("-");
+  const unsigned = withoutCommas.replace(/-/g, "");
+  const hasDecimalPoint = unsigned.includes(".");
+  const [integerPart = "", ...decimalParts] = unsigned.split(".");
+  const digits = integerPart.replace(/\D/g, "");
+  const groupedInteger = digits
+    ? integerGroupingFormatter.format(Number(digits))
+    : "";
+  const decimalPart = decimalParts.join("").replace(/\D/g, "");
+
+  return `${isNegative ? "-" : ""}${groupedInteger}${hasDecimalPoint ? `.${decimalPart}` : ""}`;
+}
+
+function parseGroupedNumberInput(value: string) {
+  const normalized = value.replace(/,/g, "");
+  if (!normalized || normalized === "-" || normalized === "." || normalized === "-.") {
+    return undefined;
+  }
+
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function displayValueForNumberInput(value: unknown) {
+  if (
+    value === undefined ||
+    value === null ||
+    (typeof value === "number" && Number.isNaN(value))
+  ) {
+    return "";
+  }
+
+  return formatGroupedNumberInput(String(value));
+}
+
 export function NumberInput<T extends FieldValues>({
   name,
   control,
@@ -239,12 +281,22 @@ export function NumberInput<T extends FieldValues>({
   max,
   step = 1,
   formatOptions,
+  startContent,
+  endContent,
   isRequired = false,
   isDisabled = false,
   className,
   description,
 }: NumberInputProps<T>) {
   const [draftValue, setDraftValue] = useState<string | null>(null);
+  const numberFormatOptions = React.useMemo(
+    () => ({
+      useGrouping: true,
+      maximumFractionDigits: 20,
+      ...formatOptions,
+    }),
+    [formatOptions],
+  );
 
   return (
     <Controller
@@ -259,7 +311,7 @@ export function NumberInput<T extends FieldValues>({
           minValue={min}
           maxValue={max}
           step={step}
-          formatOptions={formatOptions}
+          formatOptions={numberFormatOptions}
           value={
             draftValue !== null
               ? undefined
@@ -277,28 +329,29 @@ export function NumberInput<T extends FieldValues>({
           <Label>{label}</Label>
           <NumberField.Group className={fieldShellClass}>
             <NumberField.DecrementButton className="h-full px-2" />
+            {startContent && (
+              <span className="px-2 text-sm text-text-400">{startContent}</span>
+            )}
             <NumberField.Input
+              inputMode="decimal"
               placeholder={placeholder}
               className="h-full flex-1 bg-transparent px-0 focus:outline-none"
               value={
-                draftValue ??
-                (field.value === undefined ||
-                field.value === null ||
-                Number.isNaN(field.value)
-                  ? ""
-                  : String(field.value))
+                draftValue ?? displayValueForNumberInput(field.value)
               }
               onChange={(event) => {
-                const value = event.target.value;
-                setDraftValue(value);
-                const numeric = Number(value.replace(/,/g, ""));
-                field.onChange(value === "" || Number.isNaN(numeric) ? undefined : numeric);
+                const nextDraft = formatGroupedNumberInput(event.target.value);
+                setDraftValue(nextDraft);
+                field.onChange(parseGroupedNumberInput(nextDraft));
               }}
               onBlur={() => {
                 setDraftValue(null);
                 field.onBlur();
               }}
             />
+            {endContent && (
+              <span className="px-2 text-sm text-text-400">{endContent}</span>
+            )}
             <NumberField.IncrementButton className="h-full px-2" />
           </NumberField.Group>
           {description && !error && <Description>{description}</Description>}

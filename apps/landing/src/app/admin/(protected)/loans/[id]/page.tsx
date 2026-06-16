@@ -188,6 +188,7 @@ export default function LoanDetailPage() {
     (["APPROVED", "DISBURSED", "IN_PROGRESS"].includes(status || "") &&
       (!loanBondRequired || loanBondPaid) &&
       remainingToDisburse > 0);
+  const canRejectLoan = isNewLoan || (isApprovedLoan && disbursedAmount <= 0);
   const isRepayable = ["DISBURSED", "IN_PROGRESS", "OVERDUE"].includes(
     status || "",
   );
@@ -394,57 +395,68 @@ export default function LoanDetailPage() {
               </AdminModal>
             ) : null}
             {isNewLoan ? (
-              <>
-                <ConfirmActionButton
-                  confirmMessage="Approve this pending loan request and move it to the disbursement stage."
-                  confirmTitle="Approve loan request?"
-                  label="Approve"
-                  onConfirm={() => runAction("approve")}
-                  pendingLabel="Approving..."
-                  tone="success"
-                />
-                <AdminModal
-                  description="Provide an optional reason for rejecting this loan request. The member will be notified."
-                  title="Reject loan request"
-                  trigger={
-                    <button
-                      className="rounded-full bg-[#b42318] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
-                      type="button"
-                    >
-                      Reject
-                    </button>
-                  }
-                >
-                  {({ close }) => (
-                    <>
-                      <TextareaInput
-                        control={control}
-                        label="Reason (optional)"
-                        name="reason"
-                        placeholder="Enter rejection reason..."
-                        rows={3}
-                      />
-                      <div className="mt-6 flex justify-end gap-3">
-                        <button
-                          className="rounded-full border border-[var(--primary-900)/12] px-4 py-2 text-sm font-medium text-text-900"
-                          onClick={close}
-                          type="button"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="rounded-full bg-[#b42318] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
-                          disabled={rejecting}
-                          onClick={() => void handleReject(close)()}
-                          type="button"
-                        >
-                          {rejecting ? "Rejecting..." : "Confirm rejection"}
-                        </button>
+              <ConfirmActionButton
+                confirmMessage="Approve this pending loan request and move it to the disbursement stage."
+                confirmTitle="Approve loan request?"
+                label="Approve"
+                onConfirm={() => runAction("approve")}
+                pendingLabel="Approving..."
+                tone="success"
+              />
+            ) : null}
+            {canRejectLoan ? (
+              <AdminModal
+                description={
+                  isApprovedLoan
+                    ? loanBondPaid
+                      ? `Reject this approved loan before disbursement. The paid loan bond of ${currency.format(loanBondAmount)} will be refunded to the member wallet.`
+                      : "Reject this approved loan before disbursement. The member will be notified."
+                    : "Provide an optional reason for rejecting this loan request. The member will be notified."
+                }
+                title={isApprovedLoan ? "Reject approved loan" : "Reject loan request"}
+                trigger={
+                  <button
+                    className="rounded-full bg-[#b42318] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+                    type="button"
+                  >
+                    {isApprovedLoan ? "Reject Loan" : "Reject"}
+                  </button>
+                }
+              >
+                {({ close }) => (
+                  <>
+                    <TextareaInput
+                      control={control}
+                      label="Reason (optional)"
+                      name="reason"
+                      placeholder="Enter rejection reason..."
+                      rows={3}
+                    />
+                    {isApprovedLoan && loanBondPaid ? (
+                      <div className="mt-4 rounded-2xl bg-[#fff7ed] p-4 text-sm text-[#9a3412] dark:bg-[#431407] dark:text-[#fed7aa]">
+                        This will refund {currency.format(loanBondAmount)} to the member wallet.
                       </div>
-                    </>
-                  )}
-                </AdminModal>
-              </>
+                    ) : null}
+                    <div className="mt-6 flex justify-end gap-3">
+                      <button
+                        className="rounded-full border border-[var(--primary-900)/12] px-4 py-2 text-sm font-medium text-text-900"
+                        onClick={close}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="rounded-full bg-[#b42318] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-60"
+                        disabled={rejecting}
+                        onClick={() => void handleReject(close)()}
+                        type="button"
+                      >
+                        {rejecting ? "Rejecting..." : "Confirm rejection"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </AdminModal>
             ) : null}
             {canPayLoanBond ? (
               <ConfirmActionButton

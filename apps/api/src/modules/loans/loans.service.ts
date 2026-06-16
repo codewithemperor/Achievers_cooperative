@@ -259,7 +259,7 @@ export class LoansService {
           where: {
             walletId: loan.member.wallet.id,
             metadata: { path: ['loanId'], equals: loan.id },
-            type: { in: ['LOAN_BOND', 'LOAN_DISBURSEMENT', 'LOAN_REPAYMENT'] as any },
+            type: { in: ['LOAN_BOND', 'LOAN_DISBURSEMENT', 'LOAN_REPAYMENT', 'ADMIN_REFUND'] as any },
           },
           orderBy: { createdAt: 'asc' },
         })
@@ -464,32 +464,171 @@ export class LoansService {
   async reject(id: string, actorId: string, reason?: string) {
     const loan = await this.prisma.loanApplication.findUnique({
       where: { id },
-      include: { member: true },
+      include: {
+        member: {
+          include: {
+            wallet: true,
+          },
+        },
+      },
     });
     if (!loan) throw new NotFoundException('Loan application not found');
     if (loan.status !== 'APPROVED' && loan.status !== 'PENDING') {
       throw new BadRequestException('Only pending or approved loan applications can be rejected.');
     }
 
-    const updated = await this.prisma.loanApplication.update({
-      where: { id },
-      data: { status: 'REJECTED', rejectedAt: new Date() },
+    if (loan.status === 'APPROVED' && (this.resolveDisbursedAmount(loan) > 0 || loan.disbursedAt)) {
+      throw new BadRequestException('This approved loan has already been disbursed and cannot be rejected.');
+    }
+
+    const rejectedAt = new Date();
+    const rejection = await this.prisma.runTransaction('loans.reject', async (tx) => {
+      const currentLoan = await tx.loanApplication.findUnique({
+        where: { id },
+        include: {
+          member: {
+            include: {
+              wallet: true,
+            },
+          },
+        },
+      });
+      if (!currentLoan) throw new NotFoundException('Loan application not found');
+      if (currentLoan.status !== 'APPROVED' && currentLoan.status !== 'PENDING') {
+        throw new BadRequestException('Only pending or approved loan applications can be rejected.');
+      }
+      if (currentLoan.status === 'APPROVED' && (this.resolveDisbursedAmount(currentLoan) > 0 || currentLoan.disbursedAt)) {
+        throw new BadRequestException('This approved loan has already been disbursed and cannot be rejected.');
+      }
+
+      let refundTransaction: any = null;
+      let refundAmount = 0;
+      const loanBondPaid = this.isLoanBondPaid(currentLoan);
+
+      if (loanBondPaid) {
+        const bondTransaction = (currentLoan as any).loanBondTransactionId
+          ? await tx.transaction.findUnique({ where: { id: (currentLoan as any).loanBondTransactionId } })
+          : null;
+        refundAmount = normalizeMoney(
+          this.resolveStoredLoanBondAmount(currentLoan) ?? Number(bondTransaction?.amount ?? 0),
+        );
+
+        if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+          throw new BadRequestException('Loan bond refund amount could not be resolved.');
+        }
+
+        const wallet =
+          currentLoan.member.wallet ??
+          (await tx.wallet.create({
+            data: {
+              memberId: currentLoan.memberId,
+              availableBalance: 0,
+              pendingBalance: 0,
+              totalFunded: 0,
+              totalCharges: 0,
+              currency: 'NGN',
+            },
+          }));
+        const refundReference = `LOAN-BOND-REFUND-${currentLoan.id}`;
+
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: {
+            availableBalance: { increment: refundAmount },
+          },
+        });
+
+        refundTransaction = await tx.transaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'ADMIN_REFUND',
+            amount: refundAmount,
+            status: 'APPROVED',
+            reference: refundReference,
+            category: 'loan bond refund',
+            description: `Loan bond refund for ${currentLoan.member.fullName}`,
+            editable: false,
+            lockReason: 'Loan bond refunds are system-generated when an approved loan is rejected before disbursement.',
+            metadata: {
+              loanId: currentLoan.id,
+              memberId: currentLoan.memberId,
+              membershipNumber: currentLoan.member.membershipNumber,
+              originalLoanBondTransactionId: (currentLoan as any).loanBondTransactionId ?? null,
+              reason: reason || null,
+              trigger: 'APPROVED_LOAN_REJECTION',
+            } as any,
+          },
+        });
+
+        await this.financialPosting.postAssociationToWallet(
+          {
+            memberId: currentLoan.memberId,
+            amount: refundAmount,
+            reference: refundReference,
+            sourceType: 'Transaction',
+            sourceId: refundTransaction.id,
+            description: `Loan bond refund for ${currentLoan.member.fullName}`,
+            actorId,
+            category: 'loan bond refund',
+          },
+          tx,
+        );
+
+        if (bondTransaction) {
+          await tx.transaction.update({
+            where: { id: bondTransaction.id },
+            data: {
+              metadata: {
+                ...((bondTransaction.metadata as Record<string, unknown> | null) ?? {}),
+                refundedByTransactionId: refundTransaction.id,
+                refundedAt: rejectedAt.toISOString(),
+              } as any,
+            },
+          });
+        }
+      }
+
+      const updatedLoan = await tx.loanApplication.update({
+        where: { id },
+        data: {
+          status: 'REJECTED',
+          rejectedAt,
+          nextRepaymentAt: null,
+          loanBondPaidAt: null,
+          loanBondTransactionId: null,
+        } as any,
+      });
+
+      return { updatedLoan, refundAmount, refundTransaction };
     });
 
-    await this.audit.log(actorId, 'REJECT_LOAN', 'LoanApplication', id, { reason });
+    await this.audit.log(actorId, 'REJECT_LOAN', 'LoanApplication', id, {
+      reason,
+      refundAmount: rejection.refundAmount,
+      refundTransactionId: rejection.refundTransaction?.id ?? null,
+    });
 
     const rejectReason = reason ? ` Reason: ${reason}` : '';
+    const refundMessage =
+      rejection.refundAmount > 0
+        ? ` Loan bond of ₦${formatMoney(rejection.refundAmount)} has been refunded to your wallet.`
+        : '';
     await this.notifications.notifyMember(
       loan.member.userId,
       'Loan Rejected',
-      `Your loan application for ₦${Number(loan.amount).toLocaleString()} has been rejected.${rejectReason}`,
+      `Your loan application for ₦${formatMoney(loan.amount)} has been rejected.${rejectReason}${refundMessage}`,
     );
 
-    const amount = Number(updated.amount);
+    const amount = Number(rejection.updatedLoan.amount);
     return {
-      ...updated,
+      ...rejection.updatedLoan,
       amount,
-      message: `Loan application for ₦${amount.toLocaleString()} from ${loan.member.fullName} has been rejected.${rejectReason}`,
+      loanBondPaid: false,
+      loanBondPaidAt: null,
+      loanBondTransactionId: null,
+      loanBondRefundAmount: rejection.refundAmount,
+      loanBondRefundTransactionId: rejection.refundTransaction?.id ?? null,
+      message: `Loan application for ₦${formatMoney(amount)} from ${loan.member.fullName} has been rejected.${rejectReason}${refundMessage}`,
     };
   }
 
@@ -1292,9 +1431,19 @@ export class LoansService {
         reference: item.reference,
       }));
 
+    const refunds = relatedTransactions
+      .filter((item) => item.type === 'ADMIN_REFUND')
+      .map((item) => ({
+        label: 'Loan bond refunded',
+        date: item.createdAt,
+        status: item.status,
+        amount: Number(item.amount),
+        reference: item.reference,
+      }));
+
     const withoutCompletion = baseTimeline.filter((item) => item.label !== 'Completed');
     const completion = baseTimeline.find((item) => item.label === 'Completed');
-    const moneyEvents = [...bondPayments, ...disbursements, ...repayments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const moneyEvents = [...bondPayments, ...refunds, ...disbursements, ...repayments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const stageEvents = withoutCompletion.filter((item) => item.label !== 'Repayment');
     const repaymentStage = withoutCompletion.find((item) => item.label === 'Repayment');
     return completion
