@@ -1,6 +1,7 @@
 "use client";
 
 import { StatusBadge } from "@/components/ui/status-badge";
+import type { ReactNode } from "react";
 
 const currency = new Intl.NumberFormat("en-NG", {
   style: "currency",
@@ -50,6 +51,7 @@ export function TransactionReceiptModal({
   reference,
   fields,
   timeline,
+  actions,
   onClose,
 }: {
   title?: string;
@@ -59,6 +61,7 @@ export function TransactionReceiptModal({
   reference?: string | null;
   fields: ReceiptField[];
   timeline?: ReceiptTimelineItem[];
+  actions?: ReactNode;
   onClose: () => void;
 }) {
   return (
@@ -163,6 +166,12 @@ export function TransactionReceiptModal({
                   </li>
                 ))}
               </ol>
+            </div>
+          ) : null}
+
+          {actions ? (
+            <div className="flex flex-col-reverse gap-3 border-t border-primary-900/8 pt-5 dark:border-[var(--background-700)] sm:flex-row sm:justify-end">
+              {actions}
             </div>
           ) : null}
         </div>

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { parseDate } from "@internationalized/date";
 import { useForm, useWatch } from "react-hook-form";
-import { ActionMenu } from "@/components/ui/action-menu";
 import { AdminTabs } from "@/components/ui/admin-tabs";
 import { DashboardMetricCard } from "@/components/admin/dashboard-card";
 import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
@@ -255,40 +254,16 @@ export default function WithdrawalsPage() {
                 align: "right",
                 isAction: true,
                 render: (item) => (
-                  <ActionMenu
-                    items={[
-                      {
-                        label: "View details",
-                        onSelect: () => setSelectedWithdrawal(item),
-                      },
-                      {
-                        label: "Approve",
-                        tone: "success",
-                        isDisabled: item.status !== "PENDING",
-                        confirmTitle: "Approve withdrawal?",
-                        confirmMessage:
-                          "Are you sure you want to approve this request?",
-                        onSelect: () => mutateWithdrawal(item.id, "approve"),
-                      },
-                      {
-                        label: "Reject",
-                        tone: "danger",
-                        isDisabled: item.status !== "PENDING",
-                        confirmTitle: "Reject withdrawal?",
-                        confirmMessage:
-                          "Are you sure you want to reject this request?",
-                        onSelect: () => mutateWithdrawal(item.id, "reject"),
-                      },
-                      {
-                        label: "Disburse",
-                        tone: "success",
-                        isDisabled: item.status !== "APPROVED",
-                        confirmTitle: "Disburse withdrawal?",
-                        confirmMessage: `Confirm that transfer has been made to ${item.accountName} at ${item.bankName} (${item.accountNumber}) before marking this as disbursed.`,
-                        onSelect: () => mutateWithdrawal(item.id, "disburse"),
-                      },
-                    ]}
-                  />
+                  <button
+                    className="rounded-full border border-primary-900/12 bg-white px-4 py-2 text-sm font-semibold text-text-800 transition hover:bg-background-100"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedWithdrawal(item);
+                    }}
+                    type="button"
+                  >
+                    View
+                  </button>
                 ),
               },
             ]}
@@ -365,22 +340,16 @@ export default function WithdrawalsPage() {
                 align: "right",
                 isAction: true,
                 render: (item) => (
-                  <ActionMenu
-                    items={[
-                      {
-                        label: "View details",
-                        onSelect: () => setSelectedWithdrawal(item),
-                      },
-                      {
-                        label: "Disburse",
-                        tone: "success",
-                        isDisabled: item.status !== "APPROVED",
-                        confirmTitle: "Disburse withdrawal?",
-                        confirmMessage: `Confirm that transfer has been made to ${item.accountName} at ${item.bankName} (${item.accountNumber}) before marking this as disbursed.`,
-                        onSelect: () => mutateWithdrawal(item.id, "disburse"),
-                      },
-                    ]}
-                  />
+                  <button
+                    className="rounded-full border border-primary-900/12 bg-white px-4 py-2 text-sm font-semibold text-text-800 transition hover:bg-background-100"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedWithdrawal(item);
+                    }}
+                    type="button"
+                  >
+                    View
+                  </button>
                 ),
               },
             ]}
@@ -457,6 +426,46 @@ export default function WithdrawalsPage() {
                 ]
               : []),
           ]}
+          actions={
+            <>
+              {selectedWithdrawal.status === "PENDING" ? (
+                <>
+                  <button
+                    className="rounded-full border border-[#f3b8b0] px-4 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff4f2]"
+                    onClick={async () => {
+                      await mutateWithdrawal(selectedWithdrawal.id, "reject");
+                      setSelectedWithdrawal(null);
+                    }}
+                    type="button"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-800)]"
+                    onClick={async () => {
+                      await mutateWithdrawal(selectedWithdrawal.id, "approve");
+                      setSelectedWithdrawal(null);
+                    }}
+                    type="button"
+                  >
+                    Accept
+                  </button>
+                </>
+              ) : null}
+              {selectedWithdrawal.status === "APPROVED" ? (
+                <button
+                  className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-800)]"
+                  onClick={async () => {
+                    await mutateWithdrawal(selectedWithdrawal.id, "disburse");
+                    setSelectedWithdrawal(null);
+                  }}
+                  type="button"
+                >
+                  Mark as disbursed
+                </button>
+              ) : null}
+            </>
+          }
           onClose={() => setSelectedWithdrawal(null)}
         />
       ) : null}

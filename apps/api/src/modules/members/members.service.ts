@@ -249,7 +249,20 @@ export class MembersService {
       throw new NotFoundException('Member dashboard not found');
     }
 
-    const [recentTransactions, pendingPayments, transactionCount, savingsTotal, termsConfig, bankName, bankAccountName, bankAccountNumber, weeklyDeduction] = await Promise.all([
+    const [
+      recentTransactions,
+      pendingPayments,
+      pendingPaymentCount,
+      savingsWithdrawals,
+      savingsWithdrawalCount,
+      transactionCount,
+      savingsTotal,
+      termsConfig,
+      bankName,
+      bankAccountName,
+      bankAccountNumber,
+      weeklyDeduction,
+    ] = await Promise.all([
       this.prisma.transaction.findMany({
         where: { walletId: member.wallet.id },
         orderBy: { createdAt: 'desc' },
@@ -262,6 +275,20 @@ export class MembersService {
         },
         orderBy: { createdAt: 'desc' },
         take: 5,
+      }),
+      this.prisma.payment.count({
+        where: {
+          memberId: member.id,
+          status: 'PENDING',
+        },
+      }),
+      (this.prisma as any).savingsWithdrawalRequest.findMany({
+        where: { memberId: member.id },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+      (this.prisma as any).savingsWithdrawalRequest.count({
+        where: { memberId: member.id },
       }),
       this.prisma.transaction.count({ where: { walletId: member.wallet.id } }),
       this.prisma.savingsAccount.aggregate({
@@ -328,6 +355,18 @@ export class MembersService {
         description: 'Wallet funding request submitted for approval',
         reference: null,
       })),
+      ...savingsWithdrawals.map((request: any) => ({
+        id: `savings-withdrawal-${request.id}`,
+        type: 'SAVINGS_WITHDRAWAL',
+        amount: Number(request.amount),
+        status: request.status,
+        createdAt: request.createdAt,
+        description:
+          request.status === 'REJECTED'
+            ? request.rejectionReason || 'Savings withdrawal request rejected'
+            : `Savings withdrawal request to ${request.bankName} - ${request.accountNumber}`,
+        reference: null,
+      })),
     ]
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, 5);
@@ -354,7 +393,7 @@ export class MembersService {
         totalInvestments: member.investments
           .filter((item) => item.status === 'APPROVED')
           .reduce((sum, item) => sum + Number(item.principal), 0),
-        transactionCount,
+        transactionCount: transactionCount + pendingPaymentCount + savingsWithdrawalCount,
         pendingPaymentsTotal: pendingPayments.reduce((sum, item) => sum + Number(item.amount), 0),
         pendingPaymentsCount: pendingPayments.length,
         pendingPackagesTotal,

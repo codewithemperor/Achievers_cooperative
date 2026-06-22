@@ -3,6 +3,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { AuditService } from '../../common/services/audit.service';
 import { FinancialPostingService } from '../../common/services/financial-posting.service';
+import { NotificationService } from '../../common/services/notification.service';
 import { ContributeSavingsDto, RequestSavingsWithdrawalDto } from './dto/index';
 import { normalizeMoney } from '../../common/utils/money';
 
@@ -13,6 +14,7 @@ export class SavingsService {
     private readonly walletService: WalletService,
     private readonly audit: AuditService,
     private readonly financialPosting: FinancialPostingService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async getMySavings(userId: string) {
@@ -125,6 +127,22 @@ export class SavingsService {
       accountNumber,
       bankAccountId: dto.bankAccountId ?? selectedBankAccount?.id,
     });
+
+    const admins = await this.prisma.user.findMany({
+      where: { role: 'SUPER_ADMIN' },
+      select: { id: true },
+    });
+    if (admins.length) {
+      await this.notifications.broadcast(
+        'IN_APP',
+        'Savings withdrawal request',
+        `${member.fullName} requested a savings withdrawal of NGN ${amount.toLocaleString('en-NG', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}.`,
+        admins.map((admin) => admin.id),
+      );
+    }
 
     return {
       ...created,

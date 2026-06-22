@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Banknote, Clock3, Package, Receipt, TrendingUp, Wallet } from "lucide-react";
+import { Bell, Banknote, Package, PiggyBank, Receipt, TrendingUp, Wallet } from "lucide-react";
 import { DashboardMetricCard, DashboardPanel, DashboardRequestCard } from "@/components/admin/dashboard-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { useApi } from "@/hooks/useApi";
@@ -10,6 +10,12 @@ interface NotificationsResponse {
     loans: { pending: number };
     investments: { pendingCancellations: number };
     packages: { pending: number };
+    approvals?: {
+      walletWithdrawals: number;
+      savingsWithdrawals: number;
+      investmentCancellations: number;
+      total: number;
+    };
   };
   pendingPayments: Array<{
     id: string;
@@ -26,6 +32,14 @@ interface NotificationsResponse {
     member: { fullName: string };
   }>;
   pendingWalletWithdrawals: Array<{
+    id: string;
+    amount: number;
+    status: string;
+    bankName: string;
+    createdAt: string;
+    member: { fullName: string; membershipNumber: string };
+  }>;
+  pendingSavingsWithdrawals: Array<{
     id: string;
     amount: number;
     status: string;
@@ -56,13 +70,30 @@ export default function NotificationsPage() {
   const pendingPayments = dashboard.data?.pendingPayments ?? [];
   const pendingLoans = dashboard.data?.pendingLoans ?? [];
   const pendingWithdrawals = dashboard.data?.pendingWalletWithdrawals ?? [];
+  const pendingSavingsWithdrawals =
+    dashboard.data?.pendingSavingsWithdrawals ?? [];
+  const pendingWithdrawalRequests = [
+    ...pendingWithdrawals.map((withdrawal) => ({
+      ...withdrawal,
+      accountType: "Wallet withdrawal",
+      href: "/admin/withdrawals",
+    })),
+    ...pendingSavingsWithdrawals.map((withdrawal) => ({
+      ...withdrawal,
+      accountType: "Savings withdrawal",
+      href: "/admin/savings",
+    })),
+  ].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
   const pendingInvestments =
     dashboard.data?.summary.investments.pendingCancellations ?? 0;
   const pendingPackages = dashboard.data?.summary.packages.pending ?? 0;
   const total =
     pendingPayments.length +
     pendingLoans.length +
-    pendingWithdrawals.length +
+    pendingWithdrawalRequests.length +
     pendingInvestments +
     pendingPackages;
 
@@ -94,7 +125,7 @@ export default function NotificationsPage() {
           href="/admin/withdrawals"
           icon={<Wallet className="h-5 w-5" />}
           title="Withdrawals"
-          value={pendingWithdrawals.length}
+          value={pendingWithdrawalRequests.length}
         />
         <DashboardMetricCard
           description="Loan requests awaiting review."
@@ -129,18 +160,18 @@ export default function NotificationsPage() {
 
         <DashboardPanel href="/admin/withdrawals" title="Withdrawal Requests">
           <div className="space-y-3">
-            {pendingWithdrawals.map((withdrawal) => (
+            {pendingWithdrawalRequests.map((withdrawal) => (
               <DashboardRequestCard
                 amount={currency.format(withdrawal.amount)}
-                href="/admin/withdrawals"
-                key={withdrawal.id}
+                href={withdrawal.href}
+                key={`${withdrawal.accountType}-${withdrawal.id}`}
                 meta={withdrawal.bankName}
                 status={withdrawal.status}
-                subtitle={withdrawal.member.membershipNumber}
+                subtitle={`${withdrawal.accountType} - ${withdrawal.member.membershipNumber}`}
                 title={withdrawal.member.fullName}
               />
             ))}
-            {!pendingWithdrawals.length ? (
+            {!pendingWithdrawalRequests.length ? (
               <p className="rounded-2xl border border-dashed border-primary-900/12 bg-background-50 p-5 text-sm text-text-400">
                 No withdrawal request is waiting.
               </p>
@@ -172,6 +203,12 @@ export default function NotificationsPage() {
         <DashboardPanel title="Other Approvals">
           <div className="grid gap-3">
             {[
+              {
+                title: "Savings withdrawals",
+                count: pendingSavingsWithdrawals.length,
+                href: "/admin/savings",
+                icon: PiggyBank,
+              },
               {
                 title: "Investment cancellations",
                 count: pendingInvestments,

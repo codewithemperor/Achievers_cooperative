@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { parseDate } from "@internationalized/date";
 import { useForm, useWatch } from "react-hook-form";
 import { PageHeader } from "@/components/ui/page-header";
@@ -8,7 +8,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DateRangePicker } from "@/components/ui/form-input";
 import type { DateRange } from "@/components/ui/form-input";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { AdminTabs } from "@/components/ui/admin-tabs";
 import { DashboardMetricCard } from "@/components/admin/dashboard-card";
 import { TransactionReceiptModal } from "@/components/admin/transaction-receipt-modal";
@@ -114,7 +114,15 @@ export default function SavingsPage() {
     reference?: string | null;
     fields: Array<{ label: string; value?: string | number | null }>;
     timeline?: Array<{ label: string; date?: string | null; status?: string }>;
+    actions?: ReactNode;
   } | null>(null);
+  const [confirmingWithdrawal, setConfirmingWithdrawal] = useState<{
+    id: string;
+    action: "approve" | "reject";
+    amount: number;
+    memberName: string;
+  } | null>(null);
+  const [isMutatingWithdrawal, setIsMutatingWithdrawal] = useState(false);
   const transactionRows = transactions.data?.items ?? [];
   const withdrawalRows = withdrawals.data?.items ?? [];
   const pendingWithdrawals = withdrawalRows.filter((item) => item.status === "PENDING");
@@ -156,6 +164,102 @@ export default function SavingsPage() {
     (sum, item) => sum + Number(item.amount ?? 0),
     0,
   );
+
+  async function mutateSavingsWithdrawal(
+    id: string,
+    action: "approve" | "reject",
+  ) {
+    try {
+      await api.patch(`/savings/withdrawals/${id}/${action}`, {});
+      showSuccessToast(
+        `Withdrawal request ${action === "approve" ? "approved" : "rejected"} successfully.`,
+      );
+      await Promise.all([
+        withdrawals.refetch(),
+        transactions.refetch(),
+        summary.refetch(),
+      ]);
+    } catch (error: any) {
+      showErrorToast(
+        error?.response?.data?.message ||
+          `Unable to ${action} withdrawal request.`,
+      );
+      throw error;
+    }
+  }
+
+  function openWithdrawalReceipt(
+    item: SavingsWithdrawalsResponse["items"][number],
+  ) {
+    setSelectedReceipt({
+      title: "Savings Withdrawal Request",
+      amount: item.amount,
+      date: item.createdAt,
+      status: item.status,
+      reference: `SAVINGS-WD-${item.id.slice(0, 8)}`,
+      fields: [
+        { label: "Member", value: item.member.fullName },
+        { label: "Membership No.", value: item.member.membershipNumber },
+        { label: "Bank", value: item.bankName },
+        { label: "Account Name", value: item.accountName },
+        { label: "Account Number", value: item.accountNumber },
+      ],
+      timeline: [
+        { label: "Requested", date: item.createdAt, status: "PENDING" },
+        ...(item.approvedAt
+          ? [
+              {
+                label: "Approved",
+                date: item.approvedAt,
+                status: "APPROVED",
+              },
+            ]
+          : []),
+        ...(item.rejectedAt
+          ? [
+              {
+                label: "Rejected",
+                date: item.rejectedAt,
+                status: "REJECTED",
+              },
+            ]
+          : []),
+      ],
+      actions:
+        item.status === "PENDING" ? (
+          <>
+            <button
+              className="rounded-full border border-[#f3b8b0] px-4 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff4f2]"
+              onClick={() => {
+                setConfirmingWithdrawal({
+                  id: item.id,
+                  action: "reject",
+                  amount: item.amount,
+                  memberName: item.member.fullName,
+                });
+              }}
+              type="button"
+            >
+              Reject
+            </button>
+            <button
+              className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-800)]"
+              onClick={() => {
+                setConfirmingWithdrawal({
+                  id: item.id,
+                  action: "approve",
+                  amount: item.amount,
+                  memberName: item.member.fullName,
+                });
+              }}
+              type="button"
+            >
+              Accept
+            </button>
+          </>
+        ) : null,
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -380,63 +484,18 @@ export default function SavingsPage() {
               header: "Action",
               align: "right",
               isAction: true,
-              render: (item) =>
-                item.status === "PENDING" ? (
-                  <ActionMenu
-                    items={[
-                      {
-                        label: "Approve",
-                        tone: "success",
-                        confirmTitle: "Approve savings withdrawal?",
-                        confirmMessage:
-                          "Are you sure you want to approve this savings withdrawal request?",
-                        onSelect: async () => {
-                          try {
-                            await api.patch(
-                              `/savings/withdrawals/${item.id}/approve`,
-                            );
-                            showSuccessToast(
-                              "Withdrawal request approved successfully.",
-                            );
-                            await withdrawals.refetch();
-                            await summary.refetch();
-                          } catch (error: any) {
-                            showErrorToast(
-                              error?.response?.data?.message ||
-                                "Unable to approve withdrawal request.",
-                            );
-                          }
-                        },
-                      },
-                      {
-                        label: "Reject",
-                        tone: "danger",
-                        confirmTitle: "Reject savings withdrawal?",
-                        confirmMessage:
-                          "Are you sure you want to reject this savings withdrawal request?",
-                        onSelect: async () => {
-                          try {
-                            await api.patch(
-                              `/savings/withdrawals/${item.id}/reject`,
-                              {},
-                            );
-                            showSuccessToast(
-                              "Withdrawal request rejected successfully.",
-                            );
-                            await withdrawals.refetch();
-                          } catch (error: any) {
-                            showErrorToast(
-                              error?.response?.data?.message ||
-                                "Unable to reject withdrawal request.",
-                            );
-                          }
-                        },
-                      },
-                    ]}
-                  />
-                ) : (
-                  <span />
-                ),
+              render: (item) => (
+                <button
+                  className="rounded-full border border-primary-900/12 bg-white px-4 py-2 text-sm font-semibold text-text-800 transition hover:bg-background-100"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openWithdrawalReceipt(item);
+                  }}
+                  type="button"
+                >
+                  View
+                </button>
+              ),
             },
           ]}
           data={pendingWithdrawals}
@@ -444,25 +503,7 @@ export default function SavingsPage() {
             withdrawals.error || "No withdrawal requests available yet."
           }
           loading={withdrawals.loading}
-          onRowClick={(item) =>
-            setSelectedReceipt({
-              title: "Savings Withdrawal Request",
-              amount: item.amount,
-              date: item.createdAt,
-              status: item.status,
-              reference: `SAVINGS-WD-${item.id.slice(0, 8)}`,
-              fields: [
-                { label: "Member", value: item.member.fullName },
-                { label: "Membership No.", value: item.member.membershipNumber },
-                { label: "Bank", value: item.bankName },
-                { label: "Account Name", value: item.accountName },
-                { label: "Account Number", value: item.accountNumber },
-              ],
-              timeline: [
-                { label: "Requested", date: item.createdAt, status: item.status },
-              ],
-            })
-          }
+          onRowClick={openWithdrawalReceipt}
         />
       )}
       {selectedReceipt ? (
@@ -471,6 +512,37 @@ export default function SavingsPage() {
           onClose={() => setSelectedReceipt(null)}
         />
       ) : null}
+      <ConfirmModal
+        confirmLabel={isMutatingWithdrawal ? "Processing..." : "Confirm"}
+        isOpen={Boolean(confirmingWithdrawal)}
+        message={
+          confirmingWithdrawal?.action === "approve"
+            ? `Approve this savings withdrawal of ${currency.format(confirmingWithdrawal.amount)} for ${confirmingWithdrawal.memberName}? The amount will be deducted from the member's savings balance.`
+            : `Reject this savings withdrawal of ${currency.format(confirmingWithdrawal?.amount ?? 0)} for ${confirmingWithdrawal?.memberName ?? "this member"}?`
+        }
+        onCancel={() => {
+          if (!isMutatingWithdrawal) setConfirmingWithdrawal(null);
+        }}
+        onConfirm={async () => {
+          if (!confirmingWithdrawal || isMutatingWithdrawal) return;
+          setIsMutatingWithdrawal(true);
+          try {
+            await mutateSavingsWithdrawal(
+              confirmingWithdrawal.id,
+              confirmingWithdrawal.action,
+            );
+            setConfirmingWithdrawal(null);
+            setSelectedReceipt(null);
+          } finally {
+            setIsMutatingWithdrawal(false);
+          }
+        }}
+        title={
+          confirmingWithdrawal?.action === "approve"
+            ? "Approve savings withdrawal?"
+            : "Reject savings withdrawal?"
+        }
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   Clock3,
   CreditCard,
   Package,
+  PiggyBank,
   Receipt,
   TrendingUp,
   Users,
@@ -29,6 +30,7 @@ interface DashboardResponse {
     packages: { pending: number };
     approvals: {
       walletWithdrawals: number;
+      savingsWithdrawals: number;
       investmentCancellations: number;
       total: number;
     };
@@ -49,6 +51,14 @@ interface DashboardResponse {
     member: { fullName: string };
   }>;
   pendingWalletWithdrawals: Array<{
+    id: string;
+    amount: number;
+    status: string;
+    bankName: string;
+    createdAt: string;
+    member: { fullName: string; membershipNumber: string };
+  }>;
+  pendingSavingsWithdrawals: Array<{
     id: string;
     amount: number;
     status: string;
@@ -90,12 +100,29 @@ export default function AdminDashboardPage() {
   const pendingPayments = dashboard.data?.pendingPayments ?? [];
   const pendingLoans = dashboard.data?.pendingLoans ?? [];
   const pendingWithdrawals = dashboard.data?.pendingWalletWithdrawals ?? [];
+  const pendingSavingsWithdrawals =
+    dashboard.data?.pendingSavingsWithdrawals ?? [];
+  const pendingWithdrawalRequests = [
+    ...pendingWithdrawals.map((withdrawal) => ({
+      ...withdrawal,
+      accountType: "Wallet withdrawal",
+      href: "/admin/withdrawals",
+    })),
+    ...pendingSavingsWithdrawals.map((withdrawal) => ({
+      ...withdrawal,
+      accountType: "Savings withdrawal",
+      href: "/admin/savings",
+    })),
+  ].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
   const investmentApprovals = summary?.investments.pendingCancellations ?? 0;
   const packageApprovals = summary?.packages.pending ?? 0;
   const totalPendingApprovals =
     pendingPayments.length +
     pendingLoans.length +
-    pendingWithdrawals.length +
+    pendingWithdrawalRequests.length +
     investmentApprovals +
     packageApprovals;
 
@@ -127,12 +154,12 @@ export default function AdminDashboardPage() {
             value={pendingLoans.length || summary?.loans.pending || 0}
           />
           <DashboardMetricCard
-            description="Wallet withdrawals awaiting approval or disbursement."
+            description="Wallet and savings withdrawals awaiting admin action."
             href="/admin/withdrawals"
             icon={<Wallet className="h-5 w-5" />}
             title="Withdrawal Request"
             tone="neutral"
-            value={pendingWithdrawals.length}
+            value={pendingWithdrawalRequests.length}
           />
           <DashboardMetricCard
             description="All requests and reviews currently waiting for action."
@@ -188,20 +215,20 @@ export default function AdminDashboardPage() {
           title="Withdrawal Queue"
         >
           <div className="space-y-3">
-            {pendingWithdrawals.slice(0, 5).map((withdrawal) => (
+            {pendingWithdrawalRequests.slice(0, 5).map((withdrawal) => (
               <DashboardRequestCard
                 amount={currency.format(withdrawal.amount)}
-                href="/admin/withdrawals"
-                key={withdrawal.id}
+                href={withdrawal.href}
+                key={`${withdrawal.accountType}-${withdrawal.id}`}
                 meta={withdrawal.bankName}
                 status={withdrawal.status}
-                subtitle={withdrawal.member.membershipNumber}
+                subtitle={`${withdrawal.accountType} - ${withdrawal.member.membershipNumber}`}
                 title={withdrawal.member.fullName}
               />
             ))}
-            {!pendingWithdrawals.length ? (
+            {!pendingWithdrawalRequests.length ? (
               <div className="rounded-2xl border border-dashed border-primary-900/12 bg-background-50 p-6 text-sm text-text-400">
-                No wallet withdrawal request is waiting.
+                No wallet or savings withdrawal request is waiting.
               </div>
             ) : null}
           </div>
@@ -229,6 +256,12 @@ export default function AdminDashboardPage() {
                 count: pendingWithdrawals.length,
                 href: "/admin/withdrawals",
                 icon: Wallet,
+              },
+              {
+                title: "Savings withdrawals",
+                count: pendingSavingsWithdrawals.length,
+                href: "/admin/savings",
+                icon: PiggyBank,
               },
               {
                 title: "Investment cancellations",

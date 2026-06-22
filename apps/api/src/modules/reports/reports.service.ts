@@ -17,6 +17,7 @@ export class ReportsService {
       totalInvestments,
       treasury,
       walletWithdrawalPending,
+      savingsWithdrawalPending,
       investmentCancellationPending,
       packagePending,
       failedDeductionStatus,
@@ -38,6 +39,7 @@ export class ReportsService {
       }),
       this.prisma.cooperativeWallet.findFirst(),
       (this.prisma as any).walletWithdrawalRequest.count({ where: { status: 'PENDING' } }),
+      (this.prisma as any).savingsWithdrawalRequest.count({ where: { status: 'PENDING' } }),
       (this.prisma as any).investmentCancellationRequest.count({ where: { status: 'PENDING' } }),
       this.prisma.packageSubscription.count({ where: { status: 'PENDING' } }),
       this.prisma.systemConfig.findUnique({ where: { key: 'COOPERATIVE_DEDUCTION_LAST_STATUS' } }),
@@ -69,8 +71,9 @@ export class ReportsService {
       },
       approvals: {
         walletWithdrawals: walletWithdrawalPending,
+        savingsWithdrawals: savingsWithdrawalPending,
         investmentCancellations: investmentCancellationPending,
-        total: walletWithdrawalPending + investmentCancellationPending + pendingLoans + packagePending,
+        total: walletWithdrawalPending + savingsWithdrawalPending + investmentCancellationPending + pendingLoans + packagePending,
       },
       autoDeduction: {
         status: failedDeductionStatus?.value ?? 'NEVER_RUN',
@@ -85,7 +88,17 @@ export class ReportsService {
   }
 
   async getDashboard() {
-    const [summary, membershipGrowth, loanPortfolio, revenue, recentTransactions, pendingPayments, pendingLoans, pendingWalletWithdrawals] = await Promise.all([
+    const [
+      summary,
+      membershipGrowth,
+      loanPortfolio,
+      revenue,
+      recentTransactions,
+      pendingPayments,
+      pendingLoans,
+      pendingWalletWithdrawals,
+      pendingSavingsWithdrawals,
+    ] = await Promise.all([
       this.getSummary(),
       this.getMembershipGrowth(),
       this.getLoanPortfolio(),
@@ -109,6 +122,12 @@ export class ReportsService {
         orderBy: { createdAt: 'desc' },
         include: { member: { select: { id: true, fullName: true, membershipNumber: true } } },
       }),
+      (this.prisma as any).savingsWithdrawalRequest.findMany({
+        where: { status: 'PENDING' },
+        take: 6,
+        orderBy: { createdAt: 'desc' },
+        include: { member: { select: { id: true, fullName: true, membershipNumber: true } } },
+      }),
     ]);
 
     return {
@@ -126,6 +145,10 @@ export class ReportsService {
         amount: Number(loan.amount),
       })),
       pendingWalletWithdrawals: pendingWalletWithdrawals.map((item: any) => ({
+        ...item,
+        amount: Number(item.amount),
+      })),
+      pendingSavingsWithdrawals: pendingSavingsWithdrawals.map((item: any) => ({
         ...item,
         amount: Number(item.amount),
       })),
