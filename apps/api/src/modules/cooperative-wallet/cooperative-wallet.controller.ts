@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -11,7 +11,7 @@ import { CooperativeWalletService } from './cooperative-wallet.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPER_ADMIN')
 export class CooperativeWalletController {
-  constructor(private readonly cooperativeWalletService: CooperativeWalletService) {}
+  constructor(@Inject(CooperativeWalletService) private readonly cooperativeWalletService: CooperativeWalletService) {}
 
   @Get()
   @ApiOperation({ summary: 'Get cooperative wallet summary' })

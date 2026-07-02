@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { normalizeMoney } from '../utils/money';
 import type {
@@ -50,7 +50,7 @@ const ASSOCIATION_INCOME_TRANSACTION_TYPES = new Set<TransactionType | string>([
 
 @Injectable()
 export class FinancialPostingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async ensureWallet(client: PrismaClientLike = this.prisma) {
     const existing = await client.cooperativeWallet.findFirst();

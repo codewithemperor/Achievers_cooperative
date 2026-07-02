@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async getSummary() {
     const [
@@ -11,6 +11,7 @@ export class ReportsService {
       activeMembers,
       inactiveMembers,
       totalWalletBalance,
+      memberWalletRows,
       totalSavings,
       totalLoansDisbursed,
       pendingLoans,
@@ -27,6 +28,7 @@ export class ReportsService {
       this.prisma.member.count({ where: { status: 'ACTIVE' } }),
       this.prisma.member.count({ where: { status: 'INACTIVE' } }),
       this.prisma.wallet.aggregate({ _sum: { availableBalance: true } }),
+      this.prisma.wallet.findMany({ select: { availableBalance: true } }),
       this.prisma.savingsAccount.aggregate({ _sum: { balance: true } }),
       this.prisma.loanApplication.aggregate({
         _sum: { amount: true },
@@ -45,6 +47,16 @@ export class ReportsService {
       this.prisma.systemConfig.findUnique({ where: { key: 'COOPERATIVE_DEDUCTION_LAST_STATUS' } }),
       this.prisma.systemConfig.findUnique({ where: { key: 'COOPERATIVE_DEDUCTION_LAST_RUN' } }),
     ]);
+
+    const realBankCash = Number((treasury as any)?.physicalTreasuryCash ?? 0);
+    const memberWalletLiability = memberWalletRows.reduce(
+      (sum, wallet) => sum + Math.max(Number(wallet.availableBalance ?? 0), 0),
+      0,
+    );
+    const cooperativeSpendableFunds = Number(
+      (treasury as any)?.associationAvailableBalance ?? treasury?.balance ?? 0,
+    );
+    const reconciliationDifference = realBankCash - memberWalletLiability - cooperativeSpendableFunds;
 
     return {
       members: {
@@ -81,6 +93,12 @@ export class ReportsService {
       },
       cooperativeTreasury: {
         balance: Number(treasury?.balance ?? 0),
+        physicalTreasuryCash: realBankCash,
+        realBankCash,
+        memberWalletLiability,
+        associationAvailableBalance: cooperativeSpendableFunds,
+        cooperativeSpendableFunds,
+        reconciliationDifference,
         totalIncome: Number(treasury?.totalIncome ?? 0),
         totalExpense: Number(treasury?.totalExpense ?? 0),
       },

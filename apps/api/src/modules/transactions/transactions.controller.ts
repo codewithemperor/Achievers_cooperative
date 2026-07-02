@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Patch, Post, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -17,7 +17,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 @Controller('transactions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TransactionsController {
-  constructor(private readonly transactionsService: TransactionsService) {}
+  constructor(@Inject(TransactionsService) private readonly transactionsService: TransactionsService) {}
 
   @Get()
   @Roles('SUPER_ADMIN')

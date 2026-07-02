@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
+import { FinancialPostingService } from '../../common/services/financial-posting.service';
 import { UpdateTransactionDto, QueryTransactionsDto } from './dto/index';
 import { normalizePagination } from '../../common/pagination';
 import { normalizeMoney } from '../../common/utils/money';
@@ -14,8 +15,9 @@ function isCreditTransaction(type: string) {
 @Injectable()
 export class TransactionsService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly audit: AuditService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(FinancialPostingService) private readonly financialPosting: FinancialPostingService,
   ) {}
 
   async findAll(query: QueryTransactionsDto) {
@@ -144,26 +146,44 @@ export class TransactionsService {
   }
 
   async approve(id: string, actorId: string) {
-    const transaction = await this.prisma.transaction.findUnique({ where: { id } });
-    if (!transaction) throw new NotFoundException('Transaction not found');
-    if (transaction.status !== 'PENDING') {
-      throw new BadRequestException('Transaction is not pending');
-    }
+    const existing = await this.prisma.transaction.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Transaction not found');
 
-    const updated = await this.prisma.transaction.update({
-      where: { id },
-      data: { status: 'APPROVED' },
-    });
-
-    // Credit the wallet if it was a funding transaction
-    if (transaction.type === 'FUNDING') {
-      await this.prisma.wallet.update({
-        where: { id: transaction.walletId },
-        data: {
-          availableBalance: { increment: transaction.amount },
-        },
+    const updated = await this.prisma.runTransaction('transactions.approve', async (tx) => {
+      const claimed = await tx.transaction.updateMany({
+        where: { id, status: 'PENDING' },
+        data: { status: 'APPROVED' },
       });
-    }
+      if (claimed.count < 1) {
+        throw new BadRequestException('Transaction is not pending');
+      }
+
+      const approved = await tx.transaction.findUniqueOrThrow({ where: { id } });
+      if (approved.type === 'FUNDING') {
+        const wallet = await tx.wallet.update({
+          where: { id: approved.walletId },
+          data: {
+            availableBalance: { increment: approved.amount },
+            totalFunded: { increment: approved.amount },
+          },
+        });
+
+        await this.financialPosting.postWalletFunding(
+          {
+            memberId: wallet.memberId,
+            amount: Number(approved.amount),
+            reference: approved.reference ?? `FUNDING-${approved.id}`,
+            sourceType: 'Transaction',
+            sourceId: approved.id,
+            description: approved.description || 'Approved wallet funding',
+            actorId,
+          },
+          tx,
+        );
+      }
+
+      return approved;
+    });
 
     await this.audit.log(actorId, 'APPROVE_TRANSACTION', 'Transaction', id);
 

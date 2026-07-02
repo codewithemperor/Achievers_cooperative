@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { NotificationService } from '../../common/services/notification.service';
@@ -10,10 +10,10 @@ import { formatMoney, normalizeMoney } from '../../common/utils/money';
 @Injectable()
 export class InvestmentsService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly walletService: WalletService,
-    private readonly notifications: NotificationService,
-    private readonly audit: AuditService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(WalletService) private readonly walletService: WalletService,
+    @Inject(NotificationService) private readonly notifications: NotificationService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async getProducts() {
@@ -214,18 +214,49 @@ export class InvestmentsService {
 
     const annualRate = Number(investment.product.annualRate);
     const principal = Number(investment.principal);
-    const totalReturn = principal + principal * (annualRate / 100) * (investment.product.durationMonths / 12);
+    const totalReturn = normalizeMoney(principal + principal * (annualRate / 100) * (investment.product.durationMonths / 12));
+    const reference = `INV-WD-${id}`;
+    const existingReturn = await this.prisma.transaction.findUnique({ where: { reference } });
+    if (existingReturn) {
+      return {
+        ...investment,
+        principal,
+        totalReturn,
+      };
+    }
 
-    await this.walletService.creditWallet(
-      investment.memberId,
-      totalReturn,
-      'INVESTMENT_RETURN',
-      `INV-WD-${Date.now()}`,
-    );
+    if (investment.status !== 'APPROVED') {
+      throw new BadRequestException('Only active approved investments can be withdrawn.');
+    }
 
-    const updated = await this.prisma.investmentSubscription.update({
-      where: { id },
-      data: { status: 'APPROVED' },
+    const updated = await this.prisma.runTransaction('investments.withdraw', async (tx) => {
+      const claimed = await tx.investmentSubscription.updateMany({
+        where: { id, status: 'APPROVED' },
+        data: { status: 'REJECTED' },
+      });
+      if (claimed.count < 1) {
+        throw new BadRequestException('Investment has already been withdrawn.');
+      }
+
+      const debtRecoveryPlan = await this.walletService.prepareWalletFundingDebtRecovery(investment.memberId, totalReturn);
+      await this.walletService.applyWalletFundingWithDebtRecovery(
+        tx,
+        investment.memberId,
+        totalReturn,
+        'INVESTMENT_RETURN',
+        reference,
+        {
+          actorId,
+          category: 'investment return',
+          description: `Investment return for ${investment.product.name}`,
+          editable: false,
+          lockReason: 'Investment returns are generated after withdrawal.',
+          metadata: { investmentId: id, trigger: 'INVESTMENT_WITHDRAWAL' },
+          debtRecoveryPlan,
+        },
+      );
+
+      return tx.investmentSubscription.findUniqueOrThrow({ where: { id } });
     });
 
     await this.audit.log(actorId, 'WITHDRAW_INVESTMENT', 'InvestmentSubscription', id, { totalReturn });
@@ -253,22 +284,31 @@ export class InvestmentsService {
       );
     }
 
-    // Debit wallet
-    const reference = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    await this.walletService.debitWallet(member.id, principal, 'INVESTMENT', reference);
-
     const maturityDate = new Date();
     maturityDate.setMonth(maturityDate.getMonth() + product.durationMonths);
 
-    const subscription = await this.prisma.investmentSubscription.create({
-      data: {
-        memberId: member.id,
-        productId: product.id,
-        principal,
-        maturityDate,
-        status: 'APPROVED',
-      },
-      include: { product: true },
+    const subscription = await this.prisma.runTransaction('investments.subscribe', async (tx) => {
+      const created = await tx.investmentSubscription.create({
+        data: {
+          memberId: member.id,
+          productId: product.id,
+          principal,
+          maturityDate,
+          status: 'APPROVED',
+        },
+        include: { product: true },
+      });
+
+      const reference = `INV-${created.id}`;
+      await this.walletService.debitWalletInTransaction(tx, member.id, principal, 'INVESTMENT', reference, {
+        category: 'investment deposit',
+        description: `Investment deposit for ${product.name}`,
+        editable: false,
+        lockReason: 'Investment deposits are generated from subscriptions and cannot be edited.',
+        metadata: { investmentId: created.id, productId: product.id, trigger: 'INVESTMENT_SUBSCRIPTION' },
+      });
+
+      return created;
     });
 
     await this.audit.log(userId, 'SUBSCRIBE_INVESTMENT', 'InvestmentSubscription', subscription.id, {
@@ -413,31 +453,48 @@ export class InvestmentsService {
       throw new BadRequestException('Only active approved investments can be refunded.');
     }
 
-    const reference = `INV-CANCEL-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const reference = `INV-CANCEL-${id}`;
     await this.prisma.runTransaction('investments.approveCancellation', async (tx) => {
-      await tx.investmentSubscription.update({
-        where: { id: request.investmentId },
+      const claimed = await (tx as any).investmentCancellationRequest.updateMany({
+        where: { id, status: 'PENDING' },
+        data: { status: 'APPROVING' },
+      });
+      if (claimed.count < 1) {
+        throw new BadRequestException('Cancellation request is not pending.');
+      }
+
+      const investmentClaim = await tx.investmentSubscription.updateMany({
+        where: { id: request.investmentId, status: 'APPROVED' },
         data: { status: 'REJECTED' },
       });
+      if (investmentClaim.count < 1) {
+        throw new BadRequestException('Only active approved investments can be refunded.');
+      }
+
+      const principal = normalizeMoney(request.investment.principal);
+      const debtRecoveryPlan = await this.walletService.prepareWalletFundingDebtRecovery(request.memberId, principal);
+      await this.walletService.applyWalletFundingWithDebtRecovery(
+        tx,
+        request.memberId,
+        principal,
+        'INVESTMENT_CANCELLATION_REFUND' as any,
+        reference,
+        {
+          actorId,
+          category: 'investment cancellation',
+          description: `Investment cancellation refund for ${request.investmentId}`,
+          editable: false,
+          lockReason: 'Investment cancellation refunds are generated after admin approval.',
+          metadata: { investmentId: request.investmentId, cancellationRequestId: id, trigger: 'INVESTMENT_CANCELLATION' },
+          debtRecoveryPlan,
+        },
+      );
+
       await (tx as any).investmentCancellationRequest.update({
         where: { id },
         data: { status: 'APPROVED', approvedAt: new Date() },
       });
     });
-
-    await this.walletService.creditWallet(
-      request.memberId,
-      Number(request.investment.principal),
-      'INVESTMENT_CANCELLATION_REFUND' as any,
-      reference,
-      {
-        category: 'investment cancellation',
-        description: `Investment cancellation refund for ${request.investmentId}`,
-        editable: false,
-        lockReason: 'Investment cancellation refunds are generated after admin approval.',
-        metadata: { investmentId: request.investmentId, cancellationRequestId: id },
-      },
-    );
 
     await this.audit.log(actorId, 'APPROVE_INVESTMENT_CANCELLATION', 'InvestmentCancellationRequest', id, {
       investmentId: request.investmentId,

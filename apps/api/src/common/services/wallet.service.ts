@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import type { LoanTenorUnit, TransactionType } from '../prisma-types';
 import { FinancialPostingService } from './financial-posting.service';
@@ -150,6 +150,19 @@ type PreparedPackageTargetUpdate = {
   nextDueAt: Date | null;
 };
 
+type PreparedPendingTransactionDebtEntry = {
+  transactionId: string;
+  type: TransactionType;
+  reference: string | null;
+  category: string | null;
+  description: string | null;
+  amount: number;
+  outstanding: number;
+  remainingAmount: number;
+  repaymentStatus: RepaymentAttemptStatus;
+  createdAt: Date;
+};
+
 type PreparedLoanDebtEntry = {
   loanId: string;
   loanName: string;
@@ -175,6 +188,7 @@ type PreparedLoanDebtEntry = {
 
 type PreparedFundingDebtRecoveryPlan = {
   weekly?: PreparedWeeklyDebtRecovery | null;
+  pendingAssociationTransactions: PreparedPendingTransactionDebtEntry[];
   packages: {
     entries: PreparedPackageDebtEntry[];
     updates: PreparedPackageTargetUpdate[];
@@ -189,6 +203,7 @@ const WEEKLY_DEDUCTION_DAY_KEY = 'COOPERATIVE_DEDUCTION_DAY';
 const WEEKLY_OPEN_STATUSES = ['OUTSTANDING', 'PARTIAL', 'UPCOMING'];
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 const MONEY_COMPLETION_TOLERANCE = 0.01;
+const RECOVERABLE_PENDING_ASSOCIATION_TRANSACTION_TYPES: TransactionType[] = ['MEMBERSHIP_FEE'];
 
 function isUniqueConstraintError(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002';
@@ -223,8 +238,8 @@ function weeklyCycleStatus(dueDate: Date, amount: number, amountPaid: number, as
 @Injectable()
 export class WalletService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly financialPosting: FinancialPostingService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(FinancialPostingService) private readonly financialPosting: FinancialPostingService,
   ) {}
 
   async getMemberWallet(memberId: string) {
@@ -427,6 +442,9 @@ export class WalletService {
     options?: DebitWalletOptions,
   ) {
     const normalizedAmount = roundMoney(amount);
+    if (normalizedAmount <= 0) {
+      throw new BadRequestException('Transaction amount must be greater than zero.');
+    }
     return this.prisma.runTransaction('wallet.debitWallet', (tx) =>
       this.debitWalletInTransaction(tx, memberId, normalizedAmount, type, reference, options),
     );
@@ -441,6 +459,9 @@ export class WalletService {
     options?: DebitWalletOptions,
   ) {
     amount = roundMoney(amount);
+    if (amount <= 0) {
+      throw new BadRequestException('Transaction amount must be greater than zero.');
+    }
     const wallet = await this.getMemberWalletWithClient(client, memberId);
     const previousBalance = Number(wallet.availableBalance);
     const nextBalance = previousBalance - amount;
@@ -510,6 +531,10 @@ export class WalletService {
     options: TransactionOptions,
   ) {
     const wallet = await this.getMemberWallet(memberId);
+    amount = roundMoney(amount);
+    if (amount <= 0) {
+      throw new BadRequestException('Transaction amount must be greater than zero.');
+    }
     const existing = await this.prisma.transaction.findUnique({ where: { reference } });
     if (existing) {
       if (options.repaymentAttempt) {
@@ -1658,6 +1683,7 @@ export class WalletService {
     let remainingFunding = roundMoney(Math.max(fundingAmount, 0));
     const plan: PreparedFundingDebtRecoveryPlan = {
       weekly: null,
+      pendingAssociationTransactions: [],
       packages: { entries: [], updates: [] },
       loans: [],
       debtSettlementAmount: 0,
@@ -1668,6 +1694,12 @@ export class WalletService {
     if (weekly) {
       plan.weekly = weekly;
       remainingFunding = roundMoney(remainingFunding - weekly.amount);
+    }
+
+    if (remainingFunding > 0) {
+      plan.pendingAssociationTransactions = await this.preparePendingAssociationTransactionRecovery(memberId, remainingFunding);
+      const pendingAssociationTotal = plan.pendingAssociationTransactions.reduce((sum, entry) => sum + entry.amount, 0);
+      remainingFunding = roundMoney(remainingFunding - pendingAssociationTotal);
     }
 
     if (remainingFunding > 0) {
@@ -1686,6 +1718,60 @@ export class WalletService {
     plan.debtSettlementAmount = roundMoney(Math.max(fundingAmount - plan.walletCreditAmount, 0));
 
     return plan;
+  }
+
+  private async preparePendingAssociationTransactionRecovery(memberId: string, availableAmount: number) {
+    let remainingFunding = roundMoney(Math.max(availableAmount, 0));
+    const entries: PreparedPendingTransactionDebtEntry[] = [];
+    if (remainingFunding <= 0) {
+      return entries;
+    }
+
+    const wallet = await this.prisma.wallet.findUnique({ where: { memberId } });
+    if (!wallet) {
+      return entries;
+    }
+
+    const pendingTransactions = await this.prisma.transaction.findMany({
+      where: {
+        walletId: wallet.id,
+        type: { in: RECOVERABLE_PENDING_ASSOCIATION_TRANSACTION_TYPES as any },
+        status: 'PENDING',
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    for (const transaction of pendingTransactions) {
+      if (remainingFunding <= 0) {
+        break;
+      }
+
+      const metadata = (transaction.metadata as Record<string, unknown> | null) ?? {};
+      const rawOutstanding = metadata.outstandingAmount;
+      const outstanding = roundMoney(
+        typeof rawOutstanding === 'number' ? rawOutstanding : Math.max(Number(transaction.amount), 0),
+      );
+      const amount = roundMoney(Math.min(remainingFunding, outstanding));
+      if (amount <= 0 || outstanding <= 0) {
+        continue;
+      }
+
+      entries.push({
+        transactionId: transaction.id,
+        type: transaction.type,
+        reference: transaction.reference,
+        category: transaction.category,
+        description: transaction.description,
+        amount,
+        outstanding,
+        remainingAmount: roundMoney(Math.max(outstanding - amount, 0)),
+        repaymentStatus: this.repaymentAttemptStatus(amount, outstanding),
+        createdAt: transaction.createdAt,
+      });
+      remainingFunding = roundMoney(remainingFunding - amount);
+    }
+
+    return entries;
   }
 
   private async prepareWeeklyDebtRecovery(memberId: string, availableAmount: number) {
@@ -2040,6 +2126,75 @@ export class WalletService {
         expectedAmount: weekly.outstanding,
         remainingAmount: roundMoney(Math.max(weekly.outstanding - weekly.amount, 0)),
         repaymentStatus: weekly.repaymentStatus,
+      });
+    }
+
+    let pendingAssociationSequence = 0;
+    for (const entry of plan.pendingAssociationTransactions) {
+      const reference = context.referenceBase + '-PENDING-' + ++pendingAssociationSequence;
+      const nextOutstanding = entry.remainingAmount;
+      const updatedTransaction = await client.transaction.update({
+        where: { id: entry.transactionId },
+        data: {
+          status: nextOutstanding <= 0 ? 'APPROVED' : 'PENDING',
+          metadata: {
+            outstandingAmount: nextOutstanding,
+            recoveredAmount: entry.amount,
+            recoveredFromFundingTransactionId: context.fundingTransactionId,
+            recoveredAt: new Date().toISOString(),
+          } as any,
+        },
+      });
+
+      await client.wallet.update({
+        where: { id: walletId },
+        data: {
+          availableBalance: { increment: entry.amount },
+          pendingBalance: { decrement: entry.amount },
+        },
+      });
+
+      await this.financialPosting.postWalletToAssociation(
+        {
+          memberId,
+          amount: entry.amount,
+          reference,
+          sourceType: 'Transaction',
+          sourceId: entry.transactionId,
+          description: entry.description || 'Settled pending association fee',
+          actorId: context.actorId,
+          category: entry.category,
+        },
+        client,
+      );
+
+      await this.upsertRepaymentAttempt(client, memberId, entry.transactionId, reference, {
+        phase: entry.type,
+        targetType: 'Transaction',
+        targetId: entry.transactionId,
+        expectedAmount: entry.outstanding,
+        paidAmount: entry.amount,
+        remainingAmount: entry.remainingAmount,
+        status: entry.repaymentStatus,
+        mode: 'ADMIN',
+        dueAt: entry.createdAt,
+        metadata: {
+          fundingTransactionId: context.fundingTransactionId,
+          paymentId: context.paymentId,
+          trigger: context.trigger,
+          sourceTransactionId: updatedTransaction.id,
+        },
+      });
+
+      settlements.push({
+        type: entry.type,
+        amount: entry.amount,
+        targetId: entry.transactionId,
+        transactionId: entry.transactionId,
+        reference,
+        expectedAmount: entry.outstanding,
+        remainingAmount: entry.remainingAmount,
+        repaymentStatus: entry.repaymentStatus,
       });
     }
 
@@ -2438,6 +2593,11 @@ export class WalletService {
       actorId?: string;
     },
   ) {
+    input.amount = roundMoney(input.amount);
+    if (input.amount <= 0) {
+      throw new BadRequestException('Debt recovery transaction amount must be greater than zero.');
+    }
+
     const transaction = await client.transaction.create({
       data: {
         walletId: input.walletId,
@@ -2697,46 +2857,51 @@ export class WalletService {
       ? `WEEKLY-${memberId}-${firstDueCycle.id}-${moneyKey(Number(firstDueCycle.amountPaid ?? 0))}`
       : `WEEKLY-${memberId}-${runStamp.slice(0, 10)}`;
     const repaymentStatus = this.repaymentAttemptStatus(amountToDebit, outstanding);
-    let result: Awaited<ReturnType<WalletService['debitWallet']>>;
+    let result: Awaited<ReturnType<WalletService['debitWalletInTransaction']>>;
     try {
-      result = await this.debitWallet(memberId, amountToDebit, 'WEEKLY_COOPERATIVE', reference, {
-        category: 'automatic weekly cooperative',
-        description: `Automatic weekly cooperative settlement for ${runStamp.slice(0, 10)}`,
-        editable: false,
-        lockReason: 'Weekly cooperative deductions are settled automatically from wallet funding.',
-        metadata: {
-          deductionDate: runStamp,
-          memberName: member.fullName,
-          membershipNumber: member.membershipNumber,
-          autoSettled: true,
-          settlementPriority: 'WEEKLY',
-          trigger: options.trigger ?? 'SYSTEM',
-          repaymentPhase: 'WEEKLY_DEDUCTION',
-          repaymentStatus,
-          expectedAmount: outstanding,
-          paidAmount: amountToDebit,
-          remainingAmount: Math.max(outstanding - amountToDebit, 0),
-          dueFrom: dueCycles[0]?.dueDate?.toISOString?.() ?? null,
-          dueTo: dueCycles[dueCycles.length - 1]?.dueDate?.toISOString?.() ?? null,
-          dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
-        },
-        repaymentAttempt: {
-          phase: 'WEEKLY_DEDUCTION',
-          targetType: 'WeeklyDeduction',
-          targetId: memberId,
-          expectedAmount: outstanding,
-          paidAmount: amountToDebit,
-          remainingAmount: Math.max(outstanding - amountToDebit, 0),
-          status: repaymentStatus,
-          mode: 'AUTO',
-          dueAt: dueCycles[0]?.dueDate ?? today,
+      result = await this.prisma.runTransaction('wallet.settleDueWeeklyDeductions', async (tx) => {
+        const debit = await this.debitWalletInTransaction(tx, memberId, amountToDebit, 'WEEKLY_COOPERATIVE', reference, {
+          category: 'automatic weekly cooperative',
+          description: `Automatic weekly cooperative settlement for ${runStamp.slice(0, 10)}`,
+          editable: false,
+          lockReason: 'Weekly cooperative deductions are settled automatically from wallet funding.',
           metadata: {
+            deductionDate: runStamp,
+            memberName: member.fullName,
+            membershipNumber: member.membershipNumber,
+            autoSettled: true,
+            settlementPriority: 'WEEKLY',
+            trigger: options.trigger ?? 'SYSTEM',
+            repaymentPhase: 'WEEKLY_DEDUCTION',
+            repaymentStatus,
+            expectedAmount: outstanding,
+            paidAmount: amountToDebit,
+            remainingAmount: Math.max(outstanding - amountToDebit, 0),
             dueFrom: dueCycles[0]?.dueDate?.toISOString?.() ?? null,
             dueTo: dueCycles[dueCycles.length - 1]?.dueDate?.toISOString?.() ?? null,
             dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
-            trigger: options.trigger ?? 'SYSTEM',
           },
-        },
+          repaymentAttempt: {
+            phase: 'WEEKLY_DEDUCTION',
+            targetType: 'WeeklyDeduction',
+            targetId: memberId,
+            expectedAmount: outstanding,
+            paidAmount: amountToDebit,
+            remainingAmount: Math.max(outstanding - amountToDebit, 0),
+            status: repaymentStatus,
+            mode: 'AUTO',
+            dueAt: dueCycles[0]?.dueDate ?? today,
+            metadata: {
+              dueFrom: dueCycles[0]?.dueDate?.toISOString?.() ?? null,
+              dueTo: dueCycles[dueCycles.length - 1]?.dueDate?.toISOString?.() ?? null,
+              dueCycleIds: dueCycles.map((cycle: any) => cycle.id),
+              trigger: options.trigger ?? 'SYSTEM',
+            },
+          },
+        });
+
+        await this.allocateWeeklySettlement(tx, memberId, debit.transaction.id, amountToDebit);
+        return debit;
       });
     } catch (error) {
       if (isUniqueConstraintError(error)) {
@@ -2745,7 +2910,6 @@ export class WalletService {
       throw error;
     }
 
-    await this.allocateWeeklySettlement(this.prisma, memberId, result.transaction.id, amountToDebit);
     const remainingAmount = roundMoney(Math.max(outstanding - amountToDebit, 0));
 
     return {
@@ -2890,49 +3054,67 @@ export class WalletService {
       }
     }
 
+    let result: { wallet: any };
     try {
-      await this.debitWallet(memberId, amount, 'LOAN_REPAYMENT', reference, {
-      category: mode === 'AUTO' ? 'automatic loan repayment' : 'loan repayment',
-      description:
-        mode === 'AUTO'
-          ? `Automatic settlement for ${loanName}`
-          : mode === 'ADMIN'
-            ? `Admin wallet allocation for ${loanName}`
-            : `Loan repayment for ${loanName}`,
-      editable: false,
-      lockReason: 'Loan repayment transactions are system-generated and cannot be edited.',
-      metadata: {
-        loanId: loan.id,
-        loanName,
-        memberName: loan.member.fullName,
-        membershipNumber: loan.member.membershipNumber,
-        autoSettled: mode === 'AUTO',
-        adminAllocated: mode === 'ADMIN',
-        trigger: options.trigger ?? mode,
-        repaymentPhase: 'LOAN',
-        repaymentStatus,
-        expectedAmount,
-        paidAmount: amount,
-        remainingAmount: Math.max(expectedAmount - amount, 0),
-        dueAt: dueAt.toISOString(),
-        dueCycle: dueKey,
-      },
-      repaymentAttempt: {
-        phase: 'LOAN',
-        targetType: 'LoanApplication',
-        targetId: loan.id,
-        expectedAmount,
-        paidAmount: amount,
-        remainingAmount: Math.max(expectedAmount - amount, 0),
-        status: repaymentStatus,
-        mode,
-        dueAt,
-        metadata: {
-          loanName,
-          dueCycle: dueKey,
-          trigger: options.trigger ?? mode,
-        },
-      },
+      result = await this.prisma.runTransaction('wallet.applyLoanRepayment', async (tx) => {
+        await this.debitWalletInTransaction(tx, memberId, amount, 'LOAN_REPAYMENT', reference, {
+          category: mode === 'AUTO' ? 'automatic loan repayment' : 'loan repayment',
+          description:
+            mode === 'AUTO'
+              ? `Automatic settlement for ${loanName}`
+              : mode === 'ADMIN'
+                ? `Admin wallet allocation for ${loanName}`
+                : `Loan repayment for ${loanName}`,
+          editable: false,
+          lockReason: 'Loan repayment transactions are system-generated and cannot be edited.',
+          metadata: {
+            loanId: loan.id,
+            loanName,
+            memberName: loan.member.fullName,
+            membershipNumber: loan.member.membershipNumber,
+            autoSettled: mode === 'AUTO',
+            adminAllocated: mode === 'ADMIN',
+            trigger: options.trigger ?? mode,
+            repaymentPhase: 'LOAN',
+            repaymentStatus,
+            expectedAmount,
+            paidAmount: amount,
+            remainingAmount: Math.max(expectedAmount - amount, 0),
+            dueAt: dueAt.toISOString(),
+            dueCycle: dueKey,
+          },
+          repaymentAttempt: {
+            phase: 'LOAN',
+            targetType: 'LoanApplication',
+            targetId: loan.id,
+            expectedAmount,
+            paidAmount: amount,
+            remainingAmount: Math.max(expectedAmount - amount, 0),
+            status: repaymentStatus,
+            mode,
+            dueAt,
+            metadata: {
+              loanName,
+              dueCycle: dueKey,
+              trigger: options.trigger ?? mode,
+            },
+          },
+        });
+
+        await this.allocateRepaymentSchedule(tx, 'LoanApplication', loan.id, amount, mode === 'AUTO');
+        const scheduleTotals = await this.getScheduleTotals(tx, 'LoanApplication', loan.id);
+        const nextRemaining = roundMoney(Math.max(scheduleTotals.remaining, 0));
+        const isFullyRepaid = nextRemaining <= MONEY_COMPLETION_TOLERANCE;
+        await tx.loanApplication.update({
+          where: { id: loan.id },
+          data: {
+            remainingBalance: isFullyRepaid ? 0 : nextRemaining,
+            status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
+            nextRepaymentAt: isFullyRepaid ? null : await this.nextOpenScheduleDueDate(tx, 'LoanApplication', loan.id),
+          } as any,
+        });
+
+        return { wallet: await this.getMemberWalletWithClient(tx, memberId) };
       });
     } catch (error) {
       if (isUniqueConstraintError(error)) {
@@ -2953,22 +3135,8 @@ export class WalletService {
       throw error;
     }
 
-    await this.allocateRepaymentSchedule(this.prisma, 'LoanApplication', loan.id, amount, mode === 'AUTO');
-    const scheduleTotals = await this.getScheduleTotals(this.prisma, 'LoanApplication', loan.id);
-    const nextRemaining = roundMoney(Math.max(scheduleTotals.remaining, 0));
-    const isFullyRepaid = nextRemaining <= MONEY_COMPLETION_TOLERANCE;
-    await this.prisma.loanApplication.update({
-      where: { id: loan.id },
-      data: {
-        remainingBalance: isFullyRepaid ? 0 : nextRemaining,
-        status: isFullyRepaid ? 'COMPLETED' : 'IN_PROGRESS',
-        nextRepaymentAt: isFullyRepaid ? null : await this.nextOpenScheduleDueDate(this.prisma, 'LoanApplication', loan.id),
-      } as any,
-    });
-
-    const wallet = await this.getMemberWallet(memberId);
     return {
-      wallet,
+      wallet: result.wallet,
       reference,
       settlement: {
         type: 'LOAN_REPAYMENT',
@@ -3018,179 +3186,173 @@ export class WalletService {
       ? `${firstPrincipalItem.id}-${moneyKey(Number(firstPrincipalItem.paidAmount ?? 0))}`
       : `${dueAt.toISOString().slice(0, 10)}-${moneyKey(amountPaid)}`;
 
-    if (penaltyAccrued > 0 && remainingToSpend > 0) {
-      const penaltyPayment = Math.min(remainingToSpend, penaltyAccrued);
-      const expectedPenaltyAmount = penaltyAccrued;
-      const penaltyRepaymentStatus = this.repaymentAttemptStatus(penaltyPayment, expectedPenaltyAmount);
-      const penaltyReference = `PACKAGE-PENALTY-${subscription.id}-${moneyKey(penaltyAccrued)}`;
-      const existingPenalty =
-        mode === 'AUTO'
-          ? await this.prisma.transaction.findUnique({ where: { reference: penaltyReference } })
-          : null;
-      let penaltyWasApplied = false;
+    try {
+      return await this.prisma.runTransaction('wallet.applyPackagePayment', async (tx) => {
+        let remainingToApply = remainingToSpend;
+        let nextPenaltyAccrued = penaltyAccrued;
+        let nextAmountRemaining = amountRemaining;
+        let nextAmountPaid = amountPaid;
+        const appliedSettlements: SettlementRecord[] = [];
 
-      if (!existingPenalty) {
-        try {
-          await this.debitWallet(memberId, penaltyPayment, 'PACKAGE_PENALTY', penaltyReference, {
-            category: mode === 'AUTO' ? 'automatic package penalty settlement' : 'package penalty settlement',
-            description:
-              mode === 'AUTO'
-                ? `Automatic penalty settlement for ${packageName}`
-                : `Wallet allocation for ${packageName} penalty`,
-            editable: false,
-            lockReason: 'Package penalty transactions are system-generated and cannot be edited.',
-            metadata: {
-              subscriptionId: subscription.id,
-              packageName,
-              dueAt: dueAt.toISOString(),
-              dueCycle: dueKey,
-              autoSettled: mode === 'AUTO',
-              adminAllocated: mode === 'ADMIN',
-              trigger: options.trigger ?? mode,
-              repaymentPhase: 'PACKAGE_PENALTY',
+        if (nextPenaltyAccrued > 0 && remainingToApply > 0) {
+          const penaltyPayment = Math.min(remainingToApply, nextPenaltyAccrued);
+          const expectedPenaltyAmount = nextPenaltyAccrued;
+          const penaltyRepaymentStatus = this.repaymentAttemptStatus(penaltyPayment, expectedPenaltyAmount);
+          const penaltyReference = `PACKAGE-PENALTY-${subscription.id}-${moneyKey(nextPenaltyAccrued)}`;
+          const existingPenalty =
+            mode === 'AUTO'
+              ? await tx.transaction.findUnique({ where: { reference: penaltyReference } })
+              : null;
+
+          if (!existingPenalty) {
+            await this.debitWalletInTransaction(tx, memberId, penaltyPayment, 'PACKAGE_PENALTY', penaltyReference, {
+              category: mode === 'AUTO' ? 'automatic package penalty settlement' : 'package penalty settlement',
+              description:
+                mode === 'AUTO'
+                  ? `Automatic penalty settlement for ${packageName}`
+                  : `Wallet allocation for ${packageName} penalty`,
+              editable: false,
+              lockReason: 'Package penalty transactions are system-generated and cannot be edited.',
+              metadata: {
+                subscriptionId: subscription.id,
+                packageName,
+                dueAt: dueAt.toISOString(),
+                dueCycle: dueKey,
+                autoSettled: mode === 'AUTO',
+                adminAllocated: mode === 'ADMIN',
+                trigger: options.trigger ?? mode,
+                repaymentPhase: 'PACKAGE_PENALTY',
+                repaymentStatus: penaltyRepaymentStatus,
+                expectedAmount: expectedPenaltyAmount,
+                paidAmount: penaltyPayment,
+                remainingAmount: Math.max(expectedPenaltyAmount - penaltyPayment, 0),
+              },
+              repaymentAttempt: {
+                phase: 'PACKAGE_PENALTY',
+                targetType: 'PackageSubscription',
+                targetId: subscription.id,
+                expectedAmount: expectedPenaltyAmount,
+                paidAmount: penaltyPayment,
+                remainingAmount: Math.max(expectedPenaltyAmount - penaltyPayment, 0),
+                status: penaltyRepaymentStatus,
+                mode,
+                dueAt,
+                metadata: {
+                  packageName,
+                  dueCycle: dueKey,
+                  trigger: options.trigger ?? mode,
+                },
+              },
+            });
+
+            await this.clearDebtExposure(tx, this.packagePenaltyExposureSourceKey(subscription.id), penaltyPayment);
+            nextPenaltyAccrued = roundMoney(nextPenaltyAccrued - penaltyPayment);
+            remainingToApply = roundMoney(remainingToApply - penaltyPayment);
+            appliedSettlements.push({
+              type: 'PACKAGE_PENALTY',
+              amount: penaltyPayment,
+              targetId: subscription.id,
+              expectedAmount: expectedPenaltyAmount,
+              remainingAmount: Math.max(expectedPenaltyAmount - penaltyPayment, 0),
               repaymentStatus: penaltyRepaymentStatus,
-              expectedAmount: expectedPenaltyAmount,
-              paidAmount: penaltyPayment,
-              remainingAmount: Math.max(expectedPenaltyAmount - penaltyPayment, 0),
-            },
-            repaymentAttempt: {
-              phase: 'PACKAGE_PENALTY',
-              targetType: 'PackageSubscription',
-              targetId: subscription.id,
-              expectedAmount: expectedPenaltyAmount,
-              paidAmount: penaltyPayment,
-              remainingAmount: Math.max(expectedPenaltyAmount - penaltyPayment, 0),
-              status: penaltyRepaymentStatus,
-              mode,
-              dueAt,
-              metadata: {
-                packageName,
-                dueCycle: dueKey,
-                trigger: options.trigger ?? mode,
-              },
-            },
-          });
-          penaltyWasApplied = true;
-        } catch (error) {
-          if (!isUniqueConstraintError(error)) {
-            throw error;
-          }
-          if (mode !== 'AUTO') {
-            throw new BadRequestException('This package penalty payment was already processed. Please refresh the package details.');
+            });
           }
         }
-      }
 
-      if (penaltyWasApplied) {
-        await this.clearDebtExposure(this.prisma, this.packagePenaltyExposureSourceKey(subscription.id), penaltyPayment);
-        penaltyAccrued -= penaltyPayment;
-        remainingToSpend -= penaltyPayment;
-        settlements.push({
-          type: 'PACKAGE_PENALTY',
-          amount: penaltyPayment,
-          targetId: subscription.id,
-          expectedAmount: expectedPenaltyAmount,
-          remainingAmount: Math.max(expectedPenaltyAmount - penaltyPayment, 0),
-          repaymentStatus: penaltyRepaymentStatus,
-        });
-      }
-    }
+        if (nextAmountRemaining > 0 && remainingToApply > 0) {
+          const principalPayment = Math.min(remainingToApply, nextAmountRemaining);
+          const expectedPrincipalAmount = Math.max(Math.min(principalDueAtStart, nextAmountRemaining), principalPayment);
+          const principalRepaymentStatus = this.repaymentAttemptStatus(principalPayment, expectedPrincipalAmount);
+          const packageReference = `PACKAGE-${subscription.id}-${dueKey}`;
+          const existingPackage =
+            mode === 'AUTO'
+              ? await tx.transaction.findUnique({ where: { reference: packageReference } })
+              : null;
 
-    if (amountRemaining > 0 && remainingToSpend > 0) {
-      const principalPayment = Math.min(remainingToSpend, amountRemaining);
-      const expectedPrincipalAmount = Math.max(Math.min(principalDueAtStart, amountRemaining), principalPayment);
-      const principalRepaymentStatus = this.repaymentAttemptStatus(principalPayment, expectedPrincipalAmount);
-      const packageReference = `PACKAGE-${subscription.id}-${dueKey}`;
-      const existingPackage =
-        mode === 'AUTO'
-          ? await this.prisma.transaction.findUnique({ where: { reference: packageReference } })
-          : null;
-      let packageWasApplied = false;
+          if (!existingPackage) {
+            await this.debitWalletInTransaction(tx, memberId, principalPayment, 'PACKAGE_SUBSCRIPTION', packageReference, {
+              category: mode === 'AUTO' ? 'automatic package repayment' : 'package repayment',
+              description:
+                mode === 'AUTO'
+                  ? `Automatic package settlement for ${packageName}`
+                  : `Wallet allocation for ${packageName}`,
+              editable: false,
+              lockReason: 'Package subscription transactions are system-generated and cannot be edited.',
+              metadata: {
+                subscriptionId: subscription.id,
+                packageName,
+                dueAt: dueAt.toISOString(),
+                dueCycle: dueKey,
+                autoSettled: mode === 'AUTO',
+                adminAllocated: mode === 'ADMIN',
+                trigger: options.trigger ?? mode,
+                repaymentPhase: 'PACKAGE',
+                repaymentStatus: principalRepaymentStatus,
+                expectedAmount: expectedPrincipalAmount || expectedTotalAmount,
+                paidAmount: principalPayment,
+                remainingAmount: Math.max((expectedPrincipalAmount || expectedTotalAmount) - principalPayment, 0),
+              },
+              repaymentAttempt: {
+                phase: 'PACKAGE',
+                targetType: 'PackageSubscription',
+                targetId: subscription.id,
+                expectedAmount: expectedPrincipalAmount || expectedTotalAmount,
+                paidAmount: principalPayment,
+                remainingAmount: Math.max((expectedPrincipalAmount || expectedTotalAmount) - principalPayment, 0),
+                status: principalRepaymentStatus,
+                mode,
+                dueAt,
+                metadata: {
+                  packageName,
+                  dueCycle: dueKey,
+                  trigger: options.trigger ?? mode,
+                },
+              },
+            });
 
-      if (!existingPackage) {
-        try {
-          await this.debitWallet(memberId, principalPayment, 'PACKAGE_SUBSCRIPTION', packageReference, {
-            category: mode === 'AUTO' ? 'automatic package repayment' : 'package repayment',
-            description:
-              mode === 'AUTO'
-                ? `Automatic package settlement for ${packageName}`
-                : `Wallet allocation for ${packageName}`,
-            editable: false,
-            lockReason: 'Package subscription transactions are system-generated and cannot be edited.',
-            metadata: {
-              subscriptionId: subscription.id,
-              packageName,
-              dueAt: dueAt.toISOString(),
-              dueCycle: dueKey,
-              autoSettled: mode === 'AUTO',
-              adminAllocated: mode === 'ADMIN',
-              trigger: options.trigger ?? mode,
-              repaymentPhase: 'PACKAGE',
+            await this.allocateRepaymentSchedule(tx, 'PackageSubscription', subscription.id, principalPayment, mode === 'AUTO');
+            const scheduleTotals = await this.getScheduleTotals(tx, 'PackageSubscription', subscription.id);
+            nextAmountRemaining = scheduleTotals.remaining;
+            nextAmountPaid = scheduleTotals.paid;
+            remainingToApply = roundMoney(remainingToApply - principalPayment);
+            appliedSettlements.push({
+              type: 'PACKAGE_SUBSCRIPTION',
+              amount: principalPayment,
+              targetId: subscription.id,
+              expectedAmount: expectedPrincipalAmount || expectedTotalAmount,
+              remainingAmount: Math.max((expectedPrincipalAmount || expectedTotalAmount) - principalPayment, 0),
               repaymentStatus: principalRepaymentStatus,
-              expectedAmount: expectedPrincipalAmount || expectedTotalAmount,
-              paidAmount: principalPayment,
-              remainingAmount: Math.max((expectedPrincipalAmount || expectedTotalAmount) - principalPayment, 0),
-            },
-            repaymentAttempt: {
-              phase: 'PACKAGE',
-              targetType: 'PackageSubscription',
-              targetId: subscription.id,
-              expectedAmount: expectedPrincipalAmount || expectedTotalAmount,
-              paidAmount: principalPayment,
-              remainingAmount: Math.max((expectedPrincipalAmount || expectedTotalAmount) - principalPayment, 0),
-              status: principalRepaymentStatus,
-              mode,
-              dueAt,
-              metadata: {
-                packageName,
-                dueCycle: dueKey,
-                trigger: options.trigger ?? mode,
-              },
-            },
-          });
-          packageWasApplied = true;
-        } catch (error) {
-          if (!isUniqueConstraintError(error)) {
-            throw error;
-          }
-          if (mode !== 'AUTO') {
-            throw new BadRequestException('This package payment was already processed. Please refresh the package details.');
+            });
           }
         }
-      }
 
-      if (packageWasApplied) {
-        await this.allocateRepaymentSchedule(this.prisma, 'PackageSubscription', subscription.id, principalPayment, mode === 'AUTO');
-        const scheduleTotals = await this.getScheduleTotals(this.prisma, 'PackageSubscription', subscription.id);
-        amountRemaining = scheduleTotals.remaining;
-        amountPaid = scheduleTotals.paid;
-        remainingToSpend -= principalPayment;
-        settlements.push({
-          type: 'PACKAGE_SUBSCRIPTION',
-          amount: principalPayment,
-          targetId: subscription.id,
-          expectedAmount: expectedPrincipalAmount || expectedTotalAmount,
-          remainingAmount: Math.max((expectedPrincipalAmount || expectedTotalAmount) - principalPayment, 0),
-          repaymentStatus: principalRepaymentStatus,
+        const nextStatus = nextAmountRemaining <= 0 && nextPenaltyAccrued <= 0 ? 'COMPLETED' : 'IN_PROGRESS';
+        await tx.packageSubscription.update({
+          where: { id: subscription.id },
+          data: {
+            penaltyAccrued: nextPenaltyAccrued,
+            amountRemaining: nextAmountRemaining,
+            amountPaid: nextAmountPaid,
+            status: nextStatus,
+            completedAt: nextStatus === 'COMPLETED' ? new Date() : null,
+            nextDueAt: nextStatus === 'COMPLETED' ? null : await this.nextOpenScheduleDueDate(tx, 'PackageSubscription', subscription.id),
+          } as any,
         });
+
+        return {
+          wallet: await this.getMemberWalletWithClient(tx, memberId),
+          settlements: appliedSettlements,
+        };
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        if (mode === 'AUTO') {
+          return { wallet: await this.getMemberWallet(memberId), settlements: [] };
+        }
+        throw new BadRequestException('This package payment was already processed. Please refresh the package details.');
       }
+      throw error;
     }
-
-    const nextStatus = amountRemaining <= 0 && penaltyAccrued <= 0 ? 'COMPLETED' : 'IN_PROGRESS';
-    await this.prisma.packageSubscription.update({
-      where: { id: subscription.id },
-      data: {
-        penaltyAccrued,
-        amountRemaining,
-        amountPaid,
-        status: nextStatus,
-        completedAt: nextStatus === 'COMPLETED' ? new Date() : null,
-        nextDueAt: nextStatus === 'COMPLETED' ? null : await this.nextOpenScheduleDueDate(this.prisma, 'PackageSubscription', subscription.id),
-      } as any,
-    });
-
-    const wallet = await this.getMemberWallet(memberId);
-    return { wallet, settlements };
   }
 
   async applySavingsContribution(
@@ -3227,19 +3389,34 @@ export class WalletService {
           ? `Admin wallet allocation to ${account.member.fullName}'s savings`
           : `Savings contribution for ${account.member.fullName}`;
 
+    let result: { wallet: any; account: any };
     try {
-      await this.debitWallet(memberId, amount, 'SAVINGS', reference, {
-        category: mode === 'AUTO' ? 'automatic savings contribution' : 'savings contribution',
-        description,
-        editable: false,
-        lockReason: 'Savings contribution transactions are system-generated and cannot be edited.',
-        metadata: {
-          savingsAccountId: account.id,
-          memberName: account.member.fullName,
-          membershipNumber: account.member.membershipNumber,
-          autoSettled: mode === 'AUTO',
-          adminAllocated: mode === 'ADMIN',
-        },
+      result = await this.prisma.runTransaction('wallet.applySavingsContribution', async (tx) => {
+        await this.debitWalletInTransaction(tx, memberId, amount, 'SAVINGS', reference, {
+          category: mode === 'AUTO' ? 'automatic savings contribution' : 'savings contribution',
+          description,
+          editable: false,
+          lockReason: 'Savings contribution transactions are system-generated and cannot be edited.',
+          metadata: {
+            savingsAccountId: account.id,
+            memberName: account.member.fullName,
+            membershipNumber: account.member.membershipNumber,
+            autoSettled: mode === 'AUTO',
+            adminAllocated: mode === 'ADMIN',
+          },
+        });
+
+        const updated = await tx.savingsAccount.update({
+          where: { id: account.id },
+          data: {
+            balance: { increment: amount },
+          },
+        });
+
+        return {
+          wallet: await this.getMemberWalletWithClient(tx, memberId),
+          account: updated,
+        };
       });
     } catch (error) {
       if (isUniqueConstraintError(error)) {
@@ -3261,22 +3438,14 @@ export class WalletService {
       throw error;
     }
 
-    const updated = await this.prisma.savingsAccount.update({
-      where: { id: account.id },
-      data: {
-        balance: { increment: amount },
-      },
-    });
-
-    const wallet = await this.getMemberWallet(memberId);
     return {
-      wallet,
+      wallet: result.wallet,
       reference,
-      account: updated,
+      account: result.account,
       settlement: {
         type: 'SAVINGS',
         amount,
-        targetId: updated.id,
+        targetId: result.account.id,
       },
     };
   }

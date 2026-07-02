@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Post, Body, Query, UseGuards, Request, Param } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Patch, Post, Query, UseGuards, Request, Param } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 import { WalletsService } from './wallets.service';
 import { AdminWalletSpendDto, FundWalletDto, RequestWalletWithdrawalDto } from './dto/index';
@@ -11,7 +11,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 @Controller(['wallets', 'wallet'])
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class WalletsController {
-  constructor(private readonly walletsService: WalletsService) {}
+  constructor(@Inject(WalletsService) private readonly walletsService: WalletsService) {}
 
   @Get('me')
   @ApiOperation({ summary: 'Get current wallet balance' })

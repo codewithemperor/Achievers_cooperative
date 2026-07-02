@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -44,11 +45,11 @@ type LoanLike = {
 @Injectable()
 export class LoansService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly walletService: WalletService,
-    private readonly notifications: NotificationService,
-    private readonly audit: AuditService,
-    private readonly financialPosting: FinancialPostingService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(WalletService) private readonly walletService: WalletService,
+    @Inject(NotificationService) private readonly notifications: NotificationService,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(FinancialPostingService) private readonly financialPosting: FinancialPostingService,
   ) {}
 
   // ─── Apply for a loan ──────────────────────────────────────────────
@@ -897,7 +898,6 @@ export class LoansService {
         `Disbursement amount cannot exceed the remaining approved balance of ₦${remainingToDisburse.toLocaleString()}.`,
       );
     }
-    await this.assertAssociationCanFundLoan(disbursementAmount, 'disburse');
 
     const now = new Date();
     const dueDate = loan.dueDate ?? this.addCalendarMonths(now, Math.max(loan.tenorMonths, 1));
@@ -940,7 +940,6 @@ export class LoansService {
           actorId,
           memberId: loan.memberId,
           category: 'loan disbursement',
-          enforceAvailable: true,
         },
         tx,
       );
@@ -1314,16 +1313,6 @@ export class LoansService {
     }
 
     return Math.max(Math.ceil(Number(tenorMonths) || 1), 1);
-  }
-
-  private async assertAssociationCanFundLoan(amount: number, action: 'approve' | 'disburse') {
-    const wallet = await this.financialPosting.ensureWallet();
-    const available = Number((wallet as any).associationAvailableBalance ?? wallet.balance ?? 0);
-    if (available < amount) {
-      throw new BadRequestException(
-        `Association balance is not sufficient to ${action} this loan. Available balance: ₦${available.toLocaleString()}.`,
-      );
-    }
   }
 
   private buildTimeline(

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -14,11 +14,11 @@ const MEMBERSHIP_FEE_CONFIG_KEY = 'MEMBERSHIP_FEE_AMOUNT';
 @Injectable()
 export class MembersService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly audit: AuditService,
-    private readonly notifications: NotificationService,
-    private readonly weeklyDeductions: WeeklyDeductionsService,
-    private readonly walletService: WalletService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(NotificationService) private readonly notifications: NotificationService,
+    @Inject(WeeklyDeductionsService) private readonly weeklyDeductions: WeeklyDeductionsService,
+    @Inject(WalletService) private readonly walletService: WalletService,
   ) {}
 
   async findAll(query: QueryMembersDto) {
@@ -757,52 +757,16 @@ export class MembersService {
       return;
     }
 
-    const wallet = await this.walletService.getMemberWallet(memberId);
-    const cooperativeWallet = await this.ensureCooperativeWallet();
     await this.prisma.runTransaction('members.applyMembershipFee', async (tx) => {
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          availableBalance: { decrement: membershipFeeAmount },
-          pendingBalance: membershipFeeAmount,
-        },
-      });
-      await tx.transaction.create({
-        data: {
-          walletId: wallet.id,
-          type: 'MEMBERSHIP_FEE',
-          amount: membershipFeeAmount,
-          status: 'PENDING',
-          reference,
-          category: 'membership fee',
-          description: 'Automatic membership fee created during registration',
-          editable: false,
-          lockReason: 'Membership fee transactions are generated automatically when a member is registered.',
-          metadata: {
-            outstandingAmount: membershipFeeAmount,
-          } as any,
-        },
-      });
-      await tx.cooperativeWallet.upsert({
-        where: { id: cooperativeWallet.id },
-        update: {
-          balance: { increment: membershipFeeAmount },
-          totalIncome: { increment: membershipFeeAmount },
-        },
-        create: {
-          balance: membershipFeeAmount,
-          totalIncome: membershipFeeAmount,
-        },
-      });
-      await tx.cooperativeEntry.create({
-        data: {
-          walletId: cooperativeWallet.id,
-          type: 'INCOME',
-          amount: membershipFeeAmount,
-          category: 'membership fee',
-          description: `Membership fee recorded for ${fullName}`,
-          reference,
-          createdById: actorId,
+      await this.walletService.debitWalletInTransaction(tx, memberId, membershipFeeAmount, 'MEMBERSHIP_FEE', reference, {
+        allowNegative: true,
+        category: 'membership fee',
+        description: `Membership fee recorded for ${fullName}`,
+        editable: false,
+        lockReason: 'Membership fee transactions are generated automatically when a member is registered.',
+        metadata: {
+          memberId,
+          trigger: 'MEMBER_REGISTRATION',
         },
       });
     });

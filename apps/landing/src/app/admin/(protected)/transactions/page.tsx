@@ -77,8 +77,11 @@ interface WeeklyDeductionRow {
 interface TreasurySummary {
   balance: number;
   physicalTreasuryCash: number;
+  realBankCash?: number;
   memberWalletLiability: number;
   associationAvailableBalance: number;
+  cooperativeSpendableFunds?: number;
+  reconciliationDifference?: number;
   totalIncome: number;
   totalExpense: number;
   memberWalletHoldings: number;
@@ -510,27 +513,46 @@ export default function TransactionsPage() {
 
     return {
       associationAvailableBalance,
+      cooperativeSpendableFunds: associationAvailableBalance,
       memberWalletLiability,
       physicalTreasuryCash,
+      realBankCash: physicalTreasuryCash,
+      reconciliationDifference:
+        physicalTreasuryCash - memberWalletLiability - associationAvailableBalance,
     };
   }, [allTreasuryRows]);
 
+  const realBankCash =
+    wallet.data?.realBankCash ??
+    wallet.data?.physicalTreasuryCash ??
+    wallet.data?.combinedHoldings ??
+    ledgerDerivedTreasurySummary.realBankCash;
+  const memberWalletLiability =
+    wallet.data?.memberWalletLiability ??
+    wallet.data?.memberWalletHoldings ??
+    ledgerDerivedTreasurySummary.memberWalletLiability;
+  const cooperativeSpendableFunds =
+    wallet.data?.cooperativeSpendableFunds ??
+    wallet.data?.associationAvailableBalance ??
+    wallet.data?.balance ??
+    ledgerDerivedTreasurySummary.cooperativeSpendableFunds;
+  const reconciliationDifference =
+    wallet.data?.reconciliationDifference ??
+    realBankCash - memberWalletLiability - cooperativeSpendableFunds;
   const treasurySummary = {
-    physicalTreasuryCash:
-      wallet.data?.physicalTreasuryCash ??
-      wallet.data?.combinedHoldings ??
-      ledgerDerivedTreasurySummary.physicalTreasuryCash,
-    memberWalletLiability:
-      wallet.data?.memberWalletLiability ??
-      wallet.data?.memberWalletHoldings ??
-      ledgerDerivedTreasurySummary.memberWalletLiability,
-    associationAvailableBalance:
-      wallet.data?.associationAvailableBalance ??
-      wallet.data?.balance ??
-      ledgerDerivedTreasurySummary.associationAvailableBalance,
+    physicalTreasuryCash: realBankCash,
+    realBankCash,
+    memberWalletLiability,
+    associationAvailableBalance: cooperativeSpendableFunds,
+    cooperativeSpendableFunds,
+    reconciliationDifference,
     netTreasuryFlow:
       (wallet.data?.totalIncome ?? 0) - (wallet.data?.totalExpense ?? 0),
   };
+  const spendableFundsIsNegative = treasurySummary.cooperativeSpendableFunds < 0;
+  const cooperativeSpendableDescription = spendableFundsIsNegative
+    ? "The cooperative is operating with member wallet funds. Future cooperative income will reduce this deficit."
+    : "Cooperative-owned funds available for loans, expenses, and operations.";
 
   function generateTransactionReport() {
     const selectedMonths =
@@ -715,12 +737,12 @@ export default function TransactionsPage() {
       {
         title: "Income, Expenses, And Treasury",
         rows: [
-          ["Admin income", currency.format(treasuryIncome), "Treasury entries that increase physical cash and association available funds."],
-          ["Admin expenses", currency.format(treasuryExpense), "Treasury entries that reduce physical cash and association available funds."],
+          ["Admin income", currency.format(treasuryIncome), "Treasury entries that increase real bank cash and cooperative spendable funds."],
+          ["Admin expenses", currency.format(treasuryExpense), "Treasury entries that reduce real bank cash and cooperative spendable funds."],
           ["Net admin treasury movement", currency.format(treasuryIncome - treasuryExpense), "Admin income minus admin expenses for the selected period."],
-          ["Current treasury cash", currency.format(treasurySummary.physicalTreasuryCash), "Current physical cash expected in the cooperative bank account."],
+          ["Current real bank cash", currency.format(treasurySummary.realBankCash), "Current physical cash expected in the cooperative bank account."],
           ["Current member wallet liability", currency.format(treasurySummary.memberWalletLiability), "Current member-owned wallet funds held by the cooperative."],
-          ["Current association available", currency.format(treasurySummary.associationAvailableBalance), "Current cooperative-owned funds available for loans and spending."],
+          ["Current cooperative spendable funds", currency.format(treasurySummary.cooperativeSpendableFunds), spendableFundsIsNegative ? "Member wallet funds are currently being used. Future cooperative income reduces this deficit." : "Cooperative-owned funds available for loans, expenses, and operations."],
         ],
       },
     ];
@@ -916,26 +938,27 @@ export default function TransactionsPage() {
       ) : (
         <>
           <DashboardMetricCard
-            description="Physical money expected inside the association bank account."
+            description="Physical money expected inside the cooperative bank account."
             href="/admin/transactions"
             icon={<CreditCard className="h-5 w-5" />}
-            title="Treasury Cash"
+            title="Real Bank Cash"
             tone="green"
-            value={currency.format(treasurySummary.physicalTreasuryCash)}
+            value={currency.format(treasurySummary.realBankCash)}
           />
           <DashboardMetricCard
-            description="Member-owned wallet funds held by the association."
+            description="Member wallet money held inside the bank cash."
             href="/admin/transactions"
             icon={<CreditCard className="h-5 w-5" />}
             title="Member Wallet Liability"
             value={currency.format(treasurySummary.memberWalletLiability)}
           />
           <DashboardMetricCard
-            description="Cooperative-owned funds available for loans and spending."
+            description={cooperativeSpendableDescription}
             href="/admin/transactions"
             icon={<TrendingUp className="h-5 w-5" />}
-            title="Association Available"
-            value={currency.format(treasurySummary.associationAvailableBalance)}
+            title="Cooperative Spendable Funds"
+            tone={spendableFundsIsNegative ? "red" : "neutral"}
+            value={currency.format(treasurySummary.cooperativeSpendableFunds)}
           />
           <DashboardMetricCard
             description="Total treasury income minus total treasury expense."
@@ -949,6 +972,11 @@ export default function TransactionsPage() {
             }
             value={currency.format(treasurySummary.netTreasuryFlow)}
           />
+          {Math.abs(treasurySummary.reconciliationDifference) >= 0.01 ? (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 md:col-span-2 xl:col-span-4 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+              Reconciliation difference: {currency.format(treasurySummary.reconciliationDifference)}. Real bank cash should equal member wallet liability plus cooperative spendable funds.
+            </p>
+          ) : null}
         </>
       )}
     </div>
@@ -1161,7 +1189,7 @@ export default function TransactionsPage() {
         title="How Stats Are Calculated"
         subtitle={
           tab === "treasury"
-            ? "Treasury cards use the cooperative wallet summary and ledger reconciliation."
+            ? "Treasury cards use the cooperative wallet summary, with ledger data only as fallback/reconciliation."
             : tab === "weekly"
               ? "Weekly deduction cards use weekly cooperative transactions in the selected period."
             : "Member transaction cards use the full transaction API summary. Table rows use the selected period."
@@ -1189,19 +1217,19 @@ export default function TransactionsPage() {
             <div className="grid gap-3 text-sm text-text-500 dark:text-text-300 md:grid-cols-2">
               <p>
                 <span className="font-semibold text-text-900 dark:text-text-50">
-                  Treasury Cash:
+                  Real Bank Cash:
                 </span>{" "}
-                physical money expected inside the association bank account.
+                physical money expected inside the cooperative bank account.
               </p>
               <p>
                 <span className="font-semibold text-text-900 dark:text-text-50">
                   Member Wallet Liability:
                 </span>{" "}
-                member-owned wallet funds still held by the association.
+                member wallet money held inside the bank cash.
               </p>
               <p>
                 <span className="font-semibold text-text-900 dark:text-text-50">
-                  Association Available:
+                  Cooperative Spendable Funds:
                 </span>{" "}
                 cooperative-owned funds available for loans and expenses.
               </p>

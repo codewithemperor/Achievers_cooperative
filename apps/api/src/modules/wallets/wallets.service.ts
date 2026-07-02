@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -9,10 +9,10 @@ import { normalizeMoney } from '../../common/utils/money';
 @Injectable()
 export class WalletsService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly walletService: WalletService,
-    private readonly audit: AuditService,
-    private readonly financialPosting: FinancialPostingService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(WalletService) private readonly walletService: WalletService,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(FinancialPostingService) private readonly financialPosting: FinancialPostingService,
   ) {}
 
   async getMyWallet(userId: string) {
@@ -405,9 +405,15 @@ export class WalletsService {
     if (!request) throw new NotFoundException('Wallet withdrawal request not found');
     if (request.status !== 'PENDING') throw new NotFoundException('Withdrawal request is not pending');
 
-    const updated = await (this.prisma as any).walletWithdrawalRequest.update({
-      where: { id },
-      data: { status: 'APPROVED', approvedAt: new Date() },
+    const updated = await this.prisma.runTransaction('wallets.approveWithdrawal', async (tx) => {
+      const claimed = await (tx as any).walletWithdrawalRequest.updateMany({
+        where: { id, status: 'PENDING' },
+        data: { status: 'APPROVED', approvedAt: new Date() },
+      });
+      if (claimed.count < 1) {
+        throw new NotFoundException('Withdrawal request is not pending');
+      }
+      return (tx as any).walletWithdrawalRequest.findUnique({ where: { id } });
     });
 
     await this.audit.log(actorId, 'APPROVE_WALLET_WITHDRAWAL', 'WalletWithdrawalRequest', id, {
@@ -447,10 +453,22 @@ export class WalletsService {
 
     const reference = `WALLET-WD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const updated = await this.prisma.runTransaction('wallets.disburseWithdrawal', async (tx) => {
-      await tx.wallet.update({
-        where: { id: request.walletId },
+      const claimed = await (tx as any).walletWithdrawalRequest.updateMany({
+        where: { id, status: 'APPROVED', disbursedAt: null },
+        data: { status: 'DISBURSING' },
+      });
+      if (claimed.count < 1) {
+        throw new NotFoundException('Withdrawal request has already been disbursed');
+      }
+
+      const walletDebit = await tx.wallet.updateMany({
+        where: { id: request.walletId, availableBalance: { gte: amount } },
         data: { availableBalance: { decrement: amount }, totalCharges: { increment: amount } },
       });
+      if (walletDebit.count < 1) {
+        throw new NotFoundException('Member wallet balance is no longer sufficient');
+      }
+
       await tx.transaction.create({
         data: {
           walletId: request.walletId,

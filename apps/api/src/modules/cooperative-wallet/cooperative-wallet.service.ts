@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { CooperativeEntryType } from '../../common/prisma-types';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -26,9 +26,9 @@ interface UpdateEntryInput {
 @Injectable()
 export class CooperativeWalletService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly audit: AuditService,
-    private readonly financialPosting: FinancialPostingService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(FinancialPostingService) private readonly financialPosting: FinancialPostingService,
   ) {}
 
   async ensureWallet() {
@@ -100,19 +100,26 @@ export class CooperativeWalletService {
       );
     }
 
+    const reconciliationDifference = normalizeMoney(
+      physicalTreasuryCash - memberWalletLiability - associationAvailableBalance,
+    );
+
     return {
       id: wallet.id,
       balance: associationAvailableBalance,
       physicalTreasuryCash,
+      realBankCash: physicalTreasuryCash,
       memberWalletLiability,
       associationAvailableBalance,
+      cooperativeSpendableFunds: associationAvailableBalance,
+      reconciliationDifference,
       totalIncome: Number(wallet.totalIncome),
       totalExpense: Number(wallet.totalExpense),
       memberWalletHoldings: memberWalletLiability,
       combinedHoldings: physicalTreasuryCash,
       reconciliation: {
-        isBalanced:
-          Math.abs(physicalTreasuryCash - (memberWalletLiability + associationAvailableBalance)) < 0.01,
+        isBalanced: Math.abs(reconciliationDifference) < 0.01,
+        difference: reconciliationDifference,
         physicalTreasuryCashFromLedger: ledgerPhysicalTreasuryCash,
         memberWalletLiabilityFromLedger: ledgerMemberWalletLiability,
         associationAvailableFromLedger: ledgerAssociationAvailable,

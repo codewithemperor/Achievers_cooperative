@@ -102,6 +102,9 @@ export default function WithdrawalsPage() {
   const [tab, setTab] = useState<"requests" | "transactions">("requests");
   const [selectedWithdrawal, setSelectedWithdrawal] =
     useState<WalletWithdrawalsResponse["items"][number] | null>(null);
+  const [pendingAction, setPendingAction] = useState<
+    "approve" | "reject" | "disburse" | null
+  >(null);
 
   const withdrawalRows = withdrawals.data?.items ?? [];
   const pendingWithdrawals = withdrawalRows.filter((item) => item.status === "PENDING");
@@ -130,15 +133,33 @@ export default function WithdrawalsPage() {
     id: string,
     action: "approve" | "reject" | "disburse",
   ) {
+    if (pendingAction) return;
+
+    const labels = {
+      approve: "approve this withdrawal request",
+      reject: "reject this withdrawal request",
+      disburse: "mark this withdrawal as disbursed",
+    } as const;
+    const confirmed = window.confirm(`Are you sure you want to ${labels[action]}?`);
+    if (!confirmed) return;
+
+    setPendingAction(action);
     try {
       await api.patch(`/wallet/withdrawals/${id}/${action}`);
-      showSuccessToast(`Withdrawal ${action}d successfully.`);
+      const successMessages = {
+        approve: "Withdrawal approved successfully.",
+        reject: "Withdrawal rejected successfully.",
+        disburse: "Withdrawal marked as disbursed successfully.",
+      } as const;
+      showSuccessToast(successMessages[action]);
       await Promise.all([withdrawals.refetch(), transactions.refetch()]);
     } catch (error: any) {
       showErrorToast(
         error?.response?.data?.message || `Unable to ${action} withdrawal.`,
       );
       throw error;
+    } finally {
+      setPendingAction(null);
     }
   }
 
@@ -431,37 +452,40 @@ export default function WithdrawalsPage() {
               {selectedWithdrawal.status === "PENDING" ? (
                 <>
                   <button
-                    className="rounded-full border border-[#f3b8b0] px-4 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff4f2]"
+                    className="rounded-full border border-[#f3b8b0] px-4 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={Boolean(pendingAction)}
                     onClick={async () => {
                       await mutateWithdrawal(selectedWithdrawal.id, "reject");
                       setSelectedWithdrawal(null);
                     }}
                     type="button"
                   >
-                    Reject
+                    {pendingAction === "reject" ? "Rejecting..." : "Reject"}
                   </button>
                   <button
-                    className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-800)]"
+                    className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-800)] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={Boolean(pendingAction)}
                     onClick={async () => {
                       await mutateWithdrawal(selectedWithdrawal.id, "approve");
                       setSelectedWithdrawal(null);
                     }}
                     type="button"
                   >
-                    Accept
+                    {pendingAction === "approve" ? "Accepting..." : "Accept"}
                   </button>
                 </>
               ) : null}
               {selectedWithdrawal.status === "APPROVED" ? (
                 <button
-                  className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-800)]"
+                  className="rounded-full bg-[var(--primary-700)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-800)] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={Boolean(pendingAction)}
                   onClick={async () => {
                     await mutateWithdrawal(selectedWithdrawal.id, "disburse");
                     setSelectedWithdrawal(null);
                   }}
                   type="button"
                 >
-                  Mark as disbursed
+                  {pendingAction === "disburse" ? "Disbursing..." : "Mark as disbursed"}
                 </button>
               ) : null}
             </>

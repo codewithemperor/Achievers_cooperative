@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Inject, Query, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -17,7 +17,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPER_ADMIN')
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(@Inject(ReportsService) private readonly reportsService: ReportsService) {}
 
   @Get('summary')
   @ApiOperation({ summary: 'Get platform summary report' })

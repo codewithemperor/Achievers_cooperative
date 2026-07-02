@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { WalletService } from '../../common/services/wallet.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -10,11 +10,11 @@ import { normalizeMoney } from '../../common/utils/money';
 @Injectable()
 export class SavingsService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly walletService: WalletService,
-    private readonly audit: AuditService,
-    private readonly financialPosting: FinancialPostingService,
-    private readonly notifications: NotificationService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(WalletService) private readonly walletService: WalletService,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(FinancialPostingService) private readonly financialPosting: FinancialPostingService,
+    @Inject(NotificationService) private readonly notifications: NotificationService,
   ) {}
 
   async getMySavings(userId: string) {
@@ -222,14 +222,25 @@ export class SavingsService {
       throw new BadRequestException('Member savings balance is no longer sufficient for this withdrawal request.');
     }
 
-    const reference = `SAVINGS-WD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const reference = `SAVINGS-WD-${id}`;
     const updated = await this.prisma.runTransaction('savings.approveWithdrawal', async (tx) => {
-      await tx.savingsAccount.update({
-        where: { id: request.savingsAccountId },
+      const claimed = await (tx as any).savingsWithdrawalRequest.updateMany({
+        where: { id, status: 'PENDING' },
+        data: { status: 'APPROVING' },
+      });
+      if (claimed.count < 1) {
+        throw new BadRequestException('Withdrawal request is not pending.');
+      }
+
+      const savingsDebit = await tx.savingsAccount.updateMany({
+        where: { id: request.savingsAccountId, balance: { gte: amount } },
         data: {
           balance: { decrement: amount },
         },
       });
+      if (savingsDebit.count < 1) {
+        throw new BadRequestException('Member savings balance is no longer sufficient for this withdrawal request.');
+      }
 
       await this.financialPosting.postAssociationOutflow(
         {
