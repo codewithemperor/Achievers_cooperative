@@ -3381,7 +3381,7 @@ export class WalletService {
       });
     }
 
-    const reference = `SAVINGS-${account.id}-${moneyKey(Number(account.balance ?? 0))}`;
+    const reference = `SAVINGS-${account.id}-${Date.now()}`;
     const description =
       mode === 'AUTO'
         ? `Automatic savings contribution for ${account.member.fullName}`
@@ -3433,7 +3433,7 @@ export class WalletService {
             },
           };
         }
-        throw new BadRequestException('This savings contribution was already processed. Please refresh the savings details.');
+        throw new BadRequestException('This contribution is being processed. Please wait a moment and try again.');
       }
       throw error;
     }
